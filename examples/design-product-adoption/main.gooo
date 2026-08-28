@@ -1,0 +1,29 @@
+package link
+namespace designproductadoption
+
+entity DesignMatcherRelease id "link://entity/design-matcher-release"
+entity DesignMatcherArchive id "link://entity/design-matcher-archive"
+entity DesignConformance id "link://entity/design-conformance"
+entity ExplicitRelationSet id "link://entity/design-explicit-relations"
+entity DesignActivityBinding id "link://entity/design-activity-binding"
+entity ReviewedMismatch id "link://entity/design-reviewed-mismatch"
+entity MissingEvidenceUnknown id "link://entity/design-missing-evidence-unknown"
+entity NameOnlyEvidenceRefusal id "link://entity/design-name-only-refusal"
+entity DesignContradiction id "link://entity/design-contradiction"
+entity DesignReplay id "link://entity/design-replay"
+entity DesignResourceEnvelope id "link://entity/design-resource-envelope"
+entity ProductPortfolioProgress id "link://entity/design-product-portfolio-progress"
+entity AdoptionDecision id "link://entity/design-product-adoption-decision"
+
+activity ObserveDesignMatcherRelease(DesignMatcherRelease) -> AdoptionDecision
+activity LockDesignMatcherArchive(DesignMatcherRelease) -> DesignMatcherArchive
+activity ObserveDesignConformance(DesignMatcherArchive) -> DesignConformance
+activity ObserveExplicitRelations(DesignConformance) -> ExplicitRelationSet
+activity BindDesignMatcherActivities(DesignMatcherArchive) -> DesignActivityBinding
+activity ObserveReviewedMismatch(ExplicitRelationSet) -> ReviewedMismatch
+activity ObserveMissingEvidenceUnknown(DesignMatcherArchive) -> MissingEvidenceUnknown
+activity RefuseNameOnlyEvidence(DesignMatcherArchive) -> NameOnlyEvidenceRefusal
+activity ObserveDesignContradiction(DesignMatcherArchive) -> DesignContradiction
+activity ObserveDesignMatcherReplay(DesignMatcherArchive) -> DesignReplay
+activity ObserveDesignMatcherResources(DesignMatcherArchive) -> DesignResourceEnvelope
+activity RecordDesignPortfolioProgress(DesignConformance) -> ProductPortfolioProgress
