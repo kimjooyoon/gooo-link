@@ -1,0 +1,29 @@
+package link
+namespace infraproductadoption
+
+entity InfraProductRelease id "link://entity/infra-product-release"
+entity InfraProductAssets id "link://entity/infra-product-assets"
+entity InfraEvidenceChain id "link://entity/infra-evidence-chain"
+entity StructuredHCLBinding id "link://entity/structured-hcl-binding"
+entity InfraActivityBinding id "link://entity/infra-activity-binding"
+entity InfraSemanticEdges id "link://entity/infra-semantic-edges"
+entity HCLUnknownResolution id "link://entity/hcl-unknown-resolution"
+entity HCLRefutations id "link://entity/hcl-refutations"
+entity DeploymentContradiction id "link://entity/deployment-contradiction"
+entity InfraReplay id "link://entity/infra-replay"
+entity InfraResourceEnvelope id "link://entity/infra-resource-envelope"
+entity ProductPortfolioProgress id "link://entity/infra-product-portfolio-progress"
+entity AdoptionDecision id "link://entity/infra-product-adoption-decision"
+
+activity ObserveInfraProductRelease(InfraProductRelease) -> AdoptionDecision
+activity LockInfraProductAssets(InfraProductRelease) -> InfraProductAssets
+activity ObserveInfraEvidenceChain(InfraProductAssets) -> InfraEvidenceChain
+activity ObserveStructuredHCL(InfraProductAssets) -> StructuredHCLBinding
+activity BindInfraProductActivities(InfraProductAssets) -> InfraActivityBinding
+activity ObserveInfraSemanticEdges(InfraEvidenceChain) -> InfraSemanticEdges
+activity ObserveHCLUnknownResolution(InfraProductAssets) -> HCLUnknownResolution
+activity ObserveHCLRefutations(InfraProductAssets) -> HCLRefutations
+activity ObserveDeploymentContradiction(InfraProductAssets) -> DeploymentContradiction
+activity ObserveInfraReplay(InfraProductAssets) -> InfraReplay
+activity ObserveInfraResources(InfraProductAssets) -> InfraResourceEnvelope
+activity RecordInfraPortfolioProgress(InfraEvidenceChain) -> ProductPortfolioProgress

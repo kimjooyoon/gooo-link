@@ -92,9 +92,12 @@ only consumes immutable public evidence.
 - Workgraph workspace inventory: `1/3` observed by its own adoption path.
 - Design/code relation matcher: the second product, observed from
   [`gooo-design-evidence v0.5.0-dev`](https://github.com/kimjooyoon/gooo-design-evidence/releases/tag/v0.5.0-dev).
-- Exact portfolio progress after both observations: `2/3`.
+- Infrastructure/service evidence linker: the third product, observed from
+  [`gooo-infra-evidence v0.5.0-dev`](https://github.com/kimjooyoon/gooo-infra-evidence/releases/tag/v0.5.0-dev).
+- Exact portfolio progress after all three observations: `3/3`.
 - Central orchestrator authorized: `false`.
 - Common generator authorized: `false`.
+- Generator authority evaluation required: `true`.
 - Cross-project required gates: `0`.
 
 The design observation preserves relation-level `MATCH`, `UNKNOWN`, and
@@ -102,3 +105,10 @@ The design observation preserves relation-level `MATCH`, `UNKNOWN`, and
 visible while the aggregate is closed; missing evidence lowers resolution to a
 typed UNKNOWN; an unresolved contradiction refutes the claim. See
 [the design product adoption RFC](docs/rfcs/design-product-adoption-v1.md).
+
+The infrastructure observation binds a HashiCorp HCL syntax-tree receipt to
+the released Gooo activity graph and the captured declaration, plan, state,
+OpenAPI, Go symbol, artifact, deployment, and runtime chain. Reaching `3/3`
+selects a separate generator-authority evaluation; it does not make the
+portfolio a central build gate. See
+[the infrastructure product adoption RFC](docs/rfcs/infra-product-adoption-v1.md).
