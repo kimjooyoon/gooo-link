@@ -168,7 +168,7 @@ jobs:
             local bundle=$1
             local member=$2
             local expected actual
-            expected=$(awk -v member="$member" '$2 == member {print $1; exit}' "$bundle/checksums.txt")
+            expected=$(awk -v member="$member" '{path=$2; sub(/^\.\//, "", path); sub(/^\*/, "", path); if (path == member) {print $1; exit}}' "$bundle/checksums.txt")
             test -n "$expected"
             actual=$(sha256sum "$bundle/$member" | awk '{print $1}')
             test "$actual" = "$expected"
