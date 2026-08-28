@@ -1,0 +1,34 @@
+package designuserpathobservation
+namespace designuserpathobservation
+
+entity OptionalObservationAuthority id "link://design-user-path/authority"
+entity CoreRelease id "link://design-user-path/core-release"
+entity LinkBaselineRelease id "link://design-user-path/link-baseline"
+entity DesignReviewRelease id "link://design-user-path/design-release"
+entity DesignMetaGraph id "link://design-user-path/design-meta"
+entity DesignConformance id "link://design-user-path/design-conformance"
+entity ReviewRequestRelations id "link://design-user-path/request-relations"
+entity ClaimTupleLedger id "link://design-user-path/claim-ledger"
+entity GeneratedReviewArtifacts id "link://design-user-path/generated-artifacts"
+entity UserVerticalProgress id "link://design-user-path/vertical-progress"
+entity DesignResolutionEvidence id "link://design-user-path/resolution"
+entity PrimitiveBaseline id "link://design-user-path/primitive-baseline"
+entity CentralAuthorityBoundary id "link://design-user-path/central-authority"
+entity ObservationRuntime id "link://design-user-path/runtime"
+entity ObservationDecision id "link://design-user-path/decision"
+
+activity BindOptionalDesignObservation(OptionalObservationAuthority) -> ObservationDecision
+activity ObserveCoreRelease(CoreRelease) -> ObservationDecision
+activity ObserveLinkBaselineRelease(LinkBaselineRelease) -> ObservationDecision
+activity ObserveDesignReviewRelease(DesignReviewRelease) -> ObservationDecision
+activity ObserveDesignMetaBindings(DesignMetaGraph) -> ObservationDecision
+activity ObserveDesignReviewConformance(DesignConformance) -> ObservationDecision
+activity ObserveReviewRequestAndRelations(ReviewRequestRelations) -> ObservationDecision
+activity ObserveClaimTupleLedger(ClaimTupleLedger) -> ObservationDecision
+activity ObserveGeneratedReviewArtifacts(GeneratedReviewArtifacts) -> ObservationDecision
+activity RecordSecondUserVertical(UserVerticalProgress) -> ObservationDecision
+activity PreserveDesignUnknownResolution(DesignResolutionEvidence) -> ObservationDecision
+activity PreserveDesignRefutation(DesignResolutionEvidence) -> ObservationDecision
+activity PreservePrimitiveBaseline(PrimitiveBaseline) -> ObservationDecision
+activity RefuseCentralAuthority(CentralAuthorityBoundary) -> ObservationDecision
+activity ObserveDesignObservationRuntime(ObservationRuntime) -> ObservationDecision
