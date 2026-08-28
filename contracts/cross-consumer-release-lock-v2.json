@@ -13,7 +13,8 @@
     },
     "source": {
       "path": "cmd/gooo/testdata/claim-resolution/main.gooo",
-      "sha256": "c4b12d7556aea4673cc84ae029b2ac0f835bb8ae808f475b98a03d01441c5b87"
+      "sha256": "c4b12d7556aea4673cc84ae029b2ac0f835bb8ae808f475b98a03d01441c5b87",
+      "activity": "UnknownDirectClaim"
     }
   },
   "inputs": [

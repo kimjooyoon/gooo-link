@@ -119,7 +119,8 @@ jobs:
           core_source="$RUNNER_TEMP/core-claim-source.gooo"
           "$gooo" check --json "$core_source" > "$RUNNER_TEMP/core-claim-syntax.json"
           "$gooo" graph dump "$core_source" > "$RUNNER_TEMP/core-claim-graph.json"
-          core_activity=$(jq -er '[.nodes[]|select(.kind=="Activity")]|select(length==1)|.[0].name' "$RUNNER_TEMP/core-claim-graph.json")
+          core_activity=$(jq -r .core.source.activity "$lock")
+          jq -e --arg activity "$core_activity" '([.nodes[]|select(.kind=="Activity")]|length)==6 and ([.nodes[]|select(.kind=="Activity" and .name==$activity)]|length)==1' "$RUNNER_TEMP/core-claim-graph.json" >/dev/null
           "$gooo" claim resolve "$core_source" --activity "$core_activity" --json > "$RUNNER_TEMP/core-claim.json"
           core_source_digest=$(jq -r .core.source.sha256 "$lock")
           jq -e --arg digest "sha256:$core_source_digest" '
