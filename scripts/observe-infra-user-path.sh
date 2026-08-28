@@ -210,7 +210,7 @@ jq -n \
     schema: "gooo.link.infra-user-path-observation.report.v1",
     subject_sha: $subject_sha,
     scenario: $scenario,
-    resolution:
+    resolution: (
       if $refuted > 0 then {
         state: "REFUTED",
         cause: ($cells | map(select(.resolution.refutation_class == "DIRECT_CONTRADICTION"))[0].resolution)
@@ -220,7 +220,8 @@ jq -n \
         cause: ($cells | map(select(.resolution.unknown_class == "DIRECT_MISSING"))[0].resolution)
       }
       else {state: "CLOSED"}
-      end,
+      end
+    ),
     summary: {
       cells_total: 15,
       cells_closed: $closed,
