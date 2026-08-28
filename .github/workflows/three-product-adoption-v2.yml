@@ -521,7 +521,9 @@ jobs:
                 .provenance_available = false |
                 .replay_verified = false |
                 .replay_receipt_verified = false
-              else . end)
+              else . end) |
+              .actual_replay = ([.products[] | select(.replay_verified == true)] | length) |
+              .replay_mismatches = ([.products[].replay_mismatches] | add)
             ' "$kit" > "$root/kit-missing-$id.json"
             timed_observer "missing-$id" "$root/kit-missing-$id.json" "$releases" "missing-$id" "$root/missing-$id.json" "$graph"
             scenario_wall_ms=$((scenario_wall_ms + $(awk '{printf "%d\n", $1 * 1000}' "$root/observer-missing-$id.time")))
