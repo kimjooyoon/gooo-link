@@ -1,0 +1,18 @@
+{
+  "schema": "gooo/link/cross-consumer-primitive-adoption-release-lock/v4",
+  "core": {
+    "repository":"kimjooyoon/meta-ontology-go","tag":"v0.3.0-dev","release_id":378384811,"target_commit_sha":"5b7af77549d88ba345550c1428323797e6ce1fd8","prerelease":true,
+    "binary_asset":{"id":533579198,"name":"gooo-linux-amd64.tar.gz","size":7036826,"digest":"sha256:505608f28ccc92ba191d590b3cac160be14955405c159f9dc7fb3c8826985a5e"},
+    "checksum_asset":{"id":533579199,"name":"SHA256SUMS","size":614,"digest":"sha256:ace1c645109d18f62c6fce071b3e573d423a0dc40519b238b2acbe2c6c32900a"}
+  },
+  "baseline": {
+    "repository":"kimjooyoon/gooo-link","tag":"v0.16.0-dev","release_id":378445068,"target_commit_sha":"355d116b5f294156a4b997d92ee937b8443cff7b","prerelease":false,
+    "asset":{"id":533716566,"name":"fourth-primitive-adoption-355d116b5f294156a4b997d92ee937b8443cff7b.zip","size":19689,"digest":"sha256:79efb6e7d604a60a7d4ae1a4ec843e8ce4bed9b284ace7fd44c1786062ff05c7"},
+    "artifact_root":"fourth-primitive-adoption-355d116b5f294156a4b997d92ee937b8443cff7b"
+  },
+  "workgraph": {
+    "repository":"kimjooyoon/gooo-workgraph","tag":"v0.3.0-dev","release_id":378459917,"target_commit_sha":"13aa8358cdd60504183c86f72ff5b7eb9702e64d","prerelease":true,
+    "asset":{"id":533755192,"name":"workgraph-claim-resolution-adoption-13aa8358cdd60504183c86f72ff5b7eb9702e64d.zip","size":35815,"digest":"sha256:fa3a1cb7024433a85ebe25108726dd25ad90caa1433078d51cd2d809cdd84fba"},
+    "artifact_root":"workgraph-claim-resolution-adoption-13aa8358cdd60504183c86f72ff5b7eb9702e64d"
+  }
+}
