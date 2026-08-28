@@ -110,8 +110,8 @@ jq -S -n \
   ([$claims[]|select(.claim.state=="UNKNOWN")|.domain]|unique|length) as $unknown_domain_support |
   ([$claims[]|select(.claim.state=="REFUTED")|.domain]|unique|length) as $refuted_domain_support |
   ([$claims[]|select(.claim|has("stage") and has("step") and has("reason") and has("unknown_class") and has("next_operation"))]|length) as $complete_claim_tuples |
-  ([($local[0].runtime.deterministic_replay?//false),($design[0].runtime.deterministic_replay?//false),($infra[0].deterministic_replay?//false)]|map(select(.==true))|length) as $machine_replays |
-  ([$local[0],$design[0],$infra[0]]|map(select(.!=null and ((.interchange.schema?//"")=="gooo/interchange/envelope/v1")))|length) as $canonical_adoptions |
+  ([($local[0].runtime.deterministic_replay? // false),($design[0].runtime.deterministic_replay? // false),($infra[0].deterministic_replay? // false)]|map(select(.==true))|length) as $machine_replays |
+  ([$local[0],$design[0],$infra[0]]|map(select(.!=null and ((.interchange.schema? // "")=="gooo/interchange/envelope/v1")))|length) as $canonical_adoptions |
   ($releases[0].consumers|map(.selected_assets)|add) as $selected_assets |
   ($releases[0].consumers|map(.verified_assets)|add) as $verified_assets |
   ({
