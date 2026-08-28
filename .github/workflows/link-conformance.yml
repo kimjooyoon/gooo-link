@@ -56,7 +56,8 @@ jobs:
             fi
           }
 
-          observe_release kimjooyoon/meta-ontology-go v0.1.0-dev "$RUNNER_TEMP/core-release.json"
+          core_tag=$(jq -r '.tag' contracts/core-release-lock-v1.json)
+          observe_release kimjooyoon/meta-ontology-go "$core_tag" "$RUNNER_TEMP/core-release.json"
           observe_release kimjooyoon/gooo-workgraph v0.1.0-dev "$RUNNER_TEMP/workgraph-release.json"
           observe_release kimjooyoon/gooo-design-evidence v0.1.0-dev "$RUNNER_TEMP/design-release.json"
           jq -n \

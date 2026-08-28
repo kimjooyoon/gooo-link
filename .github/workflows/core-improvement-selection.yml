@@ -23,7 +23,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          lock=contracts/core-release-lock-v1.json
+          lock=contracts/core-activity-cardinality-release-lock-v1.json
           tag=$(jq -r '.tag' "$lock")
           tag_object=$(jq -r '.tag_object_sha' "$lock")
           target=$(jq -r '.target_commit_sha' "$lock")
@@ -44,7 +44,47 @@ jobs:
           "$RUNNER_TEMP/core/gooo" check --semantic --json examples/core-improvement-selection/main.gooo > "$RUNNER_TEMP/semantic.json"
           "$RUNNER_TEMP/core/gooo" graph dump examples/core-improvement-selection/main.gooo > "$RUNNER_TEMP/graph.json"
           jq -e '.status=="ok"' "$RUNNER_TEMP/syntax.json" "$RUNNER_TEMP/semantic.json" >/dev/null
-          jq -e '.schema_version=="gooo-graph/v1" and ([.nodes[]|select(.kind=="Activity")]|length)==12' "$RUNNER_TEMP/graph.json" >/dev/null
+          jq -e '.schema_version=="gooo-graph/v1"' "$RUNNER_TEMP/graph.json" >/dev/null
+
+          denominator=contracts/core-improvement-selection-denominator-v1.json
+          source=examples/core-improvement-selection/main.gooo
+          expected=$(jq -r '.target_cells' "$denominator")
+          mkdir -p "$RUNNER_TEMP/core-resolutions"
+          while IFS=$'\t' read -r ordinal activity; do
+            printf -v receipt '%s/core-resolutions/%02d-%s.json' "$RUNNER_TEMP" "$ordinal" "$activity"
+            "$RUNNER_TEMP/core/gooo" graph resolve-activity "$source" --name "$activity" > "$receipt"
+            jq -e --arg activity "$activity" '
+              .schema=="gooo/activity-cardinality-resolution/v1" and
+              .selector.name==$activity and .decision=="CLOSED" and
+              .occurrences==1 and (.matches|length)==1 and
+              .claim.state=="CLOSED" and .claim.stage=="RESOLUTION" and
+              .claim.step=="RESOLVE_ACTIVITY_CARDINALITY" and
+              .claim.reason=="ACTIVITY_UNIQUELY_RESOLVED" and
+              .claim.next_operation=="USE_RESOLVED_ACTIVITY" and
+              .claim.proof_choice=="COHERENCE" and
+              .subject.source_file=="examples/core-improvement-selection/main.gooo"
+            ' "$receipt" >/dev/null
+          done < <(jq -r '.cells[]|[.ordinal,.activity]|@tsv' "$denominator")
+          jq -S -s '.' "$RUNNER_TEMP"/core-resolutions/*.json > "$RUNNER_TEMP/core-resolution-receipts.json"
+          jq -S -n \
+            --arg repository "kimjooyoon/meta-ontology-go" \
+            --arg tag "$tag" \
+            --arg tag_object_sha "$tag_object" \
+            --arg target_commit_sha "$target" \
+            --arg binary_asset "$asset" \
+            --arg binary_sha256 "$digest" \
+            --arg resolution_schema "gooo/activity-cardinality-resolution/v1" \
+            --argjson expected "$expected" \
+            --slurpfile receipts "$RUNNER_TEMP/core-resolution-receipts.json" '
+            ($receipts[0]) as $r |
+            {
+              schema:"gooo/link/core-activity-cardinality-observation/v1",
+              core_release:{repository:$repository,tag:$tag,tag_object_sha:$tag_object_sha,target_commit_sha:$target_commit_sha,binary_asset:$binary_asset,binary_sha256:$binary_sha256,resolution_schema:$resolution_schema},
+              summary:{expected:$expected,observed:($r|length),closed:([$r[]|select(.decision=="CLOSED")]|length),unknown:([$r[]|select(.decision=="UNKNOWN")]|length),refuted:([$r[]|select(.decision=="REFUTED")]|length),unique_activity_selectors:([$r[].selector.name]|unique|length)},
+              receipts:$r
+            }
+          ' > "$RUNNER_TEMP/core-resolution-observation.json"
+          jq -e '.summary=={expected:12,observed:12,closed:12,unknown:0,refuted:0,unique_activity_selectors:12}' "$RUNNER_TEMP/core-resolution-observation.json" >/dev/null
 
       - name: Download and verify immutable consumer releases
         shell: bash
@@ -100,14 +140,14 @@ jobs:
           }
           before=$(snapshot)
           selector=scripts/select-core-improvement.sh
-          args=("$RUNNER_TEMP/graph.json" contracts/core-improvement-selection-denominator-v1.json contracts/generator-consumer-release-locks-v1.json "$RUNNER_TEMP/release-observation.json")
+          args=("$RUNNER_TEMP/graph.json" "$RUNNER_TEMP/core-resolution-observation.json" contracts/core-improvement-selection-denominator-v1.json contracts/generator-consumer-release-locks-v1.json "$RUNNER_TEMP/release-observation.json")
           start_ns=$(date +%s%N)
           /usr/bin/time -f '%M' -o "$RUNNER_TEMP/selector-rss" bash "$selector" "${args[@]}" "$RUNNER_TEMP/local-ledger-adoption" "$RUNNER_TEMP/local-ledger-bundle" "$RUNNER_TEMP/design-evidence-adoption" "$RUNNER_TEMP/design-evidence-bundle" "$RUNNER_TEMP/selection.json" "$SUBJECT_SHA" complete
           end_ns=$(date +%s%N)
           echo $(( (end_ns-start_ns)/1000000 )) > "$RUNNER_TEMP/selector-wall-ms"
           bash "$selector" "${args[@]}" "$RUNNER_TEMP/local-ledger-adoption" "$RUNNER_TEMP/local-ledger-bundle" "$RUNNER_TEMP/design-evidence-adoption" "$RUNNER_TEMP/design-evidence-bundle" "$RUNNER_TEMP/replay.json" "$SUBJECT_SHA" complete
           cmp -s "$RUNNER_TEMP/selection.json" "$RUNNER_TEMP/replay.json"
-          jq -e '.decision=="CORE_IMPROVEMENT_SELECTED" and .summary=={total:12,closed:12,unknown:0,refuted:0,direct_missing:0,dependency_blocked:0,consumers:2} and .candidate.state=="SELECTED_FOR_CORE_EVALUATION" and .candidate.implementation_status=="NOT_IMPLEMENTED" and ([.proofs[]|select(.closed==4 and .total==4)]|length)==3' "$RUNNER_TEMP/selection.json" >/dev/null
+          jq -e '.decision=="CORE_RELEASE_ADOPTED" and .summary=={total:12,closed:12,unknown:0,refuted:0,direct_missing:0,dependency_blocked:0,consumers:2} and .candidate.state=="ADOPTED_FROM_CORE_RELEASE" and .candidate.implementation_status=="RELEASED_AND_CONSUMED" and .core_adoption.identity_verified and .core_adoption.summary=={required:12,observed:12,unique_activity_selectors:12,closed:12,unknown:0,refuted:0} and ([.proofs[]|select(.closed==4 and .total==4)]|length)==3' "$RUNNER_TEMP/selection.json" >/dev/null
 
           printf 'null\n' > "$RUNNER_TEMP/missing-local-adoption.json"
           bash "$selector" "${args[@]}" "$RUNNER_TEMP/missing-local-adoption.json" "$RUNNER_TEMP/local-ledger-bundle" "$RUNNER_TEMP/design-evidence-adoption" "$RUNNER_TEMP/design-evidence-bundle" "$RUNNER_TEMP/missing-adoption.json" "$SUBJECT_SHA" missing-local-adoption
@@ -117,6 +157,16 @@ jobs:
           bash "$selector" "${args[@]}" "$RUNNER_TEMP/mutated-local-adoption.json" "$RUNNER_TEMP/local-ledger-bundle" "$RUNNER_TEMP/design-evidence-adoption" "$RUNNER_TEMP/design-evidence-bundle" "$RUNNER_TEMP/refuted-selection.json" "$SUBJECT_SHA" mutated-direct-missing
           jq -e '.decision=="FAIL_CLOSED" and .summary.closed==9 and .summary.refuted==3 and .claim.stage=="UNCERTAINTY" and .claim.step=="COMPARE_MISSING_RESOLUTION" and .claim.reason=="DIRECT_MISSING_INVARIANT_MISMATCH"' "$RUNNER_TEMP/refuted-selection.json" >/dev/null
 
+          jq 'del(.receipts[0])' "$RUNNER_TEMP/core-resolution-observation.json" > "$RUNNER_TEMP/missing-core-resolution-observation.json"
+          missing_core_args=("$RUNNER_TEMP/graph.json" "$RUNNER_TEMP/missing-core-resolution-observation.json" contracts/core-improvement-selection-denominator-v1.json contracts/generator-consumer-release-locks-v1.json "$RUNNER_TEMP/release-observation.json")
+          bash "$selector" "${missing_core_args[@]}" "$RUNNER_TEMP/local-ledger-adoption" "$RUNNER_TEMP/local-ledger-bundle" "$RUNNER_TEMP/design-evidence-adoption" "$RUNNER_TEMP/design-evidence-bundle" "$RUNNER_TEMP/missing-core-resolution.json" "$SUBJECT_SHA" missing-core-resolution
+          jq -e '.decision=="INCOMPLETE" and .summary.closed==0 and .summary.unknown==12 and .summary.direct_missing==1 and .summary.dependency_blocked==11 and .candidate.state=="UNKNOWN" and .claim.stage=="RESOLUTION_OBSERVATION" and .claim.step=="BIND_CORE_ACTIVITY_RESOLUTION_RECEIPT" and .claim.reason=="CORE_ACTIVITY_RESOLUTION_RECEIPT_UNAVAILABLE"' "$RUNNER_TEMP/missing-core-resolution.json" >/dev/null
+
+          jq '(.receipts[0].decision)="FIXED_POINT"' "$RUNNER_TEMP/core-resolution-observation.json" > "$RUNNER_TEMP/invalid-core-decision-observation.json"
+          invalid_core_args=("$RUNNER_TEMP/graph.json" "$RUNNER_TEMP/invalid-core-decision-observation.json" contracts/core-improvement-selection-denominator-v1.json contracts/generator-consumer-release-locks-v1.json "$RUNNER_TEMP/release-observation.json")
+          bash "$selector" "${invalid_core_args[@]}" "$RUNNER_TEMP/local-ledger-adoption" "$RUNNER_TEMP/local-ledger-bundle" "$RUNNER_TEMP/design-evidence-adoption" "$RUNNER_TEMP/design-evidence-bundle" "$RUNNER_TEMP/invalid-core-decision.json" "$SUBJECT_SHA" invalid-core-decision
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed==0 and .summary.refuted==12 and .candidate.state=="REFUTED" and .claim.stage=="RESOLUTION" and .claim.step=="RESOLVE_ACTIVITY_CARDINALITY" and .claim.reason=="UNRECOGNIZED_CORE_ACTIVITY_RESOLUTION_DECISION"' "$RUNNER_TEMP/invalid-core-decision.json" >/dev/null
+
           after=$(snapshot)
           if [ "$before" = "$after" ]; then writes=0; else writes=1; fi
           jq -S -n --arg subject_sha "$SUBJECT_SHA" --arg before "$before" --arg after "$after" --argjson writes "$writes" --argjson peak_rss_kib "$(cat "$RUNNER_TEMP/selector-rss")" --argjson wall_ms "$(cat "$RUNNER_TEMP/selector-wall-ms")" '{schema:"gooo/link/core-improvement-selection-runtime/v1",subject_sha:$subject_sha,selector:{peak_rss_kib:$peak_rss_kib,wall_ms:$wall_ms},repository:{before_digest:$before,after_digest:$after,writes:$writes},deterministic_replay:true,local_tests_run:0}' > "$RUNNER_TEMP/runtime.json"
@@ -124,9 +174,11 @@ jobs:
 
           {
             echo '## Evidence-selected core improvement'
-            jq -r '"- selection: \(.summary.closed)/\(.summary.total) CLOSED; consumers \(.summary.consumers)","- candidate: \(.candidate.id)","- state: \(.candidate.state)","- implementation: \(.candidate.implementation_status)","- local missing/direct: \(.comparison.common.direct_missing[0]); design missing/direct: \(.comparison.common.direct_missing[1])","- domain blocked counts: \(.comparison.variation.dependency_blocked|join(", "))","- domain duplicate refutations: \(.comparison.variation.duplicate_refuted|join(", "))"' "$RUNNER_TEMP/selection.json"
+            jq -r '"- selection: \(.summary.closed)/\(.summary.total) CLOSED; consumers \(.summary.consumers)","- candidate: \(.candidate.id)","- state: \(.candidate.state)","- implementation: \(.candidate.implementation_status)","- core receipts: \(.core_adoption.summary.closed)/\(.core_adoption.summary.required) CLOSED from \(.core_adoption.release.tag)","- local missing/direct: \(.comparison.common.direct_missing[0]); design missing/direct: \(.comparison.common.direct_missing[1])","- domain blocked counts: \(.comparison.variation.dependency_blocked|join(", "))","- domain duplicate refutations: \(.comparison.variation.duplicate_refuted|join(", "))"' "$RUNNER_TEMP/selection.json"
             jq -r '"- missing adoption: UNKNOWN \(.summary.unknown); direct \(.summary.direct_missing); blocked \(.summary.dependency_blocked)"' "$RUNNER_TEMP/missing-adoption.json"
             jq -r '"- mutated invariant: REFUTED \(.summary.refuted); first \(.claim.stage) / \(.claim.step) / \(.claim.reason)"' "$RUNNER_TEMP/refuted-selection.json"
+            jq -r '"- missing core receipt: UNKNOWN \(.summary.unknown); first \(.claim.stage) / \(.claim.step) / \(.claim.reason)"' "$RUNNER_TEMP/missing-core-resolution.json"
+            jq -r '"- invalid core decision: REFUTED \(.summary.refuted); first \(.claim.stage) / \(.claim.step) / \(.claim.reason)"' "$RUNNER_TEMP/invalid-core-decision.json"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload selection evidence
@@ -143,3 +195,6 @@ jobs:
             ${{ runner.temp }}/release-observation.json
             ${{ runner.temp }}/runtime.json
             ${{ runner.temp }}/graph.json
+            ${{ runner.temp }}/core-resolution-observation.json
+            ${{ runner.temp }}/missing-core-resolution.json
+            ${{ runner.temp }}/invalid-core-decision.json
