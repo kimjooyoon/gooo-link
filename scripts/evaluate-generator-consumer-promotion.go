@@ -758,7 +758,7 @@ func aggregateInputCounts(values []closedTotal) (int, int) {
 
 func parseChecksums(data string) map[string]string {
 	result := make(map[string]string)
-	for _, line := range strings.Split(data, "\n") {
+	for line := range strings.SplitSeq(data, "\n") {
 		fields := strings.Fields(line)
 		if len(fields) < 2 {
 			continue
