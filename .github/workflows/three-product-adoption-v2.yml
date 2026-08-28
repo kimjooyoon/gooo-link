@@ -508,9 +508,10 @@ jobs:
             local release_input=$3
             local scenario=$4
             local output=$5
-            /usr/bin/time -f '%e %M' -o "$root/observer-$name.time" bash "$observer" "$graph" "$denominator" "$lock" "$core" "$kit_input" "$release_input" "$output" "$SUBJECT_SHA" "$scenario"
+            local graph_input=${6:-$graph}
+            /usr/bin/time -f '%e %M' -o "$root/observer-$name.time" bash "$observer" "$graph_input" "$denominator" "$lock" "$core" "$kit_input" "$release_input" "$output" "$SUBJECT_SHA" "$scenario"
           }
-          timed_observer normal "$kit" "$releases" normal "$root/normal-observation.json"
+          timed_observer normal "$kit" "$releases" normal "$root/normal-observation.json" "$graph"
           scenario_wall_ms=$(awk '{total += $1 * 1000} END {printf "%d\n", total}' "$root/observer-normal.time")
           scenario_peak_rss_kib=$(awk '{print $2}' "$root/observer-normal.time")
           for id in local design infra; do
@@ -522,7 +523,7 @@ jobs:
                 .replay_receipt_verified = false
               else . end)
             ' "$kit" > "$root/kit-missing-$id.json"
-            timed_observer "missing-$id" "$root/kit-missing-$id.json" "$releases" "missing-$id" "$root/missing-$id.json"
+            timed_observer "missing-$id" "$root/kit-missing-$id.json" "$releases" "missing-$id" "$root/missing-$id.json" "$graph"
             scenario_wall_ms=$((scenario_wall_ms + $(awk '{printf "%d\n", $1 * 1000}' "$root/observer-missing-$id.time")))
             rss=$(awk '{print $2}' "$root/observer-missing-$id.time")
             if test "$rss" -gt "$scenario_peak_rss_kib"; then scenario_peak_rss_kib=$rss; fi
@@ -549,7 +550,7 @@ jobs:
                 .actual_size = $size
               else . end)
             ' "$releases" > "$root/releases-refuted-$id.json"
-            timed_observer "refuted-$id" "$kit" "$root/releases-refuted-$id.json" "refuted-$id" "$root/refuted-$id.json"
+            timed_observer "refuted-$id" "$kit" "$root/releases-refuted-$id.json" "refuted-$id" "$root/refuted-$id.json" "$graph"
             scenario_wall_ms=$((scenario_wall_ms + $(awk '{printf "%d\n", $1 * 1000}' "$root/observer-refuted-$id.time")))
             rss=$(awk '{print $2}' "$root/observer-refuted-$id.time")
             if test "$rss" -gt "$scenario_peak_rss_kib"; then scenario_peak_rss_kib=$rss; fi
@@ -562,6 +563,23 @@ jobs:
               ([.product_states[] | select(.id != $id) | .release.state, .envelope.state] | map(select(. == "CLOSED")) | length) == 4
             ' "$root/refuted-$id.json" >/dev/null
           done
+          graph_edge_input="$root/graph-edge-counterexample.json"
+          jq '.relations = [(.relations // [])[] | select(.predicate != "used" and .predicate != "wasGeneratedBy")]' "$graph" > "$graph_edge_input"
+          timed_observer graph-edge "$kit" "$releases" graph-edge-all-edges-removed "$root/graph-edge-observation.json" "$graph_edge_input"
+          graph_edge_wall_ms=$(awk '{printf "%d\n", $1 * 1000}' "$root/observer-graph-edge.time")
+          graph_edge_peak_rss_kib=$(awk '{print $2}' "$root/observer-graph-edge.time")
+          jq -e '
+            .scenario == "graph-edge-all-edges-removed" and
+            .decision == "REFUTED" and
+            .summary.total == 12 and .summary.refuted == 12 and
+            .graph.contract_valid == false and
+            .graph.activity_binding_count == 0 and
+            .graph.generated_activity_count == 0 and
+            .graph.causal_dependency_pair_count == 19 and
+            .graph.exact_causal_dependency_pair_count == 0 and
+            .graph.edge_comparison.before == null and
+            .graph.edge_comparison.after == null
+          ' "$root/graph-edge-observation.json" >/dev/null
           jq -s '
             {
               schema: "gooo/link/three-product-adoption-scenarios/v1",
@@ -572,6 +590,10 @@ jobs:
               evaluations: map({scenario, decision, summary, failure_isolation})
             }
           ' "$root/normal-observation.json" "$root"/missing-*.json "$root"/refuted-*.json > "$root/three-product-adoption-scenarios.json"
+          jq --slurpfile guard "$root/graph-edge-observation.json" \
+            '. + {graph_edge_guardrail: {scenario: $guard[0].scenario, decision: $guard[0].decision, summary: $guard[0].summary, graph: $guard[0].graph}}' \
+            "$root/three-product-adoption-scenarios.json" > "$root/three-product-adoption-scenarios-with-guardrail.json"
+          mv "$root/three-product-adoption-scenarios-with-guardrail.json" "$root/three-product-adoption-scenarios.json"
           jq -e '.total_evaluations == 7 and .normal == 1 and .unknown == 3 and .refuted == 3' "$root/three-product-adoption-scenarios.json" >/dev/null
           jq -n --slurpfile kit "$kit" \
             --arg schema "gooo/link/three-product-adoption-replay/v1" \
@@ -586,8 +608,12 @@ jobs:
               products: ($kit[0].products | map({id, replay_verified, replay_receipt_verified, replay_member_total, replay_verified_members, replay_checksum_present, replay_member_sha256, replay_member_sha256_b, replay_mismatches, input_manifest_sha256, output_manifest_sha256})),
               separately_observed_from_scenario_evaluations: true
             }' > "$root/three-product-adoption-replay.json"
+          scenario_wall_ms=$((scenario_wall_ms + graph_edge_wall_ms))
+          if test "$graph_edge_peak_rss_kib" -gt "$scenario_peak_rss_kib"; then scenario_peak_rss_kib=$graph_edge_peak_rss_kib; fi
           printf '%s\n' "$scenario_wall_ms" > "$root/scenario-wall-ms"
           printf '%s\n' "$scenario_peak_rss_kib" > "$root/scenario-peak-rss-kib"
+          printf '%s\n' "$graph_edge_wall_ms" > "$root/graph-edge-wall-ms"
+          printf '%s\n' "$graph_edge_peak_rss_kib" > "$root/graph-edge-peak-rss-kib"
 
       - name: Build the exact temporary packet and metrics
         shell: bash
@@ -616,11 +642,19 @@ jobs:
           scenario_normal=$(jq -r '.normal' "$root/three-product-adoption-scenarios.json")
           scenario_unknown=$(jq -r '.unknown' "$root/three-product-adoption-scenarios.json")
           scenario_refuted=$(jq -r '.refuted' "$root/three-product-adoption-scenarios.json")
+          graph_edge_executions=$(jq -s 'length' "$root/graph-edge-observation.json")
+          graph_edge_decision=$(jq -r '.graph_edge_guardrail.decision' "$root/three-product-adoption-scenarios.json")
+          graph_edge_total=$(jq -r '.graph_edge_guardrail.summary.total' "$root/three-product-adoption-scenarios.json")
+          graph_edge_refuted=$(jq -r '.graph_edge_guardrail.summary.refuted' "$root/three-product-adoption-scenarios.json")
+          graph_edge_exact_pairs=$(jq -r '.graph_edge_guardrail.graph.exact_causal_dependency_pair_count' "$root/three-product-adoption-scenarios.json")
           replay_executions=$(jq -r '.actual_executions' "$root/three-product-adoption-replay.json")
           replay_mismatches=$(jq -r '.actual_mismatches' "$root/three-product-adoption-replay.json")
+          graph_edge_wall_ms=$(cat "$root/graph-edge-wall-ms")
           peak_rss_kib=$core_peak_rss_kib
           if test "$kit_peak_rss_kib" -gt "$peak_rss_kib"; then peak_rss_kib=$kit_peak_rss_kib; fi
           if test "$scenario_peak_rss_kib" -gt "$peak_rss_kib"; then peak_rss_kib=$scenario_peak_rss_kib; fi
+          graph_edge_peak_rss_kib=$(cat "$root/graph-edge-peak-rss-kib")
+          if test "$graph_edge_peak_rss_kib" -gt "$peak_rss_kib"; then peak_rss_kib=$graph_edge_peak_rss_kib; fi
           total_wall_ms=$((core_wall_ms + kit_wall_ms + scenario_wall_ms))
           jq -n \
             --arg schema "gooo/link/three-product-adoption-runtime/v1" \
@@ -637,6 +671,12 @@ jobs:
             --argjson scenario_normal "$scenario_normal" \
             --argjson scenario_unknown "$scenario_unknown" \
             --argjson scenario_refuted "$scenario_refuted" \
+            --argjson graph_edge_executions "$graph_edge_executions" \
+            --arg graph_edge_decision "$graph_edge_decision" \
+            --argjson graph_edge_total "$graph_edge_total" \
+            --argjson graph_edge_refuted "$graph_edge_refuted" \
+            --argjson graph_edge_exact_pairs "$graph_edge_exact_pairs" \
+            --argjson graph_edge_wall_ms "$graph_edge_wall_ms" \
             --argjson replay_executions "$replay_executions" \
             --argjson replay_mismatches "$replay_mismatches" \
             --argjson files "$regular_files" \
@@ -653,6 +693,7 @@ jobs:
               current_link_checks: {executions: 16, wall_ms: $core_wall_ms},
               kit_conformers: {executions: $kit_executions, checks: $kit_checks, wall_ms: $kit_wall_ms},
               scenario_evaluations: {executions: $scenario_executions, normal: $scenario_normal, unknown: $scenario_unknown, refuted: $scenario_refuted, wall_ms: $scenario_wall_ms},
+              graph_edge_guardrail: {executions: $graph_edge_executions, decision: $graph_edge_decision, total: $graph_edge_total, refuted: $graph_edge_refuted, exact_causal_dependency_pairs: $graph_edge_exact_pairs, wall_ms: $graph_edge_wall_ms},
               replay: {executions: $replay_executions, mismatches: $replay_mismatches, wall_ms: $kit_wall_ms},
               product_builds: {executions: 0, wall_ms: 0},
               product_tests: {executions: 0, wall_ms: 0},
@@ -740,6 +781,11 @@ jobs:
             .runtime.kit_conformers.executions == 3 and
             .runtime.kit_conformers.checks == 30 and
             .runtime.scenario_evaluations.executions == 7 and
+            .runtime.graph_edge_guardrail.executions == 1 and
+            .runtime.graph_edge_guardrail.decision == "REFUTED" and
+            .runtime.graph_edge_guardrail.total == 12 and
+            .runtime.graph_edge_guardrail.refuted == 12 and
+            .runtime.graph_edge_guardrail.exact_causal_dependency_pairs == 0 and
             .runtime.replay.executions == 3 and
             .runtime.replay.mismatches == 0 and
             .runtime.product_builds.executions == 0 and
@@ -766,6 +812,7 @@ jobs:
               jq -r '"decision=\(.decision) cells=\(.summary.closed)/\(.summary.total) unknown=\(.summary.unknown) refuted=\(.summary.refuted)"' "$report"
               jq -r '"normal=\(.normal) unknown_scenarios=\(.unknown) refuted_scenarios=\(.refuted) evaluations=\(.total_evaluations)"' "$scenarios"
               jq -r '.evaluations[] | "\(.scenario): decision=\(.decision) closed=\(.summary.closed) unknown=\(.summary.unknown) refuted=\(.summary.refuted)"' "$scenarios"
+              jq -r '"graph_edge_guardrail=\(.graph_edge_guardrail.decision) refuted=\(.graph_edge_guardrail.summary.refuted)/\(.graph_edge_guardrail.summary.total) exact_pairs=\(.graph_edge_guardrail.graph.exact_causal_dependency_pair_count)"' "$scenarios"
               jq -r '"link_checks=\(.runtime.current_link_checks.executions) kit_conformers=\(.runtime.kit_conformers.executions) kit_checks=\(.runtime.kit_conformers.checks) replay=\(.runtime.replay.executions)/\(.runtime.replay.mismatches) total_wall_ms=\(.runtime.total_wall_ms) peak_rss_kib=\(.runtime.peak_rss_kib)"' "$report"
               jq -r '"regular_files=\(.runtime.inventory.regular_files) descendant_dirs=\(.runtime.inventory.descendant_dirs) physical_lines=\(.runtime.inventory.physical_lines) go_files=\(.runtime.inventory.go_files) go_lines=\(.runtime.inventory.go_lines) gooo_files=\(.runtime.inventory.gooo_files) gooo_lines=\(.runtime.inventory.gooo_lines)"' "$report"
               jq -r '"repository_writes=\(.runtime.repository_writes) local_tests=\(.runtime.local_test_executions) product_source_reads=\(.runtime.product_source_reads) cross_project_gates=\(.runtime.cross_project_required_gates) generator_authority=\(.runtime.generator_authority)"' "$report"

@@ -79,14 +79,15 @@ result=$(
     def cell($id): [cells[] | select(.cell_id == $id)] | first;
     def product($id): [($k[0].products // [])[] | select(.id == $id)] | first;
     def release_product($id): [($r[0].products // [])[] | select(.id == $id)] | first;
+    def activity_id($name):
+      "threeproductadoptionv2://activity/" + ($name | gsub("([a-z0-9])([A-Z])"; "\\1-\\2") | ascii_downcase);
     def activity_subject($name):
-      ([($g[0].nodes // [])[] |
-        select(.kind == "Activity" and .name == $name) |
-        (.id // .node_id // .subject)] +
-       [($g[0].relations // [])[] |
-        select(.predicate == "prov:used" and
-          ((.subject | endswith("/" + $name)) or .subject == $name)) |
-        .subject]) | map(select(. != null)) | unique;
+      [($g[0].nodes // [])[] |
+        select(.kind == "Activity" and .namespace == "threeproductadoptionv2" and
+          .name == $name and .id == activity_id($name)) |
+        .id] | unique;
+    def output_entity_exists($id):
+      any(($g[0].nodes // [])[]; .kind == "Entity" and .id == $id);
     def relation($subject; $predicate; $object):
       any(($g[0].relations // [])[];
         .subject == $subject and .predicate == $predicate and .object == $object);
@@ -151,10 +152,10 @@ result=$(
         next_operation: $c.next_operation,
         blocked_by: ($frontier | unique | sort)
       };
-    def direct_fact($c):
+    def direct_fact($c; $graph_contract_ok):
       if $c.cell_id == "CORE_RELEASE_IDENTITY" then
-        if ($g[0].relations // [] | length) > 0 then closed($c)
-        else unknown_direct($c; $c.unknown_reason)
+        if $graph_contract_ok then closed($c)
+        else refuted($c; "released graph activity, generation, or causal edge binding contradicted the denominator")
         end
       elif $c.cell_id == "LOCAL_RELEASE_IDENTITY" then
         if direct_release("local") then closed($c)
@@ -208,8 +209,8 @@ result=$(
           activity: $c.activity,
           activity_subjects: $subjects,
           output_entity: $c.output_entity,
-          used_edge: (($subjects | length) == 1 and any(($g[0].relations // [])[]; .subject == $subjects[0] and .predicate == "prov:used")),
-          generated_edge: (($subjects | length) == 1 and relation($c.output_entity; "prov:wasGeneratedBy"; $subjects[0]))
+          used_edge: (($subjects | length) == 1 and any(($g[0].relations // [])[]; .subject == $subjects[0] and .predicate == "used")),
+          generated_edge: (($subjects | length) == 1 and output_entity_exists($c.output_entity) and relation($c.output_entity; "wasGeneratedBy"; $subjects[0]))
         }
       ];
     def causal_dependency_bindings:
@@ -221,11 +222,11 @@ result=$(
           predecessor: $dep,
           used_predecessor_output: (
             ($dependent_subjects | length) == 1 and
-            relation($dependent_subjects[0]; "prov:used"; output_entity($dep))
+            relation($dependent_subjects[0]; "used"; output_entity($dep))
           ),
           predecessor_generated_output: (
             ($predecessor_subjects | length) == 1 and
-            relation(output_entity($dep); "prov:wasGeneratedBy"; $predecessor_subjects[0])
+            relation(output_entity($dep); "wasGeneratedBy"; $predecessor_subjects[0])
           )
         }
       ];
@@ -234,7 +235,25 @@ result=$(
 
     (graph_bindings) as $bindings |
     (causal_dependency_bindings) as $causal |
-    (cells | map(direct_fact(.))) as $direct |
+    ([cells[].activity]) as $activity_names |
+    ([($g[0].nodes // [])[] |
+      select(.kind == "Activity" and .namespace == "threeproductadoptionv2" and
+        (.name as $name | ($activity_names | index($name)) != null) and
+        .id == activity_id(.name))] | unique_by(.id) | length) as $released_activity_node_count |
+    ([cells[].output_entity]) as $output_ids |
+    ([($g[0].nodes // [])[] |
+      select(.kind == "Entity" and (.id as $id | ($output_ids | index($id)) != null))] | unique_by(.id) | length) as $output_entity_count |
+    ([$bindings[] | select((.activity_subjects | length) == 1)] | length) as $activity_node_count |
+    ([$bindings[] | select(.used_edge)] | length) as $used_activity_count |
+    ([$bindings[] | select(.generated_edge)] | length) as $generated_activity_count |
+    ([$bindings[] | select((.activity_subjects | length) == 1 and .used_edge and .generated_edge)] | length) as $activity_binding_count |
+    ([$causal[] | select(.used_predecessor_output)] | length) as $used_causal_count |
+    ([$causal[] | select(.predecessor_generated_output)] | length) as $generated_causal_count |
+    ([$causal[] | select(.used_predecessor_output and .predecessor_generated_output)] | length) as $exact_causal_pair_count |
+    ($released_activity_node_count == 12 and $output_entity_count == 12 and
+      $activity_node_count == 12 and $used_activity_count == 12 and $generated_activity_count == 12 and
+      ($causal | length) == 19 and $used_causal_count == 19 and $generated_causal_count == 19 and $exact_causal_pair_count == 19) as $graph_contract_ok |
+    (cells | map(direct_fact(.; $graph_contract_ok))) as $direct |
     (reduce cells[] as $c
       ([];
        . as $states |
@@ -285,10 +304,25 @@ result=$(
       },
       graph: {
         activity_bindings: $bindings,
-        activity_binding_count: ([$bindings[] | select((.activity_subjects | length) == 1 and .used_edge and .generated_edge)] | length),
+        released_activity_node_count: $released_activity_node_count,
+        output_entity_count: $output_entity_count,
+        activity_node_count: $activity_node_count,
+        used_activity_count: $used_activity_count,
+        generated_activity_count: $generated_activity_count,
+        activity_binding_count: $activity_binding_count,
+        output_generation_count: $generated_activity_count,
         causal_dependency_pairs: $causal,
         causal_dependency_pair_count: ($causal | length),
-        causal_edge_checks: (([$causal[] | select(.used_predecessor_output)] | length) + ([$causal[] | select(.predecessor_generated_output)] | length)),
+        used_causal_count: $used_causal_count,
+        generated_causal_count: $generated_causal_count,
+        exact_causal_dependency_pair_count: $exact_causal_pair_count,
+        causal_edge_checks: ($used_causal_count + $generated_causal_count),
+        contract_valid: $graph_contract_ok,
+        edge_comparison: {
+          exact_pair_count: $exact_causal_pair_count,
+          before: (if $exact_causal_pair_count == 0 then null else {activity_bindings: 12, output_generations: 12, causal_dependency_pairs: 19} end),
+          after: (if $exact_causal_pair_count == 0 then null else {activity_bindings: $activity_binding_count, output_generations: $generated_activity_count, causal_dependency_pairs: $exact_causal_pair_count} end)
+        },
         isolated_self_loop_count: graph_self_loops
       },
       product_states: [
@@ -378,7 +412,7 @@ printf '%s\n' "$result" > "$output"
 
 case "$scenario" in
   normal)
-    if ! jq -e '.decision == "CLOSED" and .summary.total == 12 and .summary.closed == 12 and .summary.unknown == 0 and .summary.refuted == 0 and .graph.activity_binding_count == 12 and .graph.causal_dependency_pair_count == 19 and .graph.causal_edge_checks == 38 and .graph.isolated_self_loop_count == 0' <<<"$result" >/dev/null; then
+    if ! jq -e '.decision == "CLOSED" and .summary.total == 12 and .summary.closed == 12 and .summary.unknown == 0 and .summary.refuted == 0 and .graph.contract_valid == true and .graph.released_activity_node_count == 12 and .graph.output_entity_count == 12 and .graph.activity_node_count == 12 and .graph.used_activity_count == 12 and .graph.generated_activity_count == 12 and .graph.output_generation_count == 12 and .graph.activity_binding_count == 12 and .graph.causal_dependency_pair_count == 19 and .graph.exact_causal_dependency_pair_count == 19 and .graph.causal_edge_checks == 38 and .graph.isolated_self_loop_count == 0' <<<"$result" >/dev/null; then
       printf '%s\n' "$result" >&2
       exit 1
     fi
@@ -388,6 +422,9 @@ case "$scenario" in
     ;;
   refuted-*)
     jq -e '.decision == "REFUTED" and .summary.total == 12 and .summary.unknown == 0 and .summary.refuted == 6 and .summary.refuted_over_unknown == true and .graph.isolated_self_loop_count == 0' <<<"$result" >/dev/null
+    ;;
+  graph-edge-*)
+    jq -e '.decision == "REFUTED" and .summary.total == 12 and .summary.refuted == 12 and .graph.contract_valid == false and (.graph.activity_binding_count < 12 or .graph.exact_causal_dependency_pair_count < 19) and ((.graph.exact_causal_dependency_pair_count != 0) or (.graph.edge_comparison.before == null and .graph.edge_comparison.after == null))' <<<"$result" >/dev/null
     ;;
   *)
     fail "unknown scenario: $scenario"
