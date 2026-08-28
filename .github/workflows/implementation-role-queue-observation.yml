@@ -136,16 +136,30 @@ jobs:
           jq -e '.decision=="INCOMPLETE" and .summary.cells_closed==3 and .summary.cells_unknown==9 and .summary.direct_missing==1 and .summary.dependency_blocked==8 and .resolution.cause.reason=="CORE_PR_SNAPSHOT_UNAVAILABLE" and .resolution.cause.unknown_class=="DIRECT_MISSING" and .resolution.cause.next_operation=="REFRESH_CORE_PR_SNAPSHOT"' "$RUNNER_TEMP/missing-role-report.json" >/dev/null
 
           repo=$(jq -r .target_repository contracts/implementation-role-queue-policy-v2.json)
-          jq -S -n --arg repo "$repo" '[
-            {number:990001,title:"implementation a",head_ref:"agent/implementation-a",base_ref:"main",draft:false,url:"https://example.invalid/990001",role:"IMPLEMENTATION",candidate_id:"a",title_only_implementation_authority:false},
-            {number:990002,title:"implementation b",head_ref:"agent/implementation-b",base_ref:"main",draft:false,url:"https://example.invalid/990002",role:"IMPLEMENTATION",candidate_id:"b",title_only_implementation_authority:false}
+          base=$(jq -r .classification.base_ref contracts/implementation-role-queue-policy-v2.json)
+          research_prefix=$(jq -r .classification.research_head_ref_prefix contracts/implementation-role-queue-policy-v2.json)
+          implementation_prefix=$(jq -r .classification.implementation_head_ref_prefix contracts/implementation-role-queue-policy-v2.json)
+
+          jq -S -n --arg base "$base" --arg research "$research_prefix" --arg implementation "$implementation_prefix" '[
+            {number:990000,title:"research",head_ref:($research+"fixture"),base_ref:$base,draft:false,url:"https://example.invalid/990000",role:"RESEARCH",candidate_id:null,title_only_implementation_authority:false},
+            {number:990001,title:"implementation",head_ref:($implementation+"fixture"),base_ref:$base,draft:false,url:"https://example.invalid/990001",role:"IMPLEMENTATION",candidate_id:"fixture",title_only_implementation_authority:false},
+            {number:990002,title:"other",head_ref:"agent/other-fixture",base_ref:$base,draft:false,url:"https://example.invalid/990002",role:"OTHER",candidate_id:null,title_only_implementation_authority:false}
+          ]' > "$RUNNER_TEMP/classification-role-prs.json"
+          classification_digest=$(sha256sum "$RUNNER_TEMP/classification-role-prs.json" | awk '{print $1}')
+          jq -S -n --arg repo "$repo" --arg digest "$classification_digest" --slurpfile prs "$RUNNER_TEMP/classification-role-prs.json" '{schema:"gooo/link/core-pr-role-snapshot/v2",source:"CONFORMANCE_FIXTURE",observed_at:"deterministic",target_repository:$repo,complete:true,all_open_pull_requests:3,snapshot_sha256:$digest,pull_requests:$prs[0]}' > "$RUNNER_TEMP/classification-role-snapshot.json"
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/role-core-observation.json" "$RUNNER_TEMP/classification-role-snapshot.json" "$RUNNER_TEMP/role-runtime.json" "$RUNNER_TEMP/classification-role-report.json" "$SUBJECT_SHA" live
+          jq -e '.resolution.state=="CLOSED" and .summary.all_open_pull_requests==3 and .summary.research_pull_requests==1 and .summary.implementation_pull_requests==1 and .summary.other_pull_requests==1 and .summary.partition_delta==0' "$RUNNER_TEMP/classification-role-report.json" >/dev/null
+
+          jq -S -n --arg base "$base" '[
+            {number:990011,title:"implementation a",head_ref:"agent/implementation-a",base_ref:$base,draft:false,url:"https://example.invalid/990011",role:"IMPLEMENTATION",candidate_id:"a",title_only_implementation_authority:false},
+            {number:990012,title:"implementation b",head_ref:"agent/implementation-b",base_ref:$base,draft:false,url:"https://example.invalid/990012",role:"IMPLEMENTATION",candidate_id:"b",title_only_implementation_authority:false}
           ]' > "$RUNNER_TEMP/duplicate-role-prs.json"
           duplicate_digest=$(sha256sum "$RUNNER_TEMP/duplicate-role-prs.json" | awk '{print $1}')
           jq -S -n --arg repo "$repo" --arg digest "$duplicate_digest" --slurpfile prs "$RUNNER_TEMP/duplicate-role-prs.json" '{schema:"gooo/link/core-pr-role-snapshot/v2",source:"ADVERSE_FIXTURE",observed_at:"deterministic",target_repository:$repo,complete:true,all_open_pull_requests:2,snapshot_sha256:$digest,pull_requests:$prs[0]}' > "$RUNNER_TEMP/duplicate-role-snapshot.json"
           bash "$evaluator" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/role-core-observation.json" "$RUNNER_TEMP/duplicate-role-snapshot.json" "$RUNNER_TEMP/role-runtime.json" "$RUNNER_TEMP/duplicate-role-report.json" "$SUBJECT_SHA" duplicate-implementation-prs
           jq -e '.decision=="FAIL_CLOSED" and .summary.cells_closed==10 and .summary.cells_refuted==2 and .resolution.cause.reason=="EXPLICIT_IMPLEMENTATION_PR_LIMIT_EXCEEDED" and .resolution.cause.refutation_class=="DIRECT_CONTRADICTION"' "$RUNNER_TEMP/duplicate-role-report.json" >/dev/null
 
-          jq -S -n --arg repo "$repo" '[{number:990003,title:"feat: title claims implementation",head_ref:"agent/luna-meta-title-only",base_ref:"main",draft:false,url:"https://example.invalid/990003",role:"RESEARCH",candidate_id:null,title_only_implementation_authority:true}]' > "$RUNNER_TEMP/title-role-prs.json"
+          jq -S -n --arg base "$base" --arg research "$research_prefix" '[{number:990013,title:"feat: title claims implementation",head_ref:($research+"title-only"),base_ref:$base,draft:false,url:"https://example.invalid/990013",role:"RESEARCH",candidate_id:null,title_only_implementation_authority:true}]' > "$RUNNER_TEMP/title-role-prs.json"
           title_digest=$(sha256sum "$RUNNER_TEMP/title-role-prs.json" | awk '{print $1}')
           jq -S -n --arg repo "$repo" --arg digest "$title_digest" --slurpfile prs "$RUNNER_TEMP/title-role-prs.json" '{schema:"gooo/link/core-pr-role-snapshot/v2",source:"ADVERSE_FIXTURE",observed_at:"deterministic",target_repository:$repo,complete:true,all_open_pull_requests:1,snapshot_sha256:$digest,pull_requests:$prs[0]}' > "$RUNNER_TEMP/title-role-snapshot.json"
           bash "$evaluator" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/role-core-observation.json" "$RUNNER_TEMP/title-role-snapshot.json" "$RUNNER_TEMP/role-runtime.json" "$RUNNER_TEMP/title-role-report.json" "$SUBJECT_SHA" title-only-promotion
@@ -187,6 +201,7 @@ jobs:
             ${{ runner.temp }}/role-queue-report.json
             ${{ runner.temp }}/role-replay-report.json
             ${{ runner.temp }}/missing-role-report.json
+            ${{ runner.temp }}/classification-role-report.json
             ${{ runner.temp }}/duplicate-role-report.json
             ${{ runner.temp }}/title-role-report.json
             ${{ runner.temp }}/invalid-role-core-report.json

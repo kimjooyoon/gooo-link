@@ -2,7 +2,7 @@
   "schema": "gooo/link/implementation-role-queue-policy/v2",
   "target_repository": "kimjooyoon/meta-ontology-go",
   "classification": {
-    "base_ref": "main",
+    "base_ref": "dev",
     "research_head_ref_prefix": "agent/luna-meta-",
     "implementation_head_ref_prefix": "agent/implementation-",
     "fallback_role": "OTHER"

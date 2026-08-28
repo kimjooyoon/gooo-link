@@ -11,7 +11,7 @@ The observed Core portfolio at design time contained exactly 34 open pull reques
 
 ## Decision
 
-Branch role is determined by an explicit prefix and the `main` base branch:
+Branch role is determined by an explicit prefix and the Core `dev` integration branch:
 
 | Prefix | Role | Cardinality policy |
 | --- | --- | --- |
