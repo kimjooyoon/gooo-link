@@ -56,10 +56,10 @@ jobs:
             selector=$2
             destination=$3
             release="$RUNNER_TEMP/$scope-release.json"
-            name=$(jq -r --arg selector "$selector" ".$scope.assets[$selector].name" "$lock")
-            id=$(jq -r --arg selector "$selector" ".$scope.assets[$selector].id" "$lock")
-            size=$(jq -r --arg selector "$selector" ".$scope.assets[$selector].size" "$lock")
-            digest=$(jq -r --arg selector "$selector" ".$scope.assets[$selector].digest" "$lock")
+            name=$(jq -r --arg scope "$scope" --arg selector "$selector" '.[$scope].assets[$selector].name' "$lock")
+            id=$(jq -r --arg scope "$scope" --arg selector "$selector" '.[$scope].assets[$selector].id' "$lock")
+            size=$(jq -r --arg scope "$scope" --arg selector "$selector" '.[$scope].assets[$selector].size' "$lock")
+            digest=$(jq -r --arg scope "$scope" --arg selector "$selector" '.[$scope].assets[$selector].digest' "$lock")
             jq -e --arg name "$name" --arg digest "$digest" --argjson id "$id" --argjson size "$size" '
               .assets[] | select(.name==$name and .id==$id and .size==$size and .digest==$digest)
             ' "$release" >/dev/null
@@ -286,4 +286,3 @@ jobs:
             ${{ runner.temp }}/infra/semantic-deployment-plan-runtime.json
             ${{ runner.temp }}/infra/semantic-deployment-plan-replay.json
             ${{ runner.temp }}/infra/semantic-deployment-plan-inventory.json
-
