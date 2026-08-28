@@ -53,7 +53,7 @@ validate_baseline() {
     .summary.direct_mappings==5 and .summary.mapping_denominator==30 and .summary.mapping_remaining==25 and
     .summary.independent_consumer_adoptions==4 and .summary.repository_writes==0 and
     .summary.local_tests_run==0 and .summary.cross_project_required_gates==0
-  ' "$local_unknown" >/dev/null
+  ' "$1" >/dev/null
 }
 
 validate_local_normal() {
@@ -68,7 +68,7 @@ validate_local_normal() {
     .summary.replay_comparisons_equal==9 and .summary.repository_writes==0 and
     .summary.local_tests_run==0 and .summary.cross_project_required_gates==0 and
     .authority.common_generator_authorized==false and .authority.central_orchestration_authorized==false
-  ' "$local_refuted" >/dev/null
+  ' "$1" >/dev/null
 }
 
 validate_local_unknown() {
@@ -80,7 +80,7 @@ validate_local_unknown() {
     .claim.step=="RESOLVE_UNKNOWN_READINESS_CLAIM" and
     .claim.reason=="PROJECTED_UNKNOWN_CLAIM_RECEIPT_UNAVAILABLE" and
     .claim.unknown_class=="DIRECT_MISSING" and .claim.next_operation=="RESOLVE_UNKNOWN_READINESS_CLAIM"
-  ' "$local_runtime" >/dev/null
+  ' "$local_unknown" >/dev/null
 }
 
 validate_local_refuted() {
@@ -90,7 +90,7 @@ validate_local_refuted() {
     .claim.state=="REFUTED" and .claim.stage=="CLAIM_RECEIPT" and
     .claim.reason=="PROJECTED_UNKNOWN_CLAIM_TUPLE_MISMATCH" and
     .claim.next_operation=="RESTORE_UNKNOWN_CLAIM_PROJECTION"
-  ' "$1" >/dev/null
+  ' "$local_refuted" >/dev/null
 }
 
 validate_local_runtime() {
@@ -100,7 +100,7 @@ validate_local_runtime() {
     .release_locks_observed==2 and .go_version=="go1.27.0" and .go_fix_module_roots==0 and
     .performance.peak_rss_kib>0 and .performance.wall_ms>=0 and
     .repository_writes==0 and .local_tests_run==0 and .cross_project_required_gates==0
-  ' "$1" >/dev/null
+  ' "$local_runtime" >/dev/null
 }
 
 validate_local_graph() {
