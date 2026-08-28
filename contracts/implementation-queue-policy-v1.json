@@ -1,0 +1,46 @@
+{
+  "schema": "gooo/link/implementation-queue-policy/v1",
+  "target_repository": "kimjooyoon/gooo-link",
+  "candidate_id": "observe-implementation-queue",
+  "classification": {
+    "base_ref": "main",
+    "head_ref_prefix": "agent/"
+  },
+  "limits": {
+    "open_implementation_prs_per_target_repository": 1,
+    "open_implementation_prs_per_candidate": 1
+  },
+  "unknown_contract": {
+    "stage": "OBSERVATION",
+    "step": "OBSERVE_GITHUB_PULL_REQUEST_SNAPSHOT",
+    "reason": "GITHUB_PR_SNAPSHOT_UNAVAILABLE",
+    "unknown_class": "DIRECT_MISSING",
+    "next_operation": "REFRESH_GITHUB_PR_SNAPSHOT"
+  },
+  "refuted_contract": {
+    "stage": "CARDINALITY",
+    "step": "ENFORCE_SINGLE_IMPLEMENTATION_PULL_REQUEST",
+    "reason": "IMPLEMENTATION_PR_LIMIT_EXCEEDED",
+    "next_operation": "REDUCE_OPEN_IMPLEMENTATION_PRS"
+  },
+  "next_execution_order": [
+    {"ordinal":1,"when":"OPEN_IMPLEMENTATION_PRS_GT_1","operation":"REDUCE_OPEN_IMPLEMENTATION_PRS"},
+    {"ordinal":2,"when":"OPEN_IMPLEMENTATION_PRS_EQ_1","operation":"MERGE_OR_CLOSE_CURRENT_IMPLEMENTATION_PR"},
+    {"ordinal":3,"when":"OPEN_IMPLEMENTATION_PRS_EQ_0","operation":"SELECT_NEXT_CANDIDATE"}
+  ],
+  "required_receipt_fields": [
+    "observed_at",
+    "target_repository",
+    "candidate_id",
+    "open_implementation_prs",
+    "open_candidate_prs",
+    "maximum_open_implementation_prs",
+    "next_operation"
+  ],
+  "authority": {
+    "source": "GITHUB_PULL_REQUESTS_API",
+    "effect": "READ_ONLY",
+    "cross_project_required_gates": 0,
+    "local_tests_required": 0
+  }
+}
