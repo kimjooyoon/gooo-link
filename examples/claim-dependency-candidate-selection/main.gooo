@@ -1,0 +1,30 @@
+package claimdependencyselection
+namespace claimdependencyselection
+
+entity Candidate id "gooo://link/claim-dependency-selection/candidate/gooo.primitive.claim-dependency-causality.v1"
+entity RoleQueueRelease id "gooo://link/claim-dependency-selection/entity/role-queue-release"
+entity LocalUserPathRelease id "gooo://link/claim-dependency-selection/entity/local-user-path-release"
+entity DesignUserPathRelease id "gooo://link/claim-dependency-selection/entity/design-user-path-release"
+entity InfraUserPathRelease id "gooo://link/claim-dependency-selection/entity/infra-user-path-release"
+entity ResearchCommit id "gooo://link/claim-dependency-selection/entity/research-commit"
+entity DirectMissingRoots id "gooo://link/claim-dependency-selection/entity/direct-missing-roots"
+entity DependencyBlockedClaims id "gooo://link/claim-dependency-selection/entity/dependency-blocked-claims"
+entity RecoveryAndCausalPredecessors id "gooo://link/claim-dependency-selection/entity/recovery-and-predecessors"
+entity CausalPredecessorGap id "gooo://link/claim-dependency-selection/entity/causal-predecessor-gap"
+entity CandidateGoooTopology id "gooo://link/claim-dependency-selection/entity/candidate-gooo-topology"
+entity SelectionAuthority id "gooo://link/claim-dependency-selection/entity/selection-authority"
+entity ExplicitImplementationOperation id "gooo://link/claim-dependency-selection/entity/explicit-implementation-operation"
+entity CandidateSelectionDecision id "gooo://link/claim-dependency-selection/entity/decision"
+
+activity ObserveRoleQueueRelease(RoleQueueRelease) -> CandidateSelectionDecision
+activity ObserveLocalUserPathRelease(LocalUserPathRelease) -> CandidateSelectionDecision
+activity ObserveDesignUserPathRelease(DesignUserPathRelease) -> CandidateSelectionDecision
+activity ObserveInfraUserPathRelease(InfraUserPathRelease) -> CandidateSelectionDecision
+activity ObserveClaimDependencyResearchCommit(ResearchCommit, Candidate) -> CandidateSelectionDecision
+activity CountDirectMissingRoots(DirectMissingRoots) -> CandidateSelectionDecision
+activity CountDependencyBlockedClaims(DependencyBlockedClaims) -> CandidateSelectionDecision
+activity BindRecoveryAndCausalPredecessors(RecoveryAndCausalPredecessors) -> CandidateSelectionDecision
+activity PreserveCausalPredecessorGap(CausalPredecessorGap) -> CandidateSelectionDecision
+activity VerifyCandidateGoooTopology(CandidateGoooTopology, Candidate) -> CandidateSelectionDecision
+activity RefuseTitleAndActiveQueueAuthority(SelectionAuthority) -> CandidateSelectionDecision
+activity SelectExplicitImplementationOperation(ExplicitImplementationOperation, Candidate) -> CandidateSelectionDecision

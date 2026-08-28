@@ -1,0 +1,61 @@
+{
+  "schema": "gooo/link/claim-dependency-candidate-lock/v1",
+  "candidate_id": "gooo.primitive.claim-dependency-causality.v1",
+  "releases": {
+    "local": {
+      "repository": "kimjooyoon/gooo-link",
+      "tag": "v0.18.0-dev",
+      "target_sha": "7a250b8a9dd8b3071c9d58356fe98b9e871f637e",
+      "asset_name": "local-user-path-observation-7a250b8a9dd8b3071c9d58356fe98b9e871f637e.zip",
+      "asset_size": 20272,
+      "asset_sha256": "3a55abeec966107585c4c37c566aa080dac50be60c2766f97a066f8714c15456",
+      "unknown_report": "local-user-path-unknown.json"
+    },
+    "design": {
+      "repository": "kimjooyoon/gooo-link",
+      "tag": "v0.19.0-dev",
+      "target_sha": "42f06656f0f16e4c7a60515ca449812af7fab1a6",
+      "asset_name": "design-user-path-observation-42f06656f0f16e4c7a60515ca449812af7fab1a6.zip",
+      "asset_size": 23517,
+      "asset_sha256": "b88810c539c635869cfbd4fc10ea12217700dcc06d1e1ef6c7b1134f39e92460",
+      "unknown_report": "design-user-path-unknown.json"
+    },
+    "infra": {
+      "repository": "kimjooyoon/gooo-link",
+      "tag": "v0.20.0-dev",
+      "target_sha": "3f848c0f1e9bab3540627e30dfd263ba494f2a61",
+      "asset_name": "infra-user-path-observation-3f848c0f1e9bab3540627e30dfd263ba494f2a61.zip",
+      "asset_size": 16565,
+      "asset_sha256": "1094bd4365a023e35976631bdb19342c2860fdcea34d6df7dca0f7756554211d",
+      "unknown_report": "missing-report.json"
+    },
+    "role_queue": {
+      "repository": "kimjooyoon/gooo-link",
+      "tag": "v0.21.0-dev",
+      "target_sha": "0c16e9675ce2f04dadcd6abc75337b0494f20898",
+      "asset_name": "implementation-role-queue-0c16e9675ce2f04dadcd6abc75337b0494f20898.zip",
+      "asset_size": 20011,
+      "asset_sha256": "7aaa81b7217f96332d83aa1b618b751e006e6297a74092d96b0a83c9fd487b62",
+      "queue_report": "role-queue-report.json"
+    }
+  },
+  "research": {
+    "repository": "kimjooyoon/meta-ontology-go",
+    "pull_request": 566,
+    "head_ref": "agent/luna-meta-22-claim-dependency-causality",
+    "base_ref": "dev",
+    "commit_sha": "9766a04e34f60167777f2824f1b28fa2ed4657f4",
+    "source": {
+      "path": "examples/language-claim-dependency/main.gooo",
+      "git_blob_sha": "7cd1953394ca01025afad82262a97ca38dabf7ab",
+      "size": 1302,
+      "sha256": "bbb7c2cfba5298699a9f9dee627e9831207039cba125ebead4e2c2c87ff71656"
+    },
+    "document": {
+      "path": "docs/research/claim-dependency-causality.md",
+      "git_blob_sha": "6c8a21489bcef1db3be51e8b010bd1764074c016",
+      "size": 10752,
+      "sha256": "375e7cbab9b522f143c37d63082900fc320d4a261459b6fa4e2820e118e34f4c"
+    }
+  }
+}
