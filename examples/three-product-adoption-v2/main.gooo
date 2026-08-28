@@ -1,0 +1,30 @@
+package threeproductadoptionv2
+
+namespace threeproductadoptionv2
+
+entity CoreRelease id "gooo://link/three-product-adoption/entity/core-release"
+entity CoreIdentity id "gooo://link/three-product-adoption/entity/core-identity"
+entity LocalRelease id "gooo://link/three-product-adoption/entity/local-release"
+entity DesignRelease id "gooo://link/three-product-adoption/entity/design-release"
+entity InfraRelease id "gooo://link/three-product-adoption/entity/infra-release"
+entity InterchangeKit id "gooo://link/three-product-adoption/entity/interchange-kit"
+entity LocalEnvelope id "gooo://link/three-product-adoption/entity/local-envelope"
+entity DesignEnvelope id "gooo://link/three-product-adoption/entity/design-envelope"
+entity InfraEnvelope id "gooo://link/three-product-adoption/entity/infra-envelope"
+entity ClaimResolution id "gooo://link/three-product-adoption/entity/claim-resolution"
+entity Provenance id "gooo://link/three-product-adoption/entity/provenance"
+entity Replay id "gooo://link/three-product-adoption/entity/replay"
+entity ReadOnlyAuthority id "gooo://link/three-product-adoption/entity/read-only-authority"
+
+activity ObserveCoreReleaseIdentity(CoreRelease) -> CoreIdentity
+activity ObserveLocalProductRelease(CoreIdentity) -> LocalRelease
+activity ObserveDesignProductRelease(CoreIdentity) -> DesignRelease
+activity ObserveInfraProductRelease(CoreIdentity) -> InfraRelease
+activity ObserveInterchangeKitRelease(CoreIdentity) -> InterchangeKit
+activity ConformLocalEnvelope(LocalRelease, InterchangeKit) -> LocalEnvelope
+activity ConformDesignEnvelope(DesignRelease, InterchangeKit) -> DesignEnvelope
+activity ConformInfraEnvelope(InfraRelease, InterchangeKit) -> InfraEnvelope
+activity BindClaimResolutionReceipts(LocalEnvelope, DesignEnvelope, InfraEnvelope) -> ClaimResolution
+activity BindReleasedProvenance(LocalEnvelope, DesignEnvelope, InfraEnvelope) -> Provenance
+activity VerifyThreeProductReplay(ClaimResolution, Provenance) -> Replay
+activity PreserveReadOnlyAuthority(Replay) -> ReadOnlyAuthority

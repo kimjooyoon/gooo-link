@@ -1,7 +1,7 @@
 package semanticforgereadiness
 namespace semanticforgereadiness
 
-entity TwoConsumerLinkRelease id "gooo://link/release/v0.25.0-dev/two-consumers"
+entity TwoConsumerLinkRelease id "gooo://link/release/v0.26.0-dev/two-consumers"
 entity CoreMetaToolRelease id "gooo://core/release/v0.4.0-dev/meta-tool"
 entity LocalProductRelease id "gooo://local-ledger/release/v0.8.0-dev/project-plan"
 entity InfraProductRelease id "gooo://infra-evidence/release/v0.8.0-dev/deployment-plan"
@@ -38,4 +38,3 @@ activity PreserveAggregateUtilityUnknown(AggregateUtilityUnknown) -> AggregateUt
 activity PreserveReadOnlyProductAuthority(ReadOnlyProductAuthority) -> ReadOnlyAuthorityCell
 activity BindTwelveReadinessMetaActivities(ReadinessMetaActivitySet) -> MetaActivitiesCell
 activity SelectOptionalForgeExperiment(OptionalForgeExperiment) -> OptionalExperimentCell
-
