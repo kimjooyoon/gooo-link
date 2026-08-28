@@ -1,0 +1,37 @@
+{
+  "schema": "gooo/link/cross-consumer-primitive-adoption-release-lock/v1",
+  "baseline": {
+    "repository": "kimjooyoon/gooo-link",
+    "tag": "v0.10.0-dev",
+    "ref_type": "commit",
+    "tag_object_sha": "a6a26af9ad27b507244dd3f34ff200b7f32d314f",
+    "target_commit_sha": "a6a26af9ad27b507244dd3f34ff200b7f32d314f",
+    "asset": {
+      "id": 533594972,
+      "name": "gooo-link-v0.10.0-dev-cross-consumer-primitive-mapping.json",
+      "size": 9509,
+      "sha256": "abbe121eb56937099cb119a99ff17dc23ec8ed927ff1cd6a61a6c3e8bc5004d4"
+    }
+  },
+  "design_adoption": {
+    "repository": "kimjooyoon/gooo-design-evidence",
+    "tag": "v0.6.0-dev",
+    "ref_type": "commit",
+    "tag_object_sha": "a37e7424c2e52bd7cdd5b14959feecbc6ef3ef0a",
+    "target_commit_sha": "a37e7424c2e52bd7cdd5b14959feecbc6ef3ef0a",
+    "asset": {
+      "id": 533657773,
+      "name": "claim-resolution-adoption-a37e7424c2e52bd7cdd5b14959feecbc6ef3ef0a.zip",
+      "size": 19633,
+      "sha256": "8e16e636aa38cfe307c791b19354361476d2b0c889b9aa551ccfd2c8dea541cc"
+    },
+    "required_reports": [
+      "adoption-report.json",
+      "adoption-unknown.json",
+      "adoption-mismatch-refuted.json",
+      "adoption-core-refuted.json",
+      "adoption-scope-refuted.json",
+      "adoption-runtime.json"
+    ]
+  }
+}

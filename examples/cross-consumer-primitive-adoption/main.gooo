@@ -1,0 +1,29 @@
+package cross_consumer_primitive_adoption
+namespace gooolink
+
+entity BaselinePrimitiveMapping id "gooo://link/primitive-mapping/v0.10.0-dev"
+entity DesignClaimResolutionAdoption id "gooo://design-evidence/claim-resolution-adoption/v0.6.0-dev"
+entity ClaimResolutionCandidateIdentity id "gooo://claim-resolution/gooo.primitive.claim-resolution-tuple.v1"
+entity BaselineDirectMappingCount id "gooo://claim-resolution/direct-mappings/1-of-30"
+entity IndependentDesignAdoption id "gooo://claim-resolution/independent-design-adoption/1-of-1"
+entity DesignClaimScenarios id "gooo://claim-resolution/design-scenarios/4-of-4"
+entity ClaimResolutionFields id "gooo://claim-resolution/fields/24-of-24"
+entity MatcherCoreEquality id "gooo://claim-resolution/matcher-core-equality/4-of-4"
+entity AdverseUnknownResolution id "gooo://claim-resolution/adverse-unknown/1-of-1"
+entity AdverseRefutations id "gooo://claim-resolution/adverse-refutations/3-of-3"
+entity ObservationAuthorityBoundary id "gooo://claim-resolution/observation-authority/v1"
+entity DirectMappingProgress id "gooo://claim-resolution/direct-mappings/2-of-30"
+entity CrossConsumerPrimitiveAdoptionReport id "gooo://link/cross-consumer-primitive-adoption/v1"
+
+activity ObserveBaselinePrimitiveMapping(BaselinePrimitiveMapping) -> CrossConsumerPrimitiveAdoptionReport
+activity ObserveDesignClaimResolutionAdoption(DesignClaimResolutionAdoption) -> CrossConsumerPrimitiveAdoptionReport
+activity BindClaimResolutionCandidateIdentity(ClaimResolutionCandidateIdentity) -> CrossConsumerPrimitiveAdoptionReport
+activity ObserveBaselineDirectMappingCount(BaselineDirectMappingCount) -> CrossConsumerPrimitiveAdoptionReport
+activity CountIndependentDesignAdoption(IndependentDesignAdoption) -> CrossConsumerPrimitiveAdoptionReport
+activity ObserveDesignClaimScenarios(DesignClaimScenarios) -> CrossConsumerPrimitiveAdoptionReport
+activity ObserveClaimResolutionFields(ClaimResolutionFields) -> CrossConsumerPrimitiveAdoptionReport
+activity PreserveMatcherCoreEquality(MatcherCoreEquality) -> CrossConsumerPrimitiveAdoptionReport
+activity PreserveAdverseUnknownResolution(AdverseUnknownResolution) -> CrossConsumerPrimitiveAdoptionReport
+activity PreserveAdverseRefutations(AdverseRefutations) -> CrossConsumerPrimitiveAdoptionReport
+activity PreserveObservationAuthorityBoundary(ObservationAuthorityBoundary) -> CrossConsumerPrimitiveAdoptionReport
+activity RecordDirectMappingProgress(DirectMappingProgress) -> CrossConsumerPrimitiveAdoptionReport

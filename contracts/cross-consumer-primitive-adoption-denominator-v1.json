@@ -1,0 +1,147 @@
+{
+  "schema": "gooo/link/cross-consumer-primitive-adoption-denominator/v1",
+  "candidate_id": "gooo.primitive.claim-resolution-tuple.v1",
+  "total": 12,
+  "proofs": [
+    {
+      "choice": "FOUNDATION",
+      "total": 4
+    },
+    {
+      "choice": "COHERENCE",
+      "total": 4
+    },
+    {
+      "choice": "REGRESSION",
+      "total": 4
+    }
+  ],
+  "indicator_classes": [
+    {
+      "class": "DRIVER",
+      "total": 4
+    },
+    {
+      "class": "OUTCOME",
+      "total": 4
+    },
+    {
+      "class": "GUARDRAIL",
+      "total": 4
+    }
+  ],
+  "cells": [
+    {
+      "id": "baseline-mapping-release",
+      "activity": "ObserveBaselinePrimitiveMapping",
+      "proof": "FOUNDATION",
+      "indicator_class": "DRIVER",
+      "depends_on": []
+    },
+    {
+      "id": "design-adoption-release",
+      "activity": "ObserveDesignClaimResolutionAdoption",
+      "proof": "FOUNDATION",
+      "indicator_class": "DRIVER",
+      "depends_on": []
+    },
+    {
+      "id": "candidate-identity",
+      "activity": "BindClaimResolutionCandidateIdentity",
+      "proof": "FOUNDATION",
+      "indicator_class": "DRIVER",
+      "depends_on": [
+        "baseline-mapping-release",
+        "design-adoption-release"
+      ]
+    },
+    {
+      "id": "baseline-mapping-count",
+      "activity": "ObserveBaselineDirectMappingCount",
+      "proof": "FOUNDATION",
+      "indicator_class": "OUTCOME",
+      "depends_on": [
+        "baseline-mapping-release"
+      ]
+    },
+    {
+      "id": "independent-design-adoption",
+      "activity": "CountIndependentDesignAdoption",
+      "proof": "COHERENCE",
+      "indicator_class": "OUTCOME",
+      "depends_on": [
+        "candidate-identity"
+      ]
+    },
+    {
+      "id": "design-claim-scenarios",
+      "activity": "ObserveDesignClaimScenarios",
+      "proof": "COHERENCE",
+      "indicator_class": "OUTCOME",
+      "depends_on": [
+        "design-adoption-release"
+      ]
+    },
+    {
+      "id": "claim-resolution-fields",
+      "activity": "ObserveClaimResolutionFields",
+      "proof": "COHERENCE",
+      "indicator_class": "OUTCOME",
+      "depends_on": [
+        "design-adoption-release"
+      ]
+    },
+    {
+      "id": "matcher-core-equality",
+      "activity": "PreserveMatcherCoreEquality",
+      "proof": "COHERENCE",
+      "indicator_class": "GUARDRAIL",
+      "depends_on": [
+        "design-claim-scenarios",
+        "claim-resolution-fields"
+      ]
+    },
+    {
+      "id": "adverse-unknown-resolution",
+      "activity": "PreserveAdverseUnknownResolution",
+      "proof": "REGRESSION",
+      "indicator_class": "GUARDRAIL",
+      "depends_on": [
+        "design-adoption-release"
+      ]
+    },
+    {
+      "id": "adverse-refutations",
+      "activity": "PreserveAdverseRefutations",
+      "proof": "REGRESSION",
+      "indicator_class": "GUARDRAIL",
+      "depends_on": [
+        "design-adoption-release"
+      ]
+    },
+    {
+      "id": "authority-boundary",
+      "activity": "PreserveObservationAuthorityBoundary",
+      "proof": "REGRESSION",
+      "indicator_class": "GUARDRAIL",
+      "depends_on": [
+        "baseline-mapping-release",
+        "design-adoption-release"
+      ]
+    },
+    {
+      "id": "direct-mapping-progress",
+      "activity": "RecordDirectMappingProgress",
+      "proof": "REGRESSION",
+      "indicator_class": "DRIVER",
+      "depends_on": [
+        "candidate-identity",
+        "independent-design-adoption",
+        "matcher-core-equality",
+        "adverse-unknown-resolution",
+        "adverse-refutations",
+        "authority-boundary"
+      ]
+    }
+  ]
+}
