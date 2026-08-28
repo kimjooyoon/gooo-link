@@ -127,7 +127,7 @@ jobs:
               "$RUNNER_TEMP/gap-laundering.json"; do
               if test -s "$report"; then
                 printf '%s\n' "--- $(basename "$report")"
-                jq -c '{status,decision,summary,claim,candidate,diagnostics}' "$report" 2>/dev/null || cat "$report"
+                jq -c '{status,decision,subject,contract,summary,claim,candidate,authority,diagnostics}' "$report" 2>/dev/null || cat "$report"
               fi
             done
             exit "$status"
