@@ -1,0 +1,5 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://gooo.dev/schemas/link/compatibility-claim-v1.schema.json","title":"Gooo Link compatibility claim v1","type":"object",
+  "required":["schema","id","subject_project","state","gooo","evidence_ids","unknown_policy"],
+  "properties":{"schema":{"const":"gooo/link/compatibility-claim/v1"},"state":{"enum":["CLOSED","UNKNOWN","REFUTED"]},"gooo":{"type":"object","required":["version","target_commit_sha","schemas"]},"evidence_ids":{"type":"array","minItems":1},"unknown_policy":{"const":"PRESERVE_STAGE_STEP_REASON_NEXT_OPERATION"}}
+}

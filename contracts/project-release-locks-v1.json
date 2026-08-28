@@ -1,0 +1,27 @@
+{
+  "schema": "gooo/link/project-release-locks/v1",
+  "projects": [
+    {
+      "key":"workgraph","id":"gooo://project/workgraph","repository":"kimjooyoon/gooo-workgraph","tag":"v0.1.0-dev","draft":false,"prerelease":true,
+      "tag_object_sha":"953187488d3b49857405cbb7818013ac8809254d","target_commit_sha":"c18a75881b75b8499179bda403a4f590562c7a25","required_report":"workgraph-report.json","required_runtime":"workgraph-runtime.json",
+      "assets": [
+        {"name":"SHA256SUMS","digest":"sha256:85d52056a4b6faa82392a32f60a942c820e7790cb149180b3602b46af1d06abd","size":382},
+        {"name":"workgraph-missing-activity-refutation.json","digest":"sha256:9752246832b0716ae953766633311a67e79915b5af0ed088d7f5a0ad49c9afbb","size":9552},
+        {"name":"workgraph-report.json","digest":"sha256:460ca52cc1278ad2d9076f94ee74d996fa42205ef46dcf4f23d9760d84e36686","size":9468},
+        {"name":"workgraph-runtime.json","digest":"sha256:308b9029fb59d228366238276d067a31369d6a2f1121f3223f03d61abefe477d","size":12599},
+        {"name":"workgraph-semantic-graph.json","digest":"sha256:44ee20de7282deffaa13421cb3e9bfd9fd9ffe8b0c7be4116d5e86682b961dad","size":8027}
+      ]
+    },
+    {
+      "key":"design-evidence","id":"gooo://project/design-evidence","repository":"kimjooyoon/gooo-design-evidence","tag":"v0.1.0-dev","draft":false,"prerelease":true,
+      "tag_object_sha":"710b0ed12dd5b96ffc9c1e9bc4891d5f1de3d3dc","target_commit_sha":"3eedfce13bf9160cb39b110b051d92744c2a6327","required_report":"design-evidence-report.json","required_runtime":"design-evidence-runtime.json",
+      "assets": [
+        {"name":"design-evidence-receipt.json","digest":"sha256:f9a1d692f4c17e621f06752b253def323254d26ef4edf5307bd70053d1561a01","size":1240},
+        {"name":"design-evidence-report.json","digest":"sha256:ee2aeccd5473060cb45a235891a68d0fcc97689c727c75b6f2bcef17ec6f3f3f","size":8401},
+        {"name":"design-evidence-runtime.json","digest":"sha256:b44c99b27738a4dad0e4c9bc818cbd0bea25619e46f99c640102b0f49f560002","size":12444},
+        {"name":"design-evidence-semantic-depth.json","digest":"sha256:1ac9fc48d8ac5958af1af12047e41ddf2b934246bf459263e83ccde29ae5aea2","size":706},
+        {"name":"SHA256SUMS","digest":"sha256:c160d8edc4fccaf91a8eef7f301013317d0c067e96ae1971546741e365af3469","size":386}
+      ]
+    }
+  ]
+}
