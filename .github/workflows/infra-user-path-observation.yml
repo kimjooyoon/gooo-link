@@ -186,7 +186,7 @@ jobs:
             "$root/link" "$root/infra-metric" "$root/metric-report.json" "$GITHUB_SHA" metric-tamper
 
           cp -a "$root/infra" "$root/infra-meta"
-          jq 'walk(if type == "object" and has("activities") then .activities |= map(select((.name // .activity // "") != "GenerateDeploymentPacketArtifacts")) else . end)' \
+          jq '.nodes |= map(select(.name != "GenerateDeploymentPacketArtifacts"))' \
             "$root/infra-meta/deployment-graph.json" > "$root/meta.tmp"
           mv "$root/meta.tmp" "$root/infra-meta/deployment-graph.json"
           scripts/observe-infra-user-path.sh \
