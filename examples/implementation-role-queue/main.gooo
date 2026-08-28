@@ -1,0 +1,29 @@
+package implementationrolequeue
+namespace implementationrolequeue
+
+entity ReleasedGoooIdentity id "gooo://link/role-queue/entity/released-gooo-identity"
+entity ImplementationRolePolicy id "gooo://link/role-queue/entity/role-policy"
+entity CorePullRequestSnapshot id "gooo://link/role-queue/entity/core-pr-snapshot"
+entity ResearchPullRequestClassification id "gooo://link/role-queue/entity/research-classification"
+entity ImplementationPullRequestClassification id "gooo://link/role-queue/entity/implementation-classification"
+entity OpenPullRequestPartition id "gooo://link/role-queue/entity/open-pr-partition"
+entity ResearchPullRequestCardinality id "gooo://link/role-queue/entity/research-cardinality"
+entity ImplementationPullRequestCardinality id "gooo://link/role-queue/entity/implementation-cardinality"
+entity SingleImplementationPullRequestLimit id "gooo://link/role-queue/entity/single-implementation-limit"
+entity TitleOnlyImplementationAuthority id "gooo://link/role-queue/entity/title-only-authority"
+entity MissingSnapshotResolution id "gooo://link/role-queue/entity/missing-snapshot-resolution"
+entity NextImplementationOperation id "gooo://link/role-queue/entity/next-operation"
+entity ImplementationRoleQueueDecision id "gooo://link/role-queue/entity/decision"
+
+activity ObserveReleasedGoooIdentity(ReleasedGoooIdentity) -> ImplementationRoleQueueDecision
+activity ObserveImplementationRolePolicy(ImplementationRolePolicy) -> ImplementationRoleQueueDecision
+activity ObserveCorePullRequestSnapshot(CorePullRequestSnapshot) -> ImplementationRoleQueueDecision
+activity ClassifyResearchPullRequests(ResearchPullRequestClassification) -> ImplementationRoleQueueDecision
+activity ClassifyImplementationPullRequests(ImplementationPullRequestClassification) -> ImplementationRoleQueueDecision
+activity PartitionOpenPullRequests(OpenPullRequestPartition) -> ImplementationRoleQueueDecision
+activity CountResearchPullRequests(ResearchPullRequestCardinality) -> ImplementationRoleQueueDecision
+activity CountExplicitImplementationPullRequests(ImplementationPullRequestCardinality) -> ImplementationRoleQueueDecision
+activity EnforceSingleExplicitImplementationPullRequest(SingleImplementationPullRequestLimit) -> ImplementationRoleQueueDecision
+activity RefuseTitleOnlyImplementationPromotion(TitleOnlyImplementationAuthority) -> ImplementationRoleQueueDecision
+activity PreserveMissingSnapshotResolution(MissingSnapshotResolution) -> ImplementationRoleQueueDecision
+activity SelectNextImplementationOperation(NextImplementationOperation) -> ImplementationRoleQueueDecision

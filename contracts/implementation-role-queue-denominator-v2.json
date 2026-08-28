@@ -1,0 +1,28 @@
+{
+  "schema": "gooo/link/implementation-role-queue-denominator/v2",
+  "target_cells": 12,
+  "proof_totals": [
+    {"proof_choice": "FOUNDATION", "total": 4},
+    {"proof_choice": "COHERENCE", "total": 4},
+    {"proof_choice": "REGRESSION", "total": 4}
+  ],
+  "indicator_totals": [
+    {"indicator_class": "DRIVER", "total": 5},
+    {"indicator_class": "OUTCOME", "total": 4},
+    {"indicator_class": "GUARDRAIL", "total": 3}
+  ],
+  "cells": [
+    {"ordinal": 1, "id": "RELEASED_GOOO_IDENTITY", "activity": "ObserveReleasedGoooIdentity", "proof_choice": "FOUNDATION", "indicator_class": "DRIVER", "stage": "CORE_RELEASE", "step": "OBSERVE_RELEASED_GOOO_IDENTITY"},
+    {"ordinal": 2, "id": "ROLE_POLICY_IDENTITY", "activity": "ObserveImplementationRolePolicy", "proof_choice": "FOUNDATION", "indicator_class": "DRIVER", "stage": "POLICY", "step": "OBSERVE_IMPLEMENTATION_ROLE_POLICY"},
+    {"ordinal": 3, "id": "CORE_PR_SNAPSHOT", "activity": "ObserveCorePullRequestSnapshot", "proof_choice": "FOUNDATION", "indicator_class": "DRIVER", "stage": "OBSERVATION", "step": "OBSERVE_CORE_PULL_REQUEST_SNAPSHOT"},
+    {"ordinal": 4, "id": "RESEARCH_CLASSIFICATION", "activity": "ClassifyResearchPullRequests", "proof_choice": "FOUNDATION", "indicator_class": "DRIVER", "stage": "CLASSIFICATION", "step": "CLASSIFY_RESEARCH_PULL_REQUESTS"},
+    {"ordinal": 5, "id": "IMPLEMENTATION_CLASSIFICATION", "activity": "ClassifyImplementationPullRequests", "proof_choice": "COHERENCE", "indicator_class": "DRIVER", "stage": "CLASSIFICATION", "step": "CLASSIFY_IMPLEMENTATION_PULL_REQUESTS"},
+    {"ordinal": 6, "id": "ROLE_PARTITION", "activity": "PartitionOpenPullRequests", "proof_choice": "COHERENCE", "indicator_class": "OUTCOME", "stage": "PARTITION", "step": "PARTITION_OPEN_PULL_REQUESTS"},
+    {"ordinal": 7, "id": "RESEARCH_CARDINALITY", "activity": "CountResearchPullRequests", "proof_choice": "COHERENCE", "indicator_class": "OUTCOME", "stage": "CARDINALITY", "step": "COUNT_RESEARCH_PULL_REQUESTS"},
+    {"ordinal": 8, "id": "IMPLEMENTATION_CARDINALITY", "activity": "CountExplicitImplementationPullRequests", "proof_choice": "COHERENCE", "indicator_class": "OUTCOME", "stage": "CARDINALITY", "step": "COUNT_EXPLICIT_IMPLEMENTATION_PULL_REQUESTS"},
+    {"ordinal": 9, "id": "SINGLE_IMPLEMENTATION_LIMIT", "activity": "EnforceSingleExplicitImplementationPullRequest", "proof_choice": "REGRESSION", "indicator_class": "GUARDRAIL", "stage": "CARDINALITY", "step": "ENFORCE_SINGLE_EXPLICIT_IMPLEMENTATION_PULL_REQUEST"},
+    {"ordinal": 10, "id": "TITLE_AUTHORITY_REFUSAL", "activity": "RefuseTitleOnlyImplementationPromotion", "proof_choice": "REGRESSION", "indicator_class": "GUARDRAIL", "stage": "AUTHORITY", "step": "REFUSE_TITLE_ONLY_IMPLEMENTATION_PROMOTION"},
+    {"ordinal": 11, "id": "MISSING_SNAPSHOT_PRESERVATION", "activity": "PreserveMissingSnapshotResolution", "proof_choice": "REGRESSION", "indicator_class": "GUARDRAIL", "stage": "RESOLUTION", "step": "PRESERVE_MISSING_SNAPSHOT_RESOLUTION"},
+    {"ordinal": 12, "id": "NEXT_OPERATION_SELECTION", "activity": "SelectNextImplementationOperation", "proof_choice": "REGRESSION", "indicator_class": "OUTCOME", "stage": "SELECTION", "step": "SELECT_NEXT_IMPLEMENTATION_OPERATION"}
+  ]
+}
