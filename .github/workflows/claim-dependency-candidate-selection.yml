@@ -1,0 +1,259 @@
+name: Claim dependency candidate selection
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  selection:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.27.0
+
+      - name: Bind exact subject
+        shell: bash
+        run: echo "SUBJECT_SHA=${{ github.event.pull_request.head.sha || github.sha }}" >> "$GITHUB_ENV"
+
+      - name: Fetch immutable consumer and queue releases
+        shell: bash
+        run: |
+          set -euo pipefail
+          lock=contracts/claim-dependency-candidate-lock-v1.json
+          root="$RUNNER_TEMP/claim-dependency-selection"
+          mkdir -p "$root/releases" "$root/evidence"
+          for key in local design infra role_queue; do
+            repo=$(jq -r ".releases.$key.repository" "$lock")
+            tag=$(jq -r ".releases.$key.tag" "$lock")
+            target=$(jq -r ".releases.$key.target_sha" "$lock")
+            asset=$(jq -r ".releases.$key.asset_name" "$lock")
+            size=$(jq -r ".releases.$key.asset_size" "$lock")
+            digest=$(jq -r ".releases.$key.asset_sha256" "$lock")
+            test "$(gh api "repos/$repo/git/ref/tags/$tag" --jq .object.sha)" = "$target"
+            gh api "repos/$repo/releases/tags/$tag" > "$root/$key-release.json"
+            asset_id=$(jq -r --arg name "$asset" '.assets[]|select(.name==$name)|.id' "$root/$key-release.json")
+            gh api -H 'Accept: application/octet-stream' "repos/$repo/releases/assets/$asset_id" > "$root/releases/$key.zip"
+            test "$(stat -c '%s' "$root/releases/$key.zip")" = "$size"
+            test "$(sha256sum "$root/releases/$key.zip" | awk '{print $1}')" = "$digest"
+            mkdir -p "$root/$key"
+            unzip -q "$root/releases/$key.zip" -d "$root/$key"
+          done
+          copy_one() {
+            local source_root=$1 name=$2 output=$3
+            mapfile -t matches < <(find "$source_root" -type f -name "$name" -print)
+            test "${#matches[@]}" -eq 1
+            cp "${matches[0]}" "$output"
+          }
+          copy_one "$root/local" "$(jq -r .releases.local.unknown_report "$lock")" "$root/evidence/local-unknown.json"
+          copy_one "$root/design" "$(jq -r .releases.design.unknown_report "$lock")" "$root/evidence/design-unknown.json"
+          copy_one "$root/infra" "$(jq -r .releases.infra.unknown_report "$lock")" "$root/evidence/infra-unknown.json"
+          copy_one "$root/role_queue" "$(jq -r .releases.role_queue.queue_report "$lock")" "$root/evidence/role-queue-report.json"
+          jq -e '.resolution.state=="CLOSED" and .summary.cells_closed==12 and .summary.all_open_pull_requests==34 and .summary.research_pull_requests==29 and .summary.implementation_pull_requests==0 and .summary.other_pull_requests==5 and .summary.partition_delta==0' "$root/evidence/role-queue-report.json" >/dev/null
+
+      - name: Derive repeated consumer dependency evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/claim-dependency-selection"
+          jq -S -n --slurpfile local "$root/evidence/local-unknown.json" --slurpfile design "$root/evidence/design-unknown.json" --slurpfile infra "$root/evidence/infra-unknown.json" '
+            def unknowns($doc;$domain): [$doc.cells[] | {domain:$domain,id:(.id//.cell_id//.name),state:(.resolution.state//.state),stage:(.resolution.stage//.stage),step:(.resolution.step//.step),reason:(.resolution.reason//.reason),unknown_class:(.resolution.unknown_class//.unknown_class),next_operation:(.resolution.next_operation//.next_operation),blocked_by:(.resolution.blocked_by//.blocked_by//[])} | select(.state=="UNKNOWN")];
+            (unknowns($local[0];"LOCAL")) as $l |
+            (unknowns($design[0];"DESIGN")) as $d |
+            (unknowns($infra[0];"INFRA")) as $i |
+            ($l+$d+$i) as $all |
+            ([$all[]|select(.unknown_class=="DEPENDENCY_BLOCKED")]) as $dependencies |
+            {
+              schema:"gooo/link/consumer-claim-dependency-observation/v1",
+              complete:true,
+              domains_observed:3,
+              direct_missing_roots:([$all[]|select(.unknown_class=="DIRECT_MISSING")]|length),
+              dependency_blocked_claims:($dependencies|length),
+              recovery_operations:([$dependencies[]|select((.next_operation|type)=="string" and (.next_operation|length)>0)]|length),
+              explicit_causal_predecessors:([$dependencies[]|select((.blocked_by|length)>0)]|length),
+              causal_predecessor_gap:([$dependencies[]|select((.blocked_by|length)==0)]|length),
+              domains:{
+                local:{unknown:($l|length),dependency_blocked:([$l[]|select(.unknown_class=="DEPENDENCY_BLOCKED")]|length),explicit_predecessors:([$l[]|select(.unknown_class=="DEPENDENCY_BLOCKED" and (.blocked_by|length)>0)]|length)},
+                design:{unknown:($d|length),dependency_blocked:([$d[]|select(.unknown_class=="DEPENDENCY_BLOCKED")]|length),explicit_predecessors:([$d[]|select(.unknown_class=="DEPENDENCY_BLOCKED" and (.blocked_by|length)>0)]|length)},
+                infra:{unknown:($i|length),dependency_blocked:([$i[]|select(.unknown_class=="DEPENDENCY_BLOCKED")]|length),explicit_predecessors:([$i[]|select(.unknown_class=="DEPENDENCY_BLOCKED" and (.blocked_by|length)>0)]|length)}
+              },
+              claims:$all
+            }
+          ' > "$root/consumer-dependency-observation.json"
+          jq -e '.complete==true and .domains_observed==3 and .direct_missing_roots==3 and .dependency_blocked_claims==14 and .recovery_operations==14 and .explicit_causal_predecessors==10 and .causal_predecessor_gap==4 and .domains.local=={unknown:7,dependency_blocked:6,explicit_predecessors:6} and .domains.design=={unknown:5,dependency_blocked:4,explicit_predecessors:4} and .domains.infra=={unknown:5,dependency_blocked:4,explicit_predecessors:0}' "$root/consumer-dependency-observation.json" >/dev/null
+
+      - name: Fetch and verify pinned research source
+        shell: bash
+        run: |
+          set -euo pipefail
+          lock=contracts/claim-dependency-candidate-lock-v1.json
+          root="$RUNNER_TEMP/claim-dependency-selection"
+          repo=$(jq -r .research.repository "$lock")
+          commit=$(jq -r .research.commit_sha "$lock")
+          test "$(gh api "repos/$repo/commits/$commit" --jq .sha)" = "$commit"
+          for kind in source document; do
+            file_path=$(jq -r ".research.$kind.path" "$lock")
+            expected_blob=$(jq -r ".research.$kind.git_blob_sha" "$lock")
+            expected_size=$(jq -r ".research.$kind.size" "$lock")
+            expected_sha=$(jq -r ".research.$kind.sha256" "$lock")
+            gh api "repos/$repo/contents/$file_path?ref=$commit" > "$root/$kind-meta.json"
+            test "$(jq -r .sha "$root/$kind-meta.json")" = "$expected_blob"
+            jq -r .content "$root/$kind-meta.json" | base64 --decode > "$root/research-$kind"
+            test "$(stat -c '%s' "$root/research-$kind")" = "$expected_size"
+            test "$(sha256sum "$root/research-$kind" | awk '{print $1}')" = "$expected_sha"
+          done
+
+      - name: Compile candidate and selection Gooo sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/claim-dependency-selection"
+          lock=contracts/core-activity-cardinality-release-lock-v1.json
+          repo=$(jq -r .repository "$lock"); tag=$(jq -r .tag "$lock"); tag_object=$(jq -r .tag_object_sha "$lock"); target=$(jq -r .target_commit_sha "$lock"); asset=$(jq -r .consumer.binary_asset "$lock"); digest=$(jq -r --arg name "$asset" '.assets[]|select(.name==$name)|.digest|sub("^sha256:";"")' "$lock")
+          gh api "repos/$repo/git/ref/tags/$tag" > "$root/core-ref.json"
+          jq -e --arg sha "$tag_object" '.object.type=="tag" and .object.sha==$sha' "$root/core-ref.json" >/dev/null
+          gh api "repos/$repo/git/tags/$tag_object" > "$root/core-tag.json"
+          jq -e --arg sha "$target" '.object.type=="commit" and .object.sha==$sha' "$root/core-tag.json" >/dev/null
+          gh api "repos/$repo/releases/tags/$tag" > "$root/core-release.json"
+          asset_id=$(jq -r --arg name "$asset" '.assets[]|select(.name==$name)|.id' "$root/core-release.json")
+          gh api -H 'Accept: application/octet-stream' "repos/$repo/releases/assets/$asset_id" > "$root/$asset"
+          printf '%s  %s\n' "$digest" "$root/$asset" | sha256sum -c -
+          mkdir -p "$root/core"
+          tar -xzf "$root/$asset" -C "$root/core"
+          chmod +x "$root/core/gooo"
+          gooo="$root/core/gooo"
+
+          cp "$root/research-source" "$root/research-main.gooo"
+          "$gooo" check --json "$root/research-main.gooo" > "$root/research-syntax.json"
+          "$gooo" check --semantic --json "$root/research-main.gooo" > "$root/research-semantic.json"
+          "$gooo" graph dump "$root/research-main.gooo" > "$root/research-graph.json"
+          jq -e '.status=="ok"' "$root/research-syntax.json" "$root/research-semantic.json" >/dev/null
+          activities=$(jq '[.nodes[]|select(.kind=="Activity")]|length' "$root/research-graph.json")
+          edges=$(jq '.edges|length' "$root/research-graph.json")
+          recoverable=$(grep -c 'computes "claim.observe:recoverable|' "$root/research-main.gooo")
+          typed=$(grep -c 'computes "claim.edge:' "$root/research-main.gooo")
+          requires=$(grep -c 'computes "claim.edge:requires|' "$root/research-main.gooo")
+          supports=$(grep -c 'computes "claim.edge:supports|' "$root/research-main.gooo")
+          contradicts=$(grep -c 'computes "claim.edge:contradicts|' "$root/research-main.gooo")
+          failure=$(grep -c 'computes "claim.edge:failure-entailment|' "$root/research-main.gooo")
+          research_lock=contracts/claim-dependency-candidate-lock-v1.json
+          jq -S -n --arg commit "$(jq -r .research.commit_sha "$research_lock")" --arg source_sha "$(jq -r .research.source.sha256 "$research_lock")" --arg document_sha "$(jq -r .research.document.sha256 "$research_lock")" --argjson activities "$activities" --argjson edges "$edges" --argjson recoverable "$recoverable" --argjson typed "$typed" --argjson requires "$requires" --argjson supports "$supports" --argjson contradicts "$contradicts" --argjson failure "$failure" '{schema:"gooo/link/claim-dependency-research-observation/v1",commit_sha:$commit,commit_valid:true,source_sha256:$source_sha,source_valid:true,document_sha256:$document_sha,document_valid:true,mapping_authority:"PINNED_GOOO_SOURCE",activities:$activities,graph_edges:$edges,recoverable_roots:$recoverable,typed_edge_programs:$typed,requires_programs:$requires,supports_programs:$supports,contradicts_programs:$contradicts,failure_entailment_programs:$failure}' > "$root/research-observation.json"
+          jq -e '.activities==6 and .graph_edges==8 and .recoverable_roots==1 and .typed_edge_programs==5 and .requires_programs==2 and .supports_programs==1 and .contradicts_programs==1 and .failure_entailment_programs==1' "$root/research-observation.json" >/dev/null
+
+          source=examples/claim-dependency-candidate-selection/main.gooo
+          denominator=contracts/claim-dependency-candidate-denominator-v1.json
+          "$gooo" check --json "$source" > "$root/selection-syntax.json"
+          "$gooo" check --semantic --json "$source" > "$root/selection-semantic.json"
+          "$gooo" graph dump "$source" > "$root/selection-graph.json"
+          jq -e '.status=="ok"' "$root/selection-syntax.json" "$root/selection-semantic.json" >/dev/null
+          jq -e '([.nodes[]|select(.kind=="Activity")]|length)==12' "$root/selection-graph.json" >/dev/null
+          mkdir -p "$root/selection-resolutions"
+          while IFS=$'\t' read -r ordinal activity; do
+            printf -v receipt '%s/selection-resolutions/%02d-%s.json' "$root" "$ordinal" "$activity"
+            "$gooo" graph resolve-activity "$source" --name "$activity" > "$receipt"
+            jq -e --arg activity "$activity" '.decision=="CLOSED" and .selector.name==$activity and .occurrences==1 and .claim.state=="CLOSED"' "$receipt" >/dev/null
+          done < <(jq -r '.cells[]|[.ordinal,.activity]|@tsv' "$denominator")
+          jq -S -s '.' "$root"/selection-resolutions/*.json > "$root/selection-receipts.json"
+          jq -S -n --slurpfile receipts "$root/selection-receipts.json" '($receipts[0]) as $resolved|{schema:"gooo/link/claim-dependency-selection-meta-observation/v1",summary:{expected:12,observed:($resolved|length),closed:([$resolved[]|select(.decision=="CLOSED")]|length)},receipts:$resolved}' > "$root/selection-meta-observation.json"
+
+          sed '/^activity PreserveCausalPredecessorGap(/d' "$source" > "$root/incomplete-selection.gooo"
+          set +e
+          "$gooo" graph resolve-activity "$root/incomplete-selection.gooo" --name PreserveCausalPredecessorGap > "$root/missing-selection-activity.json"
+          missing_status=$?
+          set -e
+          test "$missing_status" -ne 0
+          jq -e '.decision=="UNKNOWN" and .occurrences==0 and .claim.state=="UNKNOWN" and .claim.unknown_class=="DIRECT_MISSING"' "$root/missing-selection-activity.json" >/dev/null
+
+      - name: Select candidate and exercise adverse evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/claim-dependency-selection"
+          evaluator=scripts/evaluate-claim-dependency-candidate.sh
+          snapshot_repo() { find "$GITHUB_WORKSPACE" -path "$GITHUB_WORKSPACE/.git" -prune -o -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}'; }
+          before=$(snapshot_repo)
+          jq -S -n --arg subject "$SUBJECT_SHA" --arg digest "$before" '{schema:"gooo/link/claim-dependency-selection-runtime/v1",subject_sha:$subject,observer:{peak_rss_kib:0,wall_ms:0},repository:{before_digest:$digest,after_digest:$digest,writes:0},deterministic_replay:true,local_tests_run:0}' > "$root/provisional-runtime.json"
+          start_ns=$(date +%s%N)
+          /usr/bin/time -f '%M' -o "$root/selection-rss" bash "$evaluator" "$GITHUB_WORKSPACE" "$root/selection-meta-observation.json" "$root/evidence/role-queue-report.json" "$root/consumer-dependency-observation.json" "$root/research-observation.json" "$root/provisional-runtime.json" "$root/bootstrap-selection.json" "$SUBJECT_SHA" live
+          end_ns=$(date +%s%N)
+          after=$(snapshot_repo)
+          if test "$before" = "$after"; then writes=0; else writes=1; fi
+          jq -S -n --arg subject "$SUBJECT_SHA" --arg before "$before" --arg after "$after" --argjson writes "$writes" --argjson rss "$(cat "$root/selection-rss")" --argjson wall "$(((end_ns-start_ns)/1000000))" '{schema:"gooo/link/claim-dependency-selection-runtime/v1",subject_sha:$subject,observer:{peak_rss_kib:$rss,wall_ms:$wall},repository:{before_digest:$before,after_digest:$after,writes:$writes},deterministic_replay:true,local_tests_run:0}' > "$root/selection-runtime.json"
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$root/selection-meta-observation.json" "$root/evidence/role-queue-report.json" "$root/consumer-dependency-observation.json" "$root/research-observation.json" "$root/selection-runtime.json" "$root/candidate-selection-report.json" "$SUBJECT_SHA" live
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$root/selection-meta-observation.json" "$root/evidence/role-queue-report.json" "$root/consumer-dependency-observation.json" "$root/research-observation.json" "$root/selection-runtime.json" "$root/replay-selection-report.json" "$SUBJECT_SHA" live
+          cmp -s "$root/candidate-selection-report.json" "$root/replay-selection-report.json"
+          jq -e '.decision=="CANDIDATE_SELECTED" and .resolution.state=="CLOSED" and .summary.cells_closed==12 and .candidate.id=="gooo.primitive.claim-dependency-causality.v1" and .candidate.mapping_authority=="PINNED_GOOO_SOURCE" and .candidate.implementation_state=="NOT_STARTED" and .candidate.automatic_merge_allowed==false and .candidate.next_operation=="OPEN_EXPLICIT_IMPLEMENTATION_PR" and .summary.direct_candidate_mappings==1 and .summary.research_experiments==29 and .summary.primitive_mappings==5 and .summary.primitive_increment==0 and .summary.explicit_implementation_pull_requests==0 and .summary.repository_writes==0 and .summary.local_tests==0 and .summary.cross_project_required_gates==0' "$root/candidate-selection-report.json" >/dev/null
+
+          jq '.complete=false|.missing_domain="DESIGN"' "$root/consumer-dependency-observation.json" > "$root/missing-consumer.json"
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$root/selection-meta-observation.json" "$root/evidence/role-queue-report.json" "$root/missing-consumer.json" "$root/research-observation.json" "$root/selection-runtime.json" "$root/missing-design-report.json" "$SUBJECT_SHA" missing-design-evidence
+          jq -e '.decision=="INCOMPLETE" and .summary.cells_closed==6 and .summary.cells_unknown==6 and .resolution.cause.reason=="DESIGN_USER_PATH_UNKNOWN_EVIDENCE_UNAVAILABLE" and .resolution.cause.unknown_class=="DIRECT_MISSING"' "$root/missing-design-report.json" >/dev/null
+
+          jq '.explicit_causal_predecessors=14|.causal_predecessor_gap=0' "$root/consumer-dependency-observation.json" > "$root/laundered-consumer.json"
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$root/selection-meta-observation.json" "$root/evidence/role-queue-report.json" "$root/laundered-consumer.json" "$root/research-observation.json" "$root/selection-runtime.json" "$root/gap-laundering-report.json" "$SUBJECT_SHA" causal-gap-laundering
+          jq -e '.decision=="FAIL_CLOSED" and .summary.cells_closed==10 and .summary.cells_refuted==2 and .resolution.cause.reason=="CAUSAL_PREDECESSOR_GAP_LAUNDERED"' "$root/gap-laundering-report.json" >/dev/null
+
+          jq '.source_valid=false' "$root/research-observation.json" > "$root/drifted-research.json"
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$root/selection-meta-observation.json" "$root/evidence/role-queue-report.json" "$root/consumer-dependency-observation.json" "$root/drifted-research.json" "$root/selection-runtime.json" "$root/research-drift-report.json" "$SUBJECT_SHA" research-source-drift
+          jq -e '.decision=="FAIL_CLOSED" and .summary.cells_closed==10 and .summary.cells_refuted==2 and .resolution.cause.reason=="PINNED_RESEARCH_GOOO_TOPOLOGY_MISMATCH"' "$root/research-drift-report.json" >/dev/null
+
+          jq '.mapping_authority="TITLE_ONLY"' "$root/research-observation.json" > "$root/title-research.json"
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$root/selection-meta-observation.json" "$root/evidence/role-queue-report.json" "$root/consumer-dependency-observation.json" "$root/title-research.json" "$root/selection-runtime.json" "$root/title-selection-report.json" "$SUBJECT_SHA" title-only-promotion
+          jq -e '.decision=="FAIL_CLOSED" and .summary.cells_closed==10 and .summary.cells_refuted==2 and .resolution.cause.reason=="TITLE_ONLY_CANDIDATE_AUTHORITY_REFUSED"' "$root/title-selection-report.json" >/dev/null
+
+          jq '.summary.implementation_pull_requests=1' "$root/evidence/role-queue-report.json" > "$root/active-queue.json"
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$root/selection-meta-observation.json" "$root/active-queue.json" "$root/consumer-dependency-observation.json" "$root/research-observation.json" "$root/selection-runtime.json" "$root/active-queue-report.json" "$SUBJECT_SHA" active-implementation-queue
+          jq -e '.decision=="FAIL_CLOSED" and .summary.cells_closed==10 and .summary.cells_refuted==2 and .resolution.cause.reason=="EXPLICIT_IMPLEMENTATION_QUEUE_NOT_CLEAR"' "$root/active-queue-report.json" >/dev/null
+
+          jq '.receipts[0].decision="FIXED_POINT"' "$root/selection-meta-observation.json" > "$root/invalid-meta.json"
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$root/invalid-meta.json" "$root/evidence/role-queue-report.json" "$root/consumer-dependency-observation.json" "$root/research-observation.json" "$root/selection-runtime.json" "$root/invalid-meta-report.json" "$SUBJECT_SHA" invalid-core-decision
+          jq -e '.decision=="FAIL_CLOSED" and .summary.cells_closed==0 and .summary.cells_refuted==12 and .resolution.cause.reason=="UNRECOGNIZED_CORE_ACTIVITY_RESOLUTION_DECISION"' "$root/invalid-meta-report.json" >/dev/null
+
+          { echo '## Claim dependency candidate'; jq -r '"- decision: \(.decision)","- candidate: \(.candidate.id)","- next operation: \(.candidate.next_operation)","- meta cells: \(.summary.cells_closed)/\(.summary.cells_total)","- consumer domains: \(.summary.consumer_domains)/3","- direct missing roots: \(.summary.direct_missing_roots)/3","- dependency blocked claims: \(.summary.dependency_blocked_claims)/14","- recovery operations: \(.summary.recovery_operations)/14","- explicit causal predecessors: \(.summary.explicit_causal_predecessors)/14","- causal predecessor gap: \(.summary.causal_predecessor_gap)/14","- candidate mappings: \(.summary.direct_candidate_mappings)/\(.summary.research_experiments)","- primitive mappings: \(.summary.primitive_mappings)/\(.summary.primitive_denominator), increment \(.summary.primitive_increment)","- implementation PRs: \(.summary.explicit_implementation_pull_requests)/\(.summary.maximum_explicit_implementation_pull_requests)","- repository writes / local tests / cross-project gates: \(.summary.repository_writes) / \(.summary.local_tests) / \(.summary.cross_project_required_gates)"' "$root/candidate-selection-report.json"; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record repository inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/claim-dependency-selection"
+          mapfile -t module_roots < <(find . -type f -name go.mod -not -path './.git/*' -printf '%h\n' | sort -u)
+          for module_root in "${module_roots[@]}"; do (cd "$module_root" && go fix ./...); done
+          files=$(find . -type f -not -path './.git/*' -not -path './README.md' | wc -l); directories=$(find . -mindepth 1 -type d -not -path './.git*' | wc -l); go_files=$(find . -type f -name '*.go' -not -path './.git/*' | wc -l); gooo_files=$(find . -type f -name '*.gooo' -not -path './.git/*' | wc -l); go_lines=$(find . -type f -name '*.go' -not -path './.git/*' -print0 | xargs -0 -r cat | wc -l); gooo_lines=$(find . -type f -name '*.gooo' -not -path './.git/*' -print0 | xargs -0 -r cat | wc -l)
+          go_per_file=$(find . -type f -name '*.go' -not -path './.git/*' -print0 | sort -z | xargs -0 -r -n1 wc -l | jq -R -s 'split("\n")|map(select(length>0)|capture("^\\s*(?<lines>[0-9]+)\\s+(?<file>.+)$")|{file:.file,lines:(.lines|tonumber)})')
+          gooo_per_file=$(find . -type f -name '*.gooo' -not -path './.git/*' -print0 | sort -z | xargs -0 -r -n1 wc -l | jq -R -s 'split("\n")|map(select(length>0)|capture("^\\s*(?<lines>[0-9]+)\\s+(?<file>.+)$")|{file:.file,lines:(.lines|tonumber)})')
+          jq -n --arg go_version "$(go version|awk '{print $3}'|sed 's/^go//')" --argjson files "$files" --argjson directories "$directories" --argjson go_files "$go_files" --argjson gooo_files "$gooo_files" --argjson go_lines "$go_lines" --argjson gooo_lines "$gooo_lines" --argjson roots "${#module_roots[@]}" --argjson go_per_file "$go_per_file" --argjson gooo_per_file "$gooo_per_file" '{schema:"gooo.repository-inventory.v1",root_readme_excluded:true,files:$files,directories:$directories,go:{files:$go_files,physical_lines:$go_lines,per_file:$go_per_file},gooo:{files:$gooo_files,physical_lines:$gooo_lines,per_file:$gooo_per_file},toolchain:{go_version:$go_version,go_fix_module_roots:$roots}}' > "$root/selection-inventory.json"
+          jq -e '(.go.per_file|length)==.go.files and ([.go.per_file[].lines]|add//0)==.go.physical_lines and (.gooo.per_file|length)==.gooo.files and ([.gooo.per_file[].lines]|add//0)==.gooo.physical_lines' "$root/selection-inventory.json" >/dev/null
+
+      - name: Upload candidate selection evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claim-dependency-candidate-${{ github.event.pull_request.head.sha || github.sha }}
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/claim-dependency-selection/candidate-selection-report.json
+            ${{ runner.temp }}/claim-dependency-selection/replay-selection-report.json
+            ${{ runner.temp }}/claim-dependency-selection/missing-design-report.json
+            ${{ runner.temp }}/claim-dependency-selection/gap-laundering-report.json
+            ${{ runner.temp }}/claim-dependency-selection/research-drift-report.json
+            ${{ runner.temp }}/claim-dependency-selection/title-selection-report.json
+            ${{ runner.temp }}/claim-dependency-selection/active-queue-report.json
+            ${{ runner.temp }}/claim-dependency-selection/invalid-meta-report.json
+            ${{ runner.temp }}/claim-dependency-selection/consumer-dependency-observation.json
+            ${{ runner.temp }}/claim-dependency-selection/research-observation.json
+            ${{ runner.temp }}/claim-dependency-selection/research-graph.json
+            ${{ runner.temp }}/claim-dependency-selection/selection-graph.json
+            ${{ runner.temp }}/claim-dependency-selection/selection-meta-observation.json
+            ${{ runner.temp }}/claim-dependency-selection/missing-selection-activity.json
+            ${{ runner.temp }}/claim-dependency-selection/selection-runtime.json
+            ${{ runner.temp }}/claim-dependency-selection/selection-inventory.json
+            contracts/claim-dependency-candidate-denominator-v1.json
+            contracts/claim-dependency-candidate-lock-v1.json
+            examples/claim-dependency-candidate-selection/main.gooo

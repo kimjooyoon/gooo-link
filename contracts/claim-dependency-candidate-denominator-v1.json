@@ -1,0 +1,29 @@
+{
+  "schema": "gooo/link/claim-dependency-candidate-denominator/v1",
+  "candidate_id": "gooo.primitive.claim-dependency-causality.v1",
+  "target_cells": 12,
+  "proof_totals": [
+    {"proof_choice": "FOUNDATION", "total": 4},
+    {"proof_choice": "COHERENCE", "total": 4},
+    {"proof_choice": "REGRESSION", "total": 4}
+  ],
+  "indicator_totals": [
+    {"indicator_class": "DRIVER", "total": 5},
+    {"indicator_class": "OUTCOME", "total": 4},
+    {"indicator_class": "GUARDRAIL", "total": 3}
+  ],
+  "cells": [
+    {"ordinal": 1, "id": "ROLE_QUEUE_RELEASE", "activity": "ObserveRoleQueueRelease", "proof_choice": "FOUNDATION", "indicator_class": "DRIVER", "stage": "RELEASE_EVIDENCE", "step": "OBSERVE_ROLE_QUEUE_RELEASE"},
+    {"ordinal": 2, "id": "LOCAL_USER_PATH_RELEASE", "activity": "ObserveLocalUserPathRelease", "proof_choice": "FOUNDATION", "indicator_class": "DRIVER", "stage": "RELEASE_EVIDENCE", "step": "OBSERVE_LOCAL_USER_PATH_RELEASE"},
+    {"ordinal": 3, "id": "DESIGN_USER_PATH_RELEASE", "activity": "ObserveDesignUserPathRelease", "proof_choice": "FOUNDATION", "indicator_class": "DRIVER", "stage": "RELEASE_EVIDENCE", "step": "OBSERVE_DESIGN_USER_PATH_RELEASE"},
+    {"ordinal": 4, "id": "INFRA_USER_PATH_RELEASE", "activity": "ObserveInfraUserPathRelease", "proof_choice": "FOUNDATION", "indicator_class": "DRIVER", "stage": "RELEASE_EVIDENCE", "step": "OBSERVE_INFRA_USER_PATH_RELEASE"},
+    {"ordinal": 5, "id": "RESEARCH_COMMIT", "activity": "ObserveClaimDependencyResearchCommit", "proof_choice": "COHERENCE", "indicator_class": "DRIVER", "stage": "RESEARCH_SOURCE", "step": "OBSERVE_CLAIM_DEPENDENCY_RESEARCH_COMMIT"},
+    {"ordinal": 6, "id": "DIRECT_MISSING_ROOTS", "activity": "CountDirectMissingRoots", "proof_choice": "COHERENCE", "indicator_class": "OUTCOME", "stage": "CONSUMER_EVIDENCE", "step": "COUNT_DIRECT_MISSING_ROOTS"},
+    {"ordinal": 7, "id": "DEPENDENCY_BLOCKED_CLAIMS", "activity": "CountDependencyBlockedClaims", "proof_choice": "COHERENCE", "indicator_class": "OUTCOME", "stage": "CONSUMER_EVIDENCE", "step": "COUNT_DEPENDENCY_BLOCKED_CLAIMS"},
+    {"ordinal": 8, "id": "RECOVERY_AND_PREDECESSOR_BINDING", "activity": "BindRecoveryAndCausalPredecessors", "proof_choice": "COHERENCE", "indicator_class": "OUTCOME", "stage": "CONSUMER_EVIDENCE", "step": "BIND_RECOVERY_AND_CAUSAL_PREDECESSORS"},
+    {"ordinal": 9, "id": "CAUSAL_PREDECESSOR_GAP", "activity": "PreserveCausalPredecessorGap", "proof_choice": "REGRESSION", "indicator_class": "GUARDRAIL", "stage": "CAUSALITY", "step": "PRESERVE_CAUSAL_PREDECESSOR_GAP"},
+    {"ordinal": 10, "id": "CANDIDATE_GOOO_TOPOLOGY", "activity": "VerifyCandidateGoooTopology", "proof_choice": "REGRESSION", "indicator_class": "GUARDRAIL", "stage": "RESEARCH_SOURCE", "step": "VERIFY_CANDIDATE_GOOO_TOPOLOGY"},
+    {"ordinal": 11, "id": "SELECTION_AUTHORITY", "activity": "RefuseTitleAndActiveQueueAuthority", "proof_choice": "REGRESSION", "indicator_class": "GUARDRAIL", "stage": "AUTHORITY", "step": "REFUSE_TITLE_AND_ACTIVE_QUEUE_AUTHORITY"},
+    {"ordinal": 12, "id": "EXPLICIT_IMPLEMENTATION_OPERATION", "activity": "SelectExplicitImplementationOperation", "proof_choice": "REGRESSION", "indicator_class": "OUTCOME", "stage": "SELECTION", "step": "SELECT_EXPLICIT_IMPLEMENTATION_OPERATION"}
+  ]
+}
