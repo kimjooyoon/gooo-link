@@ -1,0 +1,38 @@
+{
+  "schema": "gooo/link/generator-consumer-release-locks/v1",
+  "id": "gooo://link/generator-consumers/local-ledger-design-evidence/v1",
+  "consumers": [
+    {
+      "ordinal": 1,
+      "id": "local-ledger",
+      "repository": "kimjooyoon/gooo-local-ledger",
+      "tag": "v0.2.0-dev",
+      "tag_object_sha": "6dc333551717ae43511ea57258a81645f9ccdd42",
+      "target_commit_sha": "fda925df718ac066498667817312b69bb1568a5c",
+      "assets": [
+        {"kind":"adoption","name":"consumer-adoption.json","sha256":"7ceb42c394d3e5c44d402844ad5e8bb41956042ed4a77efa50c8fcc64470f85d"},
+        {"kind":"bundle","name":"generated-evidence-bundle.tar.gz","sha256":"d7d809cd9d4157904bb5a5e71fd4edc103c69ecfa66f0b99fc44c7f728db8509"}
+      ]
+    },
+    {
+      "ordinal": 2,
+      "id": "design-evidence",
+      "repository": "kimjooyoon/gooo-design-evidence",
+      "tag": "v0.2.0-dev",
+      "tag_object_sha": "ca40c59c2657e3a96c61848d1f246baf495ffae5",
+      "target_commit_sha": "a53df10ecc1c00e13a3a0a557c91ee8421f6ace3",
+      "assets": [
+        {"kind":"adoption","name":"consumer-adoption.json","sha256":"0766f17176f54e8ce91a0d2e681c625d21d87aa68a8b87139081d30cf38350c3"},
+        {"kind":"bundle","name":"generated-design-evidence-bundle.tar.gz","sha256":"5992c444d6dba6f4d1cc2e47bcf9ed96822ca4825d40e8427306f947573efb0e"}
+      ]
+    }
+  ],
+  "selection_rule": {
+    "required_consumers": 2,
+    "required_complete_cells_per_consumer": 12,
+    "required_promoted_patterns_per_consumer": 11,
+    "required_generated_files_per_consumer": 7,
+    "required_manifest_entries_per_consumer": 6,
+    "candidate_id": "GOOO_CORE_ACTIVITY_CARDINALITY_RESOLUTION_V1"
+  }
+}

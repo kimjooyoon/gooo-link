@@ -1,0 +1,145 @@
+name: Core improvement selection
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  selection:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Bind exact subject identity
+        run: echo "SUBJECT_SHA=${{ github.event.pull_request.head.sha || github.sha }}" >> "$GITHUB_ENV"
+
+      - name: Observe released Gooo selection graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          lock=contracts/core-release-lock-v1.json
+          tag=$(jq -r '.tag' "$lock")
+          tag_object=$(jq -r '.tag_object_sha' "$lock")
+          target=$(jq -r '.target_commit_sha' "$lock")
+          asset=gooo-linux-amd64.tar.gz
+          digest=$(jq -r --arg name "$asset" '.assets[]|select(.name==$name)|(.sha256 // (.digest|sub("^sha256:";"")))' "$lock")
+          gh api "repos/kimjooyoon/meta-ontology-go/git/ref/tags/$tag" > "$RUNNER_TEMP/core-ref.json"
+          jq -e --arg sha "$tag_object" '.object.type=="tag" and .object.sha==$sha' "$RUNNER_TEMP/core-ref.json" >/dev/null
+          gh api "repos/kimjooyoon/meta-ontology-go/git/tags/$tag_object" > "$RUNNER_TEMP/core-tag.json"
+          jq -e --arg sha "$target" '.object.type=="commit" and .object.sha==$sha' "$RUNNER_TEMP/core-tag.json" >/dev/null
+          gh api "repos/kimjooyoon/meta-ontology-go/releases/tags/$tag" > "$RUNNER_TEMP/core-release.json"
+          asset_id=$(jq -r --arg name "$asset" '.assets[]|select(.name==$name)|.id' "$RUNNER_TEMP/core-release.json")
+          gh api -H 'Accept: application/octet-stream' "repos/kimjooyoon/meta-ontology-go/releases/assets/$asset_id" > "$RUNNER_TEMP/$asset"
+          printf '%s  %s\n' "$digest" "$RUNNER_TEMP/$asset" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/core"
+          tar -xzf "$RUNNER_TEMP/$asset" -C "$RUNNER_TEMP/core"
+          chmod +x "$RUNNER_TEMP/core/gooo"
+          "$RUNNER_TEMP/core/gooo" check --json examples/core-improvement-selection/main.gooo > "$RUNNER_TEMP/syntax.json"
+          "$RUNNER_TEMP/core/gooo" check --semantic --json examples/core-improvement-selection/main.gooo > "$RUNNER_TEMP/semantic.json"
+          "$RUNNER_TEMP/core/gooo" graph dump examples/core-improvement-selection/main.gooo > "$RUNNER_TEMP/graph.json"
+          jq -e '.status=="ok"' "$RUNNER_TEMP/syntax.json" "$RUNNER_TEMP/semantic.json" >/dev/null
+          jq -e '.schema_version=="gooo-graph/v1" and ([.nodes[]|select(.kind=="Activity")]|length)==12' "$RUNNER_TEMP/graph.json" >/dev/null
+
+      - name: Download and verify immutable consumer releases
+        shell: bash
+        run: |
+          set -euo pipefail
+          locks=contracts/generator-consumer-release-locks-v1.json
+          download_consumer() {
+            id=$1
+            repository=$(jq -r --arg id "$id" '.consumers[]|select(.id==$id)|.repository' "$locks")
+            tag=$(jq -r --arg id "$id" '.consumers[]|select(.id==$id)|.tag' "$locks")
+            tag_object=$(jq -r --arg id "$id" '.consumers[]|select(.id==$id)|.tag_object_sha' "$locks")
+            target=$(jq -r --arg id "$id" '.consumers[]|select(.id==$id)|.target_commit_sha' "$locks")
+            gh api "repos/$repository/git/ref/tags/$tag" > "$RUNNER_TEMP/$id-ref.json"
+            jq -e --arg sha "$tag_object" '.object.type=="tag" and .object.sha==$sha' "$RUNNER_TEMP/$id-ref.json" >/dev/null
+            gh api "repos/$repository/git/tags/$tag_object" > "$RUNNER_TEMP/$id-tag.json"
+            jq -e --arg sha "$target" '.object.type=="commit" and .object.sha==$sha' "$RUNNER_TEMP/$id-tag.json" >/dev/null
+            gh api "repos/$repository/releases/tags/$tag" > "$RUNNER_TEMP/$id-release.json"
+            for kind in adoption bundle; do
+              name=$(jq -r --arg id "$id" --arg kind "$kind" '.consumers[]|select(.id==$id)|.assets[]|select(.kind==$kind)|.name' "$locks")
+              digest=$(jq -r --arg id "$id" --arg kind "$kind" '.consumers[]|select(.id==$id)|.assets[]|select(.kind==$kind)|.sha256' "$locks")
+              asset_id=$(jq -r --arg name "$name" '.assets[]|select(.name==$name)|.id' "$RUNNER_TEMP/$id-release.json")
+              destination="$RUNNER_TEMP/$id-$kind"
+              if [[ "$kind" == "bundle" ]]; then
+                destination="$RUNNER_TEMP/$id-bundle.tar.gz"
+              fi
+              gh api -H 'Accept: application/octet-stream' "repos/$repository/releases/assets/$asset_id" > "$destination"
+              printf '%s  %s\n' "$digest" "$destination" | sha256sum -c -
+            done
+            mkdir -p "$RUNNER_TEMP/$id-bundle"
+            tar -xzf "$RUNNER_TEMP/$id-bundle.tar.gz" -C "$RUNNER_TEMP/$id-bundle"
+            manifest="$RUNNER_TEMP/$id-bundle/generation-manifest.json"
+            verified=0
+            while IFS=$'\t' read -r path expected; do
+              actual=$(sha256sum "$RUNNER_TEMP/$id-bundle/$path" | awk '{print $1}')
+              test "$actual" = "$expected"
+              verified=$((verified+1))
+            done < <(jq -r '.files[]|[.path,.sha256]|@tsv' "$manifest")
+            test "$verified" -eq 6
+            jq -e --arg target "$target" '.subject_sha==$target and .adoption_state=="MAIN_MERGED"' "$RUNNER_TEMP/$id-adoption" >/dev/null
+            jq -S -n --arg id "$id" --arg repository "$repository" --arg target "$target" --argjson assets_verified 2 --argjson manifest_entries_verified "$verified" '{id:$id,repository:$repository,target_sha:$target,identity_verified:true,assets_verified:$assets_verified,manifest_entries_verified:$manifest_entries_verified}' > "$RUNNER_TEMP/$id-observation.json"
+          }
+          download_consumer local-ledger
+          download_consumer design-evidence
+          jq -S -s '{schema:"gooo/link/generator-consumer-release-observation/v1",consumers:.}' "$RUNNER_TEMP/local-ledger-observation.json" "$RUNNER_TEMP/design-evidence-observation.json" > "$RUNNER_TEMP/release-observation.json"
+
+      - name: Select shared primitive and preserve counterexamples
+        shell: bash
+        run: |
+          set -euo pipefail
+          snapshot() {
+            find "$GITHUB_WORKSPACE" -path "$GITHUB_WORKSPACE/.git" -prune -o -type f -print0 |
+              sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}'
+          }
+          before=$(snapshot)
+          selector=scripts/select-core-improvement.sh
+          args=("$RUNNER_TEMP/graph.json" contracts/core-improvement-selection-denominator-v1.json contracts/generator-consumer-release-locks-v1.json "$RUNNER_TEMP/release-observation.json")
+          start_ns=$(date +%s%N)
+          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/selector-rss" bash "$selector" "${args[@]}" "$RUNNER_TEMP/local-ledger-adoption" "$RUNNER_TEMP/local-ledger-bundle" "$RUNNER_TEMP/design-evidence-adoption" "$RUNNER_TEMP/design-evidence-bundle" "$RUNNER_TEMP/selection.json" "$SUBJECT_SHA" complete
+          end_ns=$(date +%s%N)
+          echo $(( (end_ns-start_ns)/1000000 )) > "$RUNNER_TEMP/selector-wall-ms"
+          bash "$selector" "${args[@]}" "$RUNNER_TEMP/local-ledger-adoption" "$RUNNER_TEMP/local-ledger-bundle" "$RUNNER_TEMP/design-evidence-adoption" "$RUNNER_TEMP/design-evidence-bundle" "$RUNNER_TEMP/replay.json" "$SUBJECT_SHA" complete
+          cmp -s "$RUNNER_TEMP/selection.json" "$RUNNER_TEMP/replay.json"
+          jq -e '.decision=="CORE_IMPROVEMENT_SELECTED" and .summary=={total:12,closed:12,unknown:0,refuted:0,direct_missing:0,dependency_blocked:0,consumers:2} and .candidate.state=="SELECTED_FOR_CORE_EVALUATION" and .candidate.implementation_status=="NOT_IMPLEMENTED" and ([.proofs[]|select(.closed==4 and .total==4)]|length)==3' "$RUNNER_TEMP/selection.json" >/dev/null
+
+          printf 'null\n' > "$RUNNER_TEMP/missing-local-adoption.json"
+          bash "$selector" "${args[@]}" "$RUNNER_TEMP/missing-local-adoption.json" "$RUNNER_TEMP/local-ledger-bundle" "$RUNNER_TEMP/design-evidence-adoption" "$RUNNER_TEMP/design-evidence-bundle" "$RUNNER_TEMP/missing-adoption.json" "$SUBJECT_SHA" missing-local-adoption
+          jq -e '.decision=="INCOMPLETE" and .summary.closed==2 and .summary.unknown==10 and .summary.refuted==0 and .summary.direct_missing==1 and .summary.dependency_blocked==9 and .claim.stage=="ADOPTION" and .claim.reason=="MERGED_ADOPTION_RECEIPT_UNAVAILABLE"' "$RUNNER_TEMP/missing-adoption.json" >/dev/null
+
+          jq '.missing.direct_missing=0' "$RUNNER_TEMP/local-ledger-adoption" > "$RUNNER_TEMP/mutated-local-adoption.json"
+          bash "$selector" "${args[@]}" "$RUNNER_TEMP/mutated-local-adoption.json" "$RUNNER_TEMP/local-ledger-bundle" "$RUNNER_TEMP/design-evidence-adoption" "$RUNNER_TEMP/design-evidence-bundle" "$RUNNER_TEMP/refuted-selection.json" "$SUBJECT_SHA" mutated-direct-missing
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed==9 and .summary.refuted==3 and .claim.stage=="UNCERTAINTY" and .claim.step=="COMPARE_MISSING_RESOLUTION" and .claim.reason=="DIRECT_MISSING_INVARIANT_MISMATCH"' "$RUNNER_TEMP/refuted-selection.json" >/dev/null
+
+          after=$(snapshot)
+          if [ "$before" = "$after" ]; then writes=0; else writes=1; fi
+          jq -S -n --arg subject_sha "$SUBJECT_SHA" --arg before "$before" --arg after "$after" --argjson writes "$writes" --argjson peak_rss_kib "$(cat "$RUNNER_TEMP/selector-rss")" --argjson wall_ms "$(cat "$RUNNER_TEMP/selector-wall-ms")" '{schema:"gooo/link/core-improvement-selection-runtime/v1",subject_sha:$subject_sha,selector:{peak_rss_kib:$peak_rss_kib,wall_ms:$wall_ms},repository:{before_digest:$before,after_digest:$after,writes:$writes},deterministic_replay:true,local_tests_run:0}' > "$RUNNER_TEMP/runtime.json"
+          jq -e '.repository.writes==0 and .deterministic_replay and .local_tests_run==0' "$RUNNER_TEMP/runtime.json" >/dev/null
+
+          {
+            echo '## Evidence-selected core improvement'
+            jq -r '"- selection: \(.summary.closed)/\(.summary.total) CLOSED; consumers \(.summary.consumers)","- candidate: \(.candidate.id)","- state: \(.candidate.state)","- implementation: \(.candidate.implementation_status)","- local missing/direct: \(.comparison.common.direct_missing[0]); design missing/direct: \(.comparison.common.direct_missing[1])","- domain blocked counts: \(.comparison.variation.dependency_blocked|join(", "))","- domain duplicate refutations: \(.comparison.variation.duplicate_refuted|join(", "))"' "$RUNNER_TEMP/selection.json"
+            jq -r '"- missing adoption: UNKNOWN \(.summary.unknown); direct \(.summary.direct_missing); blocked \(.summary.dependency_blocked)"' "$RUNNER_TEMP/missing-adoption.json"
+            jq -r '"- mutated invariant: REFUTED \(.summary.refuted); first \(.claim.stage) / \(.claim.step) / \(.claim.reason)"' "$RUNNER_TEMP/refuted-selection.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload selection evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: core-improvement-selection-${{ github.event.pull_request.head.sha || github.sha }}
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/selection.json
+            ${{ runner.temp }}/replay.json
+            ${{ runner.temp }}/missing-adoption.json
+            ${{ runner.temp }}/refuted-selection.json
+            ${{ runner.temp }}/release-observation.json
+            ${{ runner.temp }}/runtime.json
+            ${{ runner.temp }}/graph.json
