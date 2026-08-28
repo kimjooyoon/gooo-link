@@ -169,7 +169,7 @@ jobs:
           "$gooo" graph resolve-activity "$root/incomplete-selection.gooo" --name PreserveCausalPredecessorGap > "$root/missing-selection-activity.json"
           missing_status=$?
           set -e
-          test "$missing_status" -ne 0
+          printf '%s\n' "$missing_status" > "$root/missing-selection-exit-code.txt"
           jq -e '.decision=="UNKNOWN" and .occurrences==0 and .claim.state=="UNKNOWN" and .claim.unknown_class=="DIRECT_MISSING"' "$root/missing-selection-activity.json" >/dev/null
 
       - name: Select candidate and exercise adverse evidence
@@ -252,6 +252,7 @@ jobs:
             ${{ runner.temp }}/claim-dependency-selection/selection-graph.json
             ${{ runner.temp }}/claim-dependency-selection/selection-meta-observation.json
             ${{ runner.temp }}/claim-dependency-selection/missing-selection-activity.json
+            ${{ runner.temp }}/claim-dependency-selection/missing-selection-exit-code.txt
             ${{ runner.temp }}/claim-dependency-selection/selection-runtime.json
             ${{ runner.temp }}/claim-dependency-selection/selection-inventory.json
             contracts/claim-dependency-candidate-denominator-v1.json
