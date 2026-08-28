@@ -366,9 +366,15 @@ result=$(
   '
 )
 
+mkdir -p "$(dirname "$output")"
+printf '%s\n' "$result" > "$output"
+
 case "$scenario" in
   normal)
-    jq -e '.decision == "CLOSED" and .summary.total == 12 and .summary.closed == 12 and .summary.unknown == 0 and .summary.refuted == 0 and .graph.activity_binding_count == 12 and .graph.causal_dependency_pair_count == 16 and .graph.causal_edge_checks == 32 and .graph.isolated_self_loop_count == 0' <<<"$result" >/dev/null
+    if ! jq -e '.decision == "CLOSED" and .summary.total == 12 and .summary.closed == 12 and .summary.unknown == 0 and .summary.refuted == 0 and .graph.activity_binding_count == 12 and .graph.causal_dependency_pair_count == 16 and .graph.causal_edge_checks == 32 and .graph.isolated_self_loop_count == 0' <<<"$result" >/dev/null; then
+      printf '%s\n' "$result" >&2
+      exit 1
+    fi
     ;;
   missing-*)
     jq -e '.decision == "UNKNOWN" and .summary.total == 12 and .summary.direct_missing == 1 and .summary.refuted == 0 and .summary.dependency_blocked == 4 and .graph.isolated_self_loop_count == 0 and ([.cells[] | select(.state == "UNKNOWN" and .unknown_class == "DIRECT_MISSING" and .blocked_by == [] and .stage != null and .step != null and .reason != null and .next_operation != null)] | length) == 1' <<<"$result" >/dev/null
@@ -380,6 +386,3 @@ case "$scenario" in
     fail "unknown scenario: $scenario"
     ;;
 esac
-
-mkdir -p "$(dirname "$output")"
-printf '%s\n' "$result" > "$output"
