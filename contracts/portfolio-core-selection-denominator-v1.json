@@ -26,6 +26,6 @@
     { "id": "primitive-version-lock", "activity": "BindPrimitiveVersionLock", "proof": "REGRESSION", "indicator_class": "GUARDRAIL", "depends_on": ["primitive-semantic-invariant"] },
     { "id": "experiment-pr-mapping", "activity": "BindExperimentPullRequestMapping", "proof": "REGRESSION", "indicator_class": "GUARDRAIL", "depends_on": [] },
     { "id": "single-selected-implementation-pr", "activity": "EnforceSelectedImplementationPullRequest", "proof": "REGRESSION", "indicator_class": "OUTCOME", "depends_on": ["experiment-pr-mapping"] },
-    { "id": "next-self-improvement-operation", "activity": "SelectNextSelfImprovementOperation", "proof": "REGRESSION", "indicator_class": "OUTCOME", "depends_on": ["stale-adoption-operation", "core-primitive-candidate", "cross-consumer-primitive-need", "primitive-semantic-invariant", "primitive-version-lock", "experiment-pr-mapping", "single-selected-implementation-pr"] }
+    { "id": "next-self-improvement-operation", "activity": "SelectNextSelfImprovementOperation", "proof": "REGRESSION", "indicator_class": "OUTCOME", "depends_on": ["portfolio-authority-boundary", "stale-adoption-operation", "core-primitive-candidate", "cross-consumer-primitive-need", "primitive-semantic-invariant", "primitive-version-lock", "experiment-pr-mapping", "single-selected-implementation-pr"] }
   ]
 }
