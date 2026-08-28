@@ -45,7 +45,7 @@ jq -e '
   .summary.unique_selectors == 12
 ' "$core_observation" >/dev/null
 
-jq -e --arg scenario "$scenario" '
+if ! jq -e --arg scenario "$scenario" '
   .expected_executions == 3 and
   .actual_executions == 3 and
   .expected_checks == 30 and
@@ -54,7 +54,11 @@ jq -e --arg scenario "$scenario" '
   .actual_replay == (if ($scenario | startswith("missing-")) then 2 else 3 end) and
   .replay_mismatches == 0 and
   ([.products[] | select(.checks == 10 and .closed == 10 and .unknown == 0 and .refuted == 0 and .receipt_available == true and .provenance_available == true)] | length) == (if ($scenario | startswith("missing-")) then 2 else 3 end)
-' "$kit_observation" >/dev/null
+' "$kit_observation" >/dev/null; then
+  echo "three-product adoption kit observation failed for scenario=$scenario" >&2
+  jq '.' "$kit_observation" >&2
+  exit 1
+fi
 
 jq -e '
   .product_count == 3 and

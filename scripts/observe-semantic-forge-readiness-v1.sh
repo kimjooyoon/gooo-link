@@ -43,7 +43,7 @@ test -s "$local_markdown"
 test -s "$infra_markdown"
 test -f "$observation"
 jq -e '.target_cells==12 and (.cells|length)==12 and (.shared_invariants|length)==8 and ([.cells[].activity]|unique|length)==12 and ([.proof_totals[].total]|add)==12 and ([.indicator_totals[].total]|add)==12' "$denominator" >/dev/null
-jq -e '.schema=="gooo/link/semantic-forge-readiness-release-lock/v1" and .link.tag=="v0.25.0-dev" and .local.tag=="v0.8.0-dev" and .infra.tag=="v0.8.0-dev" and .core.tag=="v0.4.0-dev" and (.local.assets|length)==6 and (.infra.assets|length)==6' "$lock" >/dev/null
+jq -e '.schema=="gooo/link/semantic-forge-readiness-release-lock/v1" and .link.tag=="v0.26.0-dev" and .local.tag=="v0.8.0-dev" and .infra.tag=="v0.8.0-dev" and .core.tag=="v0.4.0-dev" and (.local.assets|length)==6 and (.infra.assets|length)==6' "$lock" >/dev/null
 test "$(grep -c '^activity ' "$observation")" -eq 12
 
 work=$(mktemp -d)
@@ -77,14 +77,20 @@ jq -S -n \
     $release.id==$expected.release_id and $release.tag_name==$expected.tag and $release.target_commitish==$expected.target_commit_sha and
     $release.draft==false and $release.prerelease==$expected.prerelease;
   (release_ok($link_release[0];$lock[0].link) and asset_matches($link_release[0];$lock[0].link.assets.report)) as $link_release_ok |
-  ($link_report[0].schema=="gooo/link/infra-deployment-plan-consumer-report/v7" and
-    $link_report[0].subject_sha==$lock[0].link.target_commit_sha and $link_report[0].decision=="INFRA_DEPLOYMENT_PLAN_CONSUMER_OBSERVED" and
+  ($link_report[0].schema=="gooo/link/semantic-forge-readiness-report/v1" and
+    $link_report[0].subject_sha==$lock[0].link.target_commit_sha and $link_report[0].decision=="SEMANTIC_FORGE_EXPERIMENT_READY" and
     $link_report[0].claim.state=="CLOSED" and $link_report[0].summary.closed_cells==12 and $link_report[0].summary.total_cells==12 and
-    $link_report[0].summary.primitive_mappings_current==6 and $link_report[0].summary.independent_consumers_current==2 and
-    $link_report[0].summary.independent_consumer_increment==1 and $link_report[0].summary.external_use_cases_evidenced==0 and
-    $link_report[0].summary.external_use_cases_declared==1 and $link_report[0].summary.utility_state=="UNKNOWN" and
+    $link_report[0].summary.primitive_mappings_observed==6 and $link_report[0].summary.primitive_mapping_denominator==30 and
+    $link_report[0].summary.independent_consumers_observed==2 and $link_report[0].summary.product_releases_observed==2 and
+    $link_report[0].summary.selected_evidence_assets_observed==12 and $link_report[0].summary.shared_invariants_observed==8 and
+    $link_report[0].summary.product_conformance_cells_observed==24 and $link_report[0].summary.product_activities_observed==12 and
+    $link_report[0].summary.product_dependencies_observed==16 and $link_report[0].summary.generated_artifacts_observed==4 and
+    $link_report[0].summary.unknown_coordinates_observed==12 and $link_report[0].summary.refuted_boundaries_observed==6 and
+    $link_report[0].summary.replay_comparisons_observed==14 and $link_report[0].summary.external_use_cases_evidenced==0 and
+    $link_report[0].summary.external_use_cases_declared==2 and $link_report[0].summary.utility_state=="UNKNOWN" and
     $link_report[0].authority.cross_project_required_gates==0 and $link_report[0].authority.local_tests_run==0 and
-    $link_report[0].authority.source_repository_writes==0 and $link_report[0].authority.generator_authority==false) as $baseline_ok |
+    $link_report[0].authority.source_repository_writes==0 and $link_report[0].authority.common_generator_authorized==false and
+    $link_report[0].authority.product_generation_authorized==false) as $baseline_ok |
   (release_ok($local_release[0];$lock[0].local)) as $local_release_ok |
   (release_ok($infra_release[0];$lock[0].infra)) as $infra_release_ok |
   (($lock[0].local.assets|to_entries|length)==6 and all($lock[0].local.assets|to_entries[];asset_matches($local_release[0];.value))) as $local_assets_ok |

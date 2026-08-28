@@ -15,11 +15,11 @@ jobs:
     env:
       SUBJECT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ env.SUBJECT_SHA }}
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: 1.27.x
           check-latest: true
@@ -188,7 +188,7 @@ jobs:
           jq 'del(.nodes[]|select(.kind=="Activity" and .name=="BindTwelveReadinessMetaActivities"))' "$RUNNER_TEMP/graph.json" > "$RUNNER_TEMP/missing-meta-graph.json"
           evaluate "$RUNNER_TEMP/link/report.json" "$RUNNER_TEMP/local" "$RUNNER_TEMP/infra" "$RUNNER_TEMP/readiness-runtime.json" "$RUNNER_TEMP/meta-refuted.json" missing-meta-activity "$RUNNER_TEMP/missing-meta-graph.json"
 
-          jq '.summary.independent_consumers_current=1' "$RUNNER_TEMP/link/report.json" > "$RUNNER_TEMP/baseline-mismatch.json"
+          jq '.summary.independent_consumers_observed=1' "$RUNNER_TEMP/link/report.json" > "$RUNNER_TEMP/baseline-mismatch.json"
           evaluate "$RUNNER_TEMP/baseline-mismatch.json" "$RUNNER_TEMP/local" "$RUNNER_TEMP/infra" "$RUNNER_TEMP/readiness-runtime.json" "$RUNNER_TEMP/baseline-refuted.json" baseline-mismatch "$RUNNER_TEMP/graph.json"
 
           jq -e '
@@ -250,7 +250,7 @@ jobs:
       - name: Enforce read-only repository effect
         run: test -z "$(git status --porcelain=v1 --untracked-files=all)"
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
         with:
           name: semantic-forge-readiness-${{ env.SUBJECT_SHA }}
@@ -274,4 +274,3 @@ jobs:
             ${{ runner.temp }}/local/project-plan.json
             ${{ runner.temp }}/infra/semantic-deployment-plan-evaluation.json
             ${{ runner.temp }}/infra/deployment-plan.json
-
