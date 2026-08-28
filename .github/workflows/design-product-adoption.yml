@@ -1,0 +1,244 @@
+name: Design product adoption
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  observation:
+    runs-on: ubuntu-latest
+    env:
+      SUBJECT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SUBJECT_SHA }}
+
+      - name: Bind exact subject identity
+        run: test "$(git rev-parse HEAD)" = "$SUBJECT_SHA"
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.0'
+
+      - name: Observe Go 1.27 and fix surface
+        run: |
+          set -euo pipefail
+          test "$(go env GOVERSION)" = "go1.27.0"
+          go_files=$(find . -type f -name '*.go' | wc -l | tr -d ' ')
+          go_modules=$(find . -type f -name 'go.mod' | wc -l | tr -d ' ')
+          while IFS= read -r -d '' module; do
+            (cd "$(dirname "$module")" && go fix ./...)
+          done < <(find . -type f -name 'go.mod' -print0)
+          jq -n --arg go_version "$(go env GOVERSION)" --argjson go_files "$go_files" \
+            --argjson go_modules "$go_modules" \
+            '{schema:"gooo/link-go-fix-observation/v1",go_version:$go_version,go_files:$go_files,
+              go_modules:$go_modules,go_fix_targets:$go_modules}' \
+            > "$RUNNER_TEMP/go-fix-observation.json"
+
+      - name: Observe immutable public releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          design_lock=contracts/design-product-release-lock-v1.json
+          core_lock=contracts/core-release-lock-v3.json
+
+          design_repository=$(jq -r .repository "$design_lock")
+          design_tag=$(jq -r .tag "$design_lock")
+          gh api "repos/$design_repository/releases/tags/$design_tag" > "$RUNNER_TEMP/design-release.json"
+          gh api "repos/$design_repository/git/ref/tags/$design_tag" > "$RUNNER_TEMP/design-ref.json"
+          jq -e --slurpfile lock "$design_lock" '
+            .tag_name==$lock[0].tag and .draft==false and
+            (.assets|length)==$lock[0].asset_total and
+            ([.assets[] as $asset | $lock[0].assets[] |
+              select(.id==$asset.id and .name==$asset.name and .size==$asset.size and
+                ("sha256:"+.sha256)==$asset.digest)]|length)==$lock[0].asset_total
+          ' "$RUNNER_TEMP/design-release.json" >/dev/null
+          jq -e --slurpfile lock "$design_lock" '
+            .object.type==$lock[0].ref_type and .object.sha==$lock[0].tag_object_sha
+          ' "$RUNNER_TEMP/design-ref.json" >/dev/null
+
+          core_repository=$(jq -r .repository "$core_lock")
+          core_tag=$(jq -r .tag "$core_lock")
+          gh api "repos/$core_repository/releases/tags/$core_tag" > "$RUNNER_TEMP/core-release.json"
+          gh api "repos/$core_repository/git/ref/tags/$core_tag" > "$RUNNER_TEMP/core-ref.json"
+          jq -e --slurpfile lock "$core_lock" '
+            .tag_name==$lock[0].tag and .draft==false and
+            ([.assets[]|select(.id==$lock[0].asset.id and .name==$lock[0].asset.name and
+              .size==$lock[0].asset.size and ("sha256:"+$lock[0].asset.sha256)==.digest)]|length)==1
+          ' "$RUNNER_TEMP/core-release.json" >/dev/null
+          jq -e --slurpfile lock "$core_lock" '
+            .object.type==$lock[0].ref_type and .object.sha==$lock[0].tag_object_sha
+          ' "$RUNNER_TEMP/core-ref.json" >/dev/null
+
+      - name: Download digest-locked release bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          design_lock=contracts/design-product-release-lock-v1.json
+          core_lock=contracts/core-release-lock-v3.json
+          design_asset_id=$(jq -r '.assets[]|select(.consume)|.id' "$design_lock")
+          core_asset_id=$(jq -r '.asset.id' "$core_lock")
+          gh api -H 'Accept: application/octet-stream' "repos/kimjooyoon/gooo-design-evidence/releases/assets/$design_asset_id" > "$RUNNER_TEMP/design-code-match.zip"
+          gh api -H 'Accept: application/octet-stream' "repos/kimjooyoon/meta-ontology-go/releases/assets/$core_asset_id" > "$RUNNER_TEMP/gooo-linux-amd64.tar.gz"
+          test "$(sha256sum "$RUNNER_TEMP/design-code-match.zip" | awk '{print $1}')" = "$(jq -r '.assets[]|select(.consume)|.sha256' "$design_lock")"
+          test "$(wc -c < "$RUNNER_TEMP/design-code-match.zip" | tr -d ' ')" = "$(jq -r '.assets[]|select(.consume)|.size' "$design_lock")"
+          test "$(sha256sum "$RUNNER_TEMP/gooo-linux-amd64.tar.gz" | awk '{print $1}')" = "$(jq -r '.asset.sha256' "$core_lock")"
+          mkdir -p "$RUNNER_TEMP/design-product" "$RUNNER_TEMP/gooo"
+          unzip -q "$RUNNER_TEMP/design-code-match.zip" -d "$RUNNER_TEMP/design-product"
+          tar -xzf "$RUNNER_TEMP/gooo-linux-amd64.tar.gz" -C "$RUNNER_TEMP/gooo"
+
+      - name: Compile Link meta-observer with released Gooo
+        run: |
+          set -euo pipefail
+          gooo="$RUNNER_TEMP/gooo/gooo"
+          "$gooo" version --json > "$RUNNER_TEMP/gooo-version.json"
+          jq -e '.schema_version=="gooo-version/v1" and .language=="gooo" and .version=="0.2.0-dev"' \
+            "$RUNNER_TEMP/gooo-version.json" >/dev/null
+          go version -m "$gooo" > "$RUNNER_TEMP/gooo-build-info.txt"
+          grep -Eq 'go1\.27\.0' "$RUNNER_TEMP/gooo-build-info.txt"
+          "$gooo" check --json examples/design-product-adoption/main.gooo > "$RUNNER_TEMP/design-adoption-syntax.json"
+          "$gooo" check --semantic --json examples/design-product-adoption/main.gooo > "$RUNNER_TEMP/design-adoption-semantic.json"
+          "$gooo" graph dump examples/design-product-adoption/main.gooo > "$RUNNER_TEMP/design-adoption-graph.json"
+
+      - name: Observe product and preserve adverse states
+        run: |
+          set -euo pipefail
+          evaluator=scripts/observe-design-product-adoption.sh
+          inputs="$RUNNER_TEMP/design-product"
+          graph="$RUNNER_TEMP/design-adoption-graph.json"
+          denominator=contracts/design-product-adoption-denominator-v1.json
+          before="$RUNNER_TEMP/repository-before.bin"
+          after="$RUNNER_TEMP/repository-after.bin"
+          git status --porcelain=v1 -z --untracked-files=all > "$before"
+
+          args=(
+            "$graph" "$denominator"
+            "$inputs/matcher-conformance.json" "$inputs/matcher-conformance-replay.json"
+            "$inputs/matcher-normal.json" "$inputs/matcher-replay.json"
+            "$inputs/matcher-unknown.json" "$inputs/matcher-name-only.json"
+            "$inputs/matcher-refuted.json" "$inputs/matcher-runtime.json"
+            "$inputs/matcher-graph.json"
+          )
+          start_ns=$(date +%s%N)
+          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/design-adoption-rss" \
+            bash "$evaluator" "${args[@]}" "$RUNNER_TEMP/design-adoption-report.json" "$SUBJECT_SHA" complete
+          end_ns=$(date +%s%N)
+          wall_ms=$(( (end_ns-start_ns)/1000000 ))
+          bash "$evaluator" "${args[@]}" "$RUNNER_TEMP/design-adoption-replay.json" "$SUBJECT_SHA" complete
+          cmp -s "$RUNNER_TEMP/design-adoption-report.json" "$RUNNER_TEMP/design-adoption-replay.json"
+
+          printf 'null\n' > "$RUNNER_TEMP/missing-conformance.json"
+          bash "$evaluator" "$graph" "$denominator" \
+            "$RUNNER_TEMP/missing-conformance.json" "$RUNNER_TEMP/missing-conformance.json" \
+            "${args[@]:4:7}" "$RUNNER_TEMP/design-adoption-unknown.json" "$SUBJECT_SHA" missing-conformance
+
+          jq '.summary.match=4' "$inputs/matcher-normal.json" > "$RUNNER_TEMP/tampered-normal.json"
+          bash "$evaluator" "$graph" "$denominator" \
+            "$inputs/matcher-conformance.json" "$inputs/matcher-conformance-replay.json" \
+            "$RUNNER_TEMP/tampered-normal.json" "$inputs/matcher-replay.json" \
+            "$inputs/matcher-unknown.json" "$inputs/matcher-name-only.json" \
+            "$inputs/matcher-refuted.json" "$inputs/matcher-runtime.json" "$inputs/matcher-graph.json" \
+            "$RUNNER_TEMP/design-adoption-metric-refuted.json" "$SUBJECT_SHA" metric-tamper
+
+          jq '(.nodes)|=map(select(.name!="RefuseNameOnlyMatch"))' "$inputs/matcher-graph.json" > "$RUNNER_TEMP/missing-product-activity.json"
+          meta_args=("${args[@]:0:10}" "$RUNNER_TEMP/missing-product-activity.json")
+          bash "$evaluator" "${meta_args[@]}" "$RUNNER_TEMP/design-adoption-meta-refuted.json" "$SUBJECT_SHA" missing-product-meta
+
+          jq '.authority.cross_project_required_gates=1' "$inputs/matcher-conformance.json" > "$RUNNER_TEMP/escalated-conformance.json"
+          scope_args=("${args[@]}")
+          scope_args[2]="$RUNNER_TEMP/escalated-conformance.json"
+          bash "$evaluator" "${scope_args[@]}" "$RUNNER_TEMP/design-adoption-scope-refuted.json" "$SUBJECT_SHA" scope-escalation
+
+          jq '(.nodes)|=map(select(.name!="RecordDesignPortfolioProgress"))' "$graph" > "$RUNNER_TEMP/missing-link-activity.json"
+          missing_link_args=("${args[@]}")
+          missing_link_args[0]="$RUNNER_TEMP/missing-link-activity.json"
+          if bash "$evaluator" "${missing_link_args[@]}" "$RUNNER_TEMP/missing-link-meta.json" "$SUBJECT_SHA" complete; then
+            echo 'observer accepted a missing Link Gooo activity' >&2
+            exit 1
+          fi
+
+          jq -e '.decision=="DESIGN_PRODUCT_ADOPTION_OBSERVED" and .summary.closed_cells==12 and
+            .summary.independent_products_observed==2 and .summary.independent_products_total==3 and
+            .summary.relation_outputs==4 and .summary.matches==3 and .summary.reviewed_mismatches==1 and
+            .portfolio.central_orchestrator_authorized==false and .portfolio.common_generator_authorized==false and
+            .summary.repository_writes==0 and .summary.local_tests_run==0 and
+            .summary.cross_project_required_gates==0' "$RUNNER_TEMP/design-adoption-report.json" >/dev/null
+          jq -e '.decision=="DESIGN_PRODUCT_ADOPTION_UNKNOWN" and .summary.closed_cells==9 and
+            .summary.unknown_cells==3 and .summary.independent_products_observed==1 and
+            .claim.reason=="DESIGN_CONFORMANCE_UNAVAILABLE" and .claim.unknown_class=="DIRECT_MISSING"' \
+            "$RUNNER_TEMP/design-adoption-unknown.json" >/dev/null
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==11 and .summary.refuted_cells==1 and
+            .claim.reason=="DESIGN_RELATION_METRIC_MISMATCH"' "$RUNNER_TEMP/design-adoption-metric-refuted.json" >/dev/null
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==11 and .summary.refuted_cells==1 and
+            .claim.reason=="DESIGN_META_BINDING_MISMATCH"' "$RUNNER_TEMP/design-adoption-meta-refuted.json" >/dev/null
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==11 and .summary.refuted_cells==1 and
+            .claim.reason=="CROSS_PROJECT_REQUIRED_GATE_ESCALATION"' "$RUNNER_TEMP/design-adoption-scope-refuted.json" >/dev/null
+
+          git status --porcelain=v1 -z --untracked-files=all > "$after"
+          if cmp -s "$before" "$after"; then writes=0; else writes=1; fi
+          jq -S -n \
+            --arg subject_sha "$SUBJECT_SHA" \
+            --arg go_version "$(go env GOVERSION)" \
+            --argjson peak_rss_kib "$(cat "$RUNNER_TEMP/design-adoption-rss")" \
+            --argjson wall_ms "$wall_ms" \
+            --argjson writes "$writes" \
+            '{schema:"gooo/link-design-product-adoption-runtime/v1",subject_sha:$subject_sha,
+              go_version:$go_version,peak_rss_kib:$peak_rss_kib,wall_ms:$wall_ms,
+              repository_writes:$writes,local_tests_run:0,cross_project_required_gates:0}' \
+            > "$RUNNER_TEMP/design-adoption-runtime.json"
+
+      - name: Publish exact human-readable product progress
+        run: |
+          {
+            echo '## Design matcher independent product adoption'
+            echo
+            jq -r '
+              "- adoption cells: \(.summary.closed_cells)/\(.summary.total_cells) CLOSED",
+              "- independent product progress: \(.summary.independent_products_observed)/\(.summary.independent_products_total)",
+              "- explicit relation outputs: \(.summary.relation_outputs)",
+              "- matches: \(.summary.matches)",
+              "- reviewed mismatches: \(.summary.reviewed_mismatches)",
+              "- product Gooo activities: \(.summary.product_meta_activities)/12",
+              "- repository writes: \(.summary.repository_writes)",
+              "- local tests: \(.summary.local_tests_run)",
+              "- cross-project required gates: \(.summary.cross_project_required_gates)",
+              "- central orchestrator authorized: \(.portfolio.central_orchestrator_authorized)",
+              "- common generator authorized: \(.portfolio.common_generator_authorized)",
+              "- next operation: \(.claim.next_operation)"
+            ' "$RUNNER_TEMP/design-adoption-report.json"
+            jq -r '"- observer peak RSS: \(.peak_rss_kib) KiB", "- observer wall time: \(.wall_ms) ms", "- Go toolchain: \(.go_version)"' \
+              "$RUNNER_TEMP/design-adoption-runtime.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce zero Link repository writes
+        run: test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: design-product-adoption-${{ env.SUBJECT_SHA }}
+          path: |
+            ${{ runner.temp }}/design-release.json
+            ${{ runner.temp }}/design-code-match.zip
+            ${{ runner.temp }}/go-fix-observation.json
+            ${{ runner.temp }}/gooo-version.json
+            ${{ runner.temp }}/gooo-build-info.txt
+            ${{ runner.temp }}/design-adoption-syntax.json
+            ${{ runner.temp }}/design-adoption-semantic.json
+            ${{ runner.temp }}/design-adoption-graph.json
+            ${{ runner.temp }}/design-adoption-report.json
+            ${{ runner.temp }}/design-adoption-replay.json
+            ${{ runner.temp }}/design-adoption-unknown.json
+            ${{ runner.temp }}/design-adoption-metric-refuted.json
+            ${{ runner.temp }}/design-adoption-meta-refuted.json
+            ${{ runner.temp }}/design-adoption-scope-refuted.json
+            ${{ runner.temp }}/design-adoption-runtime.json
+          if-no-files-found: warn

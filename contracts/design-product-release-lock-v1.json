@@ -1,0 +1,20 @@
+{
+  "schema": "gooo/link-design-product-release-lock/v1",
+  "repository": "kimjooyoon/gooo-design-evidence",
+  "tag": "v0.5.0-dev",
+  "ref_type": "commit",
+  "tag_object_sha": "1e1b667be7be986c1a374c71e08686d5ab58b745",
+  "target_commit_sha": "1e1b667be7be986c1a374c71e08686d5ab58b745",
+  "asset_total": 1,
+  "assets": [
+    {
+      "id": 533631166,
+      "name": "design-code-match-1e1b667be7be986c1a374c71e08686d5ab58b745.zip",
+      "size": 13069,
+      "sha256": "88261972eb1df52221762666d405a3dd4ca3a505cc97a51494d222cf7ff7587b",
+      "role": "DESIGN_PRODUCT_EVIDENCE_ARCHIVE",
+      "consume": true,
+      "output": "design-code-match.zip"
+    }
+  ]
+}

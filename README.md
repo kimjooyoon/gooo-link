@@ -82,3 +82,23 @@ and next queue operation.
 
 The observer is read-only, has zero cross-project required gates, and does not
 rank candidate value. See [the queue RFC](docs/rfcs/implementation-queue-v1.md).
+
+## Independent product portfolio
+
+The portfolio observation is intentionally smaller than a package registry or
+central orchestrator. Each product remains independently releasable and Link
+only consumes immutable public evidence.
+
+- Workgraph workspace inventory: `1/3` observed by its own adoption path.
+- Design/code relation matcher: the second product, observed from
+  [`gooo-design-evidence v0.5.0-dev`](https://github.com/kimjooyoon/gooo-design-evidence/releases/tag/v0.5.0-dev).
+- Exact portfolio progress after both observations: `2/3`.
+- Central orchestrator authorized: `false`.
+- Common generator authorized: `false`.
+- Cross-project required gates: `0`.
+
+The design observation preserves relation-level `MATCH`, `UNKNOWN`, and
+`MISMATCH` separately from the aggregate claim. A reviewed mismatch may remain
+visible while the aggregate is closed; missing evidence lowers resolution to a
+typed UNKNOWN; an unresolved contradiction refutes the claim. See
+[the design product adoption RFC](docs/rfcs/design-product-adoption-v1.md).
