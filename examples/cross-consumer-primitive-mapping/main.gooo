@@ -1,0 +1,31 @@
+package cross_consumer_primitive_mapping
+namespace gooolink
+
+entity LocalLedgerRelease id "gooo://consumer/local-ledger/v0.5.0-dev"
+entity DesignEvidenceRelease id "gooo://consumer/design-evidence/v0.4.0-dev"
+entity InfraEvidenceRelease id "gooo://consumer/infra-evidence/v0.5.0-dev"
+entity CorePrimitiveRelease id "gooo://core/claim-resolution/v0.3.0-dev"
+entity CommonClaimEnvelope id "gooo://claim-resolution/common-envelope/v1"
+entity BaseClaimResolutionTuple id "gooo://claim-resolution/base-tuple/v1"
+entity ThreeStateClaimLifecycle id "gooo://claim-resolution/three-state-lifecycle/v1"
+entity UnknownProducingConsumers id "gooo://claim-resolution/unknown-producers/v1"
+entity TypedUnknownEvidenceRoles id "gooo://claim-resolution/typed-unknown-roles/v1"
+entity ClaimResolutionCompatibilityGap id "gooo://claim-resolution/compatibility-gap/v1"
+entity ObservationAuthorityBoundary id "gooo://claim-resolution/observation-authority/v1"
+entity DirectExperimentMapping id "gooo://claim-resolution/direct-experiment-mapping/v1"
+entity MinimalCoreContractOperation id "gooo://claim-resolution/minimal-core-contract-operation/v1"
+entity CrossConsumerPrimitiveMappingReport id "gooo://link/cross-consumer-primitive-mapping/v2"
+
+activity ObserveLocalLedgerRelease(LocalLedgerRelease) -> CrossConsumerPrimitiveMappingReport
+activity ObserveDesignEvidenceRelease(DesignEvidenceRelease) -> CrossConsumerPrimitiveMappingReport
+activity ObserveInfraEvidenceRelease(InfraEvidenceRelease) -> CrossConsumerPrimitiveMappingReport
+activity ObserveCorePrimitiveRelease(CorePrimitiveRelease) -> CrossConsumerPrimitiveMappingReport
+activity BindCommonClaimEnvelope(CommonClaimEnvelope) -> CrossConsumerPrimitiveMappingReport
+activity ObserveBaseClaimResolutionTuple(BaseClaimResolutionTuple) -> CrossConsumerPrimitiveMappingReport
+activity ObserveThreeStateClaimLifecycle(ThreeStateClaimLifecycle) -> CrossConsumerPrimitiveMappingReport
+activity CountUnknownProducingConsumers(UnknownProducingConsumers) -> CrossConsumerPrimitiveMappingReport
+activity BindTypedUnknownEvidenceRoles(TypedUnknownEvidenceRoles) -> CrossConsumerPrimitiveMappingReport
+activity ExposeClaimResolutionCompatibilityGap(ClaimResolutionCompatibilityGap) -> CrossConsumerPrimitiveMappingReport
+activity PreserveObservationAuthorityBoundary(ObservationAuthorityBoundary) -> CrossConsumerPrimitiveMappingReport
+activity RejectTitleOnlyExperimentMapping(DirectExperimentMapping) -> CrossConsumerPrimitiveMappingReport
+activity SelectMinimalCoreContractOperation(MinimalCoreContractOperation) -> CrossConsumerPrimitiveMappingReport
