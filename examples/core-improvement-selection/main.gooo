@@ -1,0 +1,29 @@
+package coreimprovementselection
+namespace coreimprovementselection
+
+entity ConsumerReleaseIdentities id "gooo://selection/entity/consumer-release-identities"
+entity MergedAdoptionReceipts id "gooo://selection/entity/merged-adoption-receipts"
+entity DistinctProjectGraphs id "gooo://selection/entity/distinct-project-graphs"
+entity CompleteGeneration id "gooo://selection/entity/complete-generation"
+entity PromotedPatterns id "gooo://selection/entity/promoted-patterns"
+entity GeneratedFileCounts id "gooo://selection/entity/generated-file-counts"
+entity MissingResolution id "gooo://selection/entity/missing-resolution"
+entity DuplicateResolution id "gooo://selection/entity/duplicate-resolution"
+entity DomainSpecificCounts id "gooo://selection/entity/domain-specific-counts"
+entity ZeroRepositoryWrites id "gooo://selection/entity/zero-repository-writes"
+entity DeterministicArtifacts id "gooo://selection/entity/deterministic-artifacts"
+entity ActivityCardinalityPrimitive id "gooo://selection/entity/activity-cardinality-primitive"
+entity SelectionDecision id "gooo://selection/entity/selection-decision"
+
+activity ObserveConsumerReleaseIdentities(ConsumerReleaseIdentities) -> SelectionDecision
+activity ObserveMergedAdoptionReceipts(MergedAdoptionReceipts) -> SelectionDecision
+activity ObserveDistinctProjectGraphs(DistinctProjectGraphs) -> SelectionDecision
+activity ObserveCompleteGeneration(CompleteGeneration) -> SelectionDecision
+activity ComparePromotedPatterns(PromotedPatterns) -> SelectionDecision
+activity CompareGeneratedFileCounts(GeneratedFileCounts) -> SelectionDecision
+activity CompareMissingResolution(MissingResolution) -> SelectionDecision
+activity CompareDuplicateResolution(DuplicateResolution) -> SelectionDecision
+activity PreserveDomainSpecificCounts(DomainSpecificCounts) -> SelectionDecision
+activity ObserveZeroRepositoryWrites(ZeroRepositoryWrites) -> SelectionDecision
+activity ObserveDeterministicArtifacts(DeterministicArtifacts) -> SelectionDecision
+activity SelectActivityCardinalityPrimitive(ActivityCardinalityPrimitive) -> SelectionDecision
