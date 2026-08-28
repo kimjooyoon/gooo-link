@@ -1,0 +1,30 @@
+{
+  "schema": "gooo/link/cross-consumer-primitive-adoption-release-lock/v3",
+  "core": {
+    "repository": "kimjooyoon/meta-ontology-go",
+    "tag": "v0.3.0-dev",
+    "release_id": 378384811,
+    "target_commit_sha": "5b7af77549d88ba345550c1428323797e6ce1fd8",
+    "prerelease": true,
+    "binary_asset": {"id": 533579198, "name": "gooo-linux-amd64.tar.gz", "size": 7036826, "digest": "sha256:505608f28ccc92ba191d590b3cac160be14955405c159f9dc7fb3c8826985a5e"},
+    "checksum_asset": {"id": 533579199, "name": "SHA256SUMS", "size": 614, "digest": "sha256:ace1c645109d18f62c6fce071b3e573d423a0dc40519b238b2acbe2c6c32900a"}
+  },
+  "baseline": {
+    "repository": "kimjooyoon/gooo-link",
+    "tag": "v0.15.0-dev",
+    "release_id": 378435013,
+    "target_commit_sha": "fb6953ef5ab325147c5328dab4ad411cff8f62c3",
+    "prerelease": false,
+    "asset": {"id": 533692349, "name": "third-primitive-adoption-fb6953ef5ab325147c5328dab4ad411cff8f62c3.zip", "size": 22604, "digest": "sha256:98a655fbafbf49dc01cbe5ba03c97b571edc42486db07c94e17792ba2bc5cf7e"},
+    "report_path": "_artifact/adoption-v2-report.json"
+  },
+  "infra": {
+    "repository": "kimjooyoon/gooo-infra-evidence",
+    "tag": "v0.6.0-dev",
+    "release_id": 378440932,
+    "target_commit_sha": "89b2b14ef6e30225e874fa029e1b46613d2d8d33",
+    "prerelease": true,
+    "asset": {"id": 533706593, "name": "infra-claim-resolution-adoption-89b2b14ef6e30225e874fa029e1b46613d2d8d33.zip", "size": 30893, "digest": "sha256:199d4cb08eb772fd85ce08786ca9f84bdb28eeb9c74705772b6635cf75ee9c4a"},
+    "artifact_root": "infra-claim-resolution-adoption-89b2b14ef6e30225e874fa029e1b46613d2d8d33"
+  }
+}

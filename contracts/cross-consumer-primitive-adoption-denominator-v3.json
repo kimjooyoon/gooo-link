@@ -1,0 +1,29 @@
+{
+  "schema": "gooo/evidence-generator/denominator/v1",
+  "id": "gooo://denominator/cross-consumer-primitive-adoption/v3",
+  "target_cells": 12,
+  "proof_totals": [
+    {"proof_choice": "FOUNDATION", "total": 4},
+    {"proof_choice": "COHERENCE", "total": 4},
+    {"proof_choice": "REGRESSION", "total": 4}
+  ],
+  "indicator_totals": [
+    {"indicator_class": "DRIVER", "total": 4},
+    {"indicator_class": "OUTCOME", "total": 4},
+    {"indicator_class": "GUARDRAIL", "total": 4}
+  ],
+  "cells": [
+    {"ordinal": 1, "id": "LINK_BASELINE_RELEASE", "activity": "ObserveLinkBaselineRelease", "stage": "BASELINE_RELEASE", "step": "OBSERVE_LINK_V0_15_BASELINE", "proof_choice": "FOUNDATION", "indicator_class": "DRIVER", "closed_reason": "LINK_V0_15_BASELINE_OBSERVED", "unknown_reason": "LINK_BASELINE_RELEASE_UNAVAILABLE", "refuted_reason": "LINK_BASELINE_RELEASE_IDENTITY_MISMATCH", "next_operation": "FETCH_PINNED_LINK_BASELINE_RELEASE"},
+    {"ordinal": 2, "id": "INFRA_ADOPTION_RELEASE", "activity": "ObserveInfraAdoptionRelease", "stage": "PRODUCT_RELEASE", "step": "OBSERVE_INFRA_V0_6_ADOPTION", "proof_choice": "FOUNDATION", "indicator_class": "DRIVER", "closed_reason": "INFRA_V0_6_ADOPTION_OBSERVED", "unknown_reason": "INFRA_ADOPTION_RELEASE_UNAVAILABLE", "refuted_reason": "INFRA_ADOPTION_RELEASE_IDENTITY_MISMATCH", "next_operation": "FETCH_PINNED_INFRA_ADOPTION_RELEASE"},
+    {"ordinal": 3, "id": "CLAIM_RESOLUTION_CANDIDATE", "activity": "BindClaimResolutionCandidateIdentity", "stage": "CORE_RELEASE", "step": "BIND_CLAIM_RESOLUTION_CANDIDATE", "proof_choice": "FOUNDATION", "indicator_class": "DRIVER", "closed_reason": "CLAIM_RESOLUTION_CANDIDATE_BOUND", "unknown_reason": "CLAIM_RESOLUTION_CANDIDATE_UNAVAILABLE", "refuted_reason": "CLAIM_RESOLUTION_CANDIDATE_IDENTITY_MISMATCH", "next_operation": "RESTORE_CLAIM_RESOLUTION_CANDIDATE_IDENTITY"},
+    {"ordinal": 4, "id": "THREE_OF_THIRTY_BASELINE", "activity": "BindThreeOfThirtyBaseline", "stage": "BASELINE", "step": "BIND_THREE_OF_THIRTY_BASELINE", "proof_choice": "FOUNDATION", "indicator_class": "OUTCOME", "closed_reason": "THREE_OF_THIRTY_BASELINE_BOUND", "unknown_reason": "BASELINE_MAPPING_COUNT_UNAVAILABLE", "refuted_reason": "BASELINE_MAPPING_COUNT_MISMATCH", "next_operation": "RESTORE_THREE_OF_THIRTY_BASELINE"},
+    {"ordinal": 5, "id": "INFRA_DIRECT_MAPPING", "activity": "BindInfraDirectMapping", "stage": "ADOPTION", "step": "BIND_INFRA_DIRECT_MAPPING", "proof_choice": "COHERENCE", "indicator_class": "DRIVER", "closed_reason": "INFRA_DIRECT_MAPPING_BOUND", "unknown_reason": "INFRA_DIRECT_MAPPING_UNAVAILABLE", "refuted_reason": "INFRA_DIRECT_MAPPING_MISMATCH", "next_operation": "RESTORE_INFRA_DIRECT_MAPPING_EVIDENCE"},
+    {"ordinal": 6, "id": "FOUR_OF_THIRTY", "activity": "AdvanceToFourOfThirty", "stage": "ACCUMULATION", "step": "ADVANCE_TO_FOUR_OF_THIRTY", "proof_choice": "COHERENCE", "indicator_class": "OUTCOME", "closed_reason": "FOURTH_DIRECT_MAPPING_OBSERVED", "unknown_reason": "FOURTH_DIRECT_MAPPING_UNAVAILABLE", "refuted_reason": "FOURTH_DIRECT_MAPPING_ARITHMETIC_MISMATCH", "next_operation": "RESTORE_MAPPING_ACCUMULATION"},
+    {"ordinal": 7, "id": "THREE_INDEPENDENT_CONSUMERS", "activity": "CountThreeIndependentConsumers", "stage": "INDEPENDENCE", "step": "COUNT_THREE_INDEPENDENT_CONSUMERS", "proof_choice": "COHERENCE", "indicator_class": "OUTCOME", "closed_reason": "THREE_INDEPENDENT_CONSUMERS_OBSERVED", "unknown_reason": "INDEPENDENT_CONSUMER_EVIDENCE_UNAVAILABLE", "refuted_reason": "INDEPENDENT_CONSUMER_COUNT_MISMATCH", "next_operation": "RESTORE_INDEPENDENT_CONSUMER_EVIDENCE"},
+    {"ordinal": 8, "id": "INFRA_ADOPTION_EVIDENCE", "activity": "BindInfraAdoptionEvidence", "stage": "EVIDENCE", "step": "BIND_INFRA_ADOPTION_EVIDENCE", "proof_choice": "COHERENCE", "indicator_class": "OUTCOME", "closed_reason": "INFRA_ADOPTION_DENOMINATORS_BOUND", "unknown_reason": "INFRA_ADOPTION_EVIDENCE_UNAVAILABLE", "refuted_reason": "INFRA_ADOPTION_DENOMINATOR_MISMATCH", "next_operation": "RESTORE_INFRA_ADOPTION_DENOMINATORS"},
+    {"ordinal": 9, "id": "INFRA_UNKNOWN_RESOLUTION", "activity": "PreserveInfraUnknownResolution", "stage": "RESOLUTION", "step": "PRESERVE_INFRA_UNKNOWN_RESOLUTION", "proof_choice": "REGRESSION", "indicator_class": "GUARDRAIL", "closed_reason": "INFRA_UNKNOWN_RESOLUTION_PRESERVED", "unknown_reason": "INFRA_UNKNOWN_COUNTEREXAMPLE_UNAVAILABLE", "refuted_reason": "INFRA_UNKNOWN_RESOLUTION_MISMATCH", "next_operation": "RESTORE_INFRA_UNKNOWN_COUNTEREXAMPLE"},
+    {"ordinal": 10, "id": "INFRA_REFUTED_RESOLUTION", "activity": "PreserveInfraRefutedResolution", "stage": "RESOLUTION", "step": "PRESERVE_INFRA_REFUTED_RESOLUTION", "proof_choice": "REGRESSION", "indicator_class": "GUARDRAIL", "closed_reason": "INFRA_REFUTED_RESOLUTIONS_PRESERVED", "unknown_reason": "INFRA_REFUTED_COUNTEREXAMPLES_UNAVAILABLE", "refuted_reason": "INFRA_REFUTED_RESOLUTION_MISMATCH", "next_operation": "RESTORE_INFRA_REFUTED_COUNTEREXAMPLES"},
+    {"ordinal": 11, "id": "META_ACTIVITY_SET", "activity": "BindTwelveMetaActivities", "stage": "META", "step": "BIND_TWELVE_META_ACTIVITIES", "proof_choice": "REGRESSION", "indicator_class": "GUARDRAIL", "closed_reason": "TWELVE_GOOO_META_ACTIVITIES_BOUND", "unknown_reason": "GOOO_META_ACTIVITY_GRAPH_UNAVAILABLE", "refuted_reason": "GOOO_META_ACTIVITY_SET_MISMATCH", "next_operation": "RESTORE_TWELVE_GOOO_META_ACTIVITIES"},
+    {"ordinal": 12, "id": "OPTIONAL_READ_ONLY_BOUNDARY", "activity": "PreserveOptionalReadOnlyBoundary", "stage": "AUTHORITY", "step": "PRESERVE_OPTIONAL_READ_ONLY_BOUNDARY", "proof_choice": "REGRESSION", "indicator_class": "GUARDRAIL", "closed_reason": "OPTIONAL_READ_ONLY_BOUNDARY_PRESERVED", "unknown_reason": "AUTHORITY_OBSERVATION_UNAVAILABLE", "refuted_reason": "OBSERVATION_AUTHORITY_ESCALATED", "next_operation": "RESTORE_OPTIONAL_READ_ONLY_BOUNDARY"}
+  ]
+}

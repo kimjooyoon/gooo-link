@@ -1,0 +1,204 @@
+name: Fourth primitive adoption observation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    env:
+      SUBJECT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SUBJECT_SHA }}
+      - name: Bind exact subject identity
+        run: test "$(git rev-parse HEAD)" = "$SUBJECT_SHA"
+      - name: Download three immutable releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          lock=contracts/cross-consumer-primitive-adoption-release-lock-v3.json
+          mkdir -p "$RUNNER_TEMP/core" "$RUNNER_TEMP/baseline" "$RUNNER_TEMP/infra"
+          for scope in core baseline infra; do
+            repository=$(jq -r ".$scope.repository" "$lock")
+            tag=$(jq -r ".$scope.tag" "$lock")
+            target=$(jq -r ".$scope.target_commit_sha" "$lock")
+            release_id=$(jq -r ".$scope.release_id" "$lock")
+            prerelease=$(jq -r ".$scope.prerelease" "$lock")
+            gh api "repos/$repository/releases/tags/$tag" > "$RUNNER_TEMP/$scope-release.json"
+            gh api "repos/$repository/git/ref/tags/$tag" > "$RUNNER_TEMP/$scope-ref.json"
+            jq -e --arg tag "$tag" --arg target "$target" --argjson release_id "$release_id" --argjson prerelease "$prerelease" \
+              '.id==$release_id and .tag_name==$tag and .target_commitish==$target and .draft==false and .prerelease==$prerelease' \
+              "$RUNNER_TEMP/$scope-release.json" >/dev/null
+            jq -e --arg target "$target" '.object.type=="commit" and .object.sha==$target' "$RUNNER_TEMP/$scope-ref.json" >/dev/null
+          done
+
+          download_asset() {
+            scope=$1
+            selector=$2
+            destination=$3
+            release="$RUNNER_TEMP/$scope-release.json"
+            name=$(jq -r ".$scope.$selector.name" "$lock")
+            id=$(jq -r ".$scope.$selector.id" "$lock")
+            size=$(jq -r ".$scope.$selector.size" "$lock")
+            digest=$(jq -r ".$scope.$selector.digest" "$lock")
+            jq -e --arg name "$name" --arg digest "$digest" --argjson id "$id" --argjson size "$size" \
+              '.assets[]|select(.name==$name and .id==$id and .size==$size and .digest==$digest)' "$release" >/dev/null
+            url=$(jq -r --arg name "$name" '.assets[]|select(.name==$name)|.browser_download_url' "$release")
+            curl --fail --location --retry 3 "$url" --output "$destination"
+            test "$(wc -c < "$destination"|tr -d ' ')" -eq "$size"
+            test "sha256:$(sha256sum "$destination"|awk '{print $1}')" = "$digest"
+          }
+
+          download_asset core binary_asset "$RUNNER_TEMP/core/gooo.tar.gz"
+          download_asset core checksum_asset "$RUNNER_TEMP/core/SHA256SUMS"
+          binary_name=$(jq -r '.core.binary_asset.name' "$lock")
+          test "$(sha256sum "$RUNNER_TEMP/core/gooo.tar.gz"|awk '{print $1}')" = \
+            "$(awk -v name="$binary_name" '$2==name {print $1}' "$RUNNER_TEMP/core/SHA256SUMS")"
+          tar -xzf "$RUNNER_TEMP/core/gooo.tar.gz" -C "$RUNNER_TEMP/core"
+
+          download_asset baseline asset "$RUNNER_TEMP/baseline.zip"
+          download_asset infra asset "$RUNNER_TEMP/infra.zip"
+          unzip -qq "$RUNNER_TEMP/baseline.zip" -d "$RUNNER_TEMP/baseline"
+          unzip -qq "$RUNNER_TEMP/infra.zip" -d "$RUNNER_TEMP/infra"
+          baseline_report=$(jq -r '.baseline.report_path' "$lock")
+          infra_root=$(jq -r '.infra.artifact_root' "$lock")
+          test -f "$RUNNER_TEMP/baseline/$baseline_report"
+          test -f "$RUNNER_TEMP/infra/$infra_root/report.json"
+          printf '%s\n' "$RUNNER_TEMP/baseline/$baseline_report" > "$RUNNER_TEMP/baseline-report-path"
+          printf '%s\n' "$RUNNER_TEMP/infra/$infra_root" > "$RUNNER_TEMP/infra-root-path"
+      - name: Observe Gooo meta graph and read-only runtime
+        run: |
+          set -euo pipefail
+          gooo="$RUNNER_TEMP/core/gooo"
+          source=examples/cross-consumer-primitive-adoption-v3/main.gooo
+          git status --porcelain=v1 -z --untracked-files=all > "$RUNNER_TEMP/before.bin"
+          "$gooo" version --json > "$RUNNER_TEMP/version.json"
+          "$gooo" check --json "$source" > "$RUNNER_TEMP/syntax.json"
+          "$gooo" check --semantic --json "$source" > "$RUNNER_TEMP/semantic.json"
+          start_ns=$(date +%s%N)
+          /usr/bin/time -v -o "$RUNNER_TEMP/time.txt" "$gooo" graph dump "$source" > "$RUNNER_TEMP/graph.json"
+          end_ns=$(date +%s%N)
+          wall_ms=$(( (end_ns-start_ns)/1000000 ))
+          peak_rss_kib=$(awk -F: '/Maximum resident set size/ {gsub(/ /,"",$2); print $2}' "$RUNNER_TEMP/time.txt")
+          module_roots=$(find . -name go.mod -not -path './.git/*' | wc -l | tr -d ' ')
+          test "$module_roots" -eq 0
+          git status --porcelain=v1 -z --untracked-files=all > "$RUNNER_TEMP/after.bin"
+          if cmp -s "$RUNNER_TEMP/before.bin" "$RUNNER_TEMP/after.bin"; then writes=0; else writes=1; fi
+          jq -n --arg subject_sha "$SUBJECT_SHA" --argjson peak_rss_kib "$peak_rss_kib" --argjson wall_ms "$wall_ms" \
+            --argjson writes "$writes" --argjson module_roots "$module_roots" --slurpfile version "$RUNNER_TEMP/version.json" \
+            '{schema:"gooo/link/cross-consumer-primitive-adoption-runtime/v3",subject_sha:$subject_sha,version:$version[0],
+              releases:{core:true,baseline:true,infra:true},performance:{graph_peak_rss_kib:$peak_rss_kib,graph_wall_ms:$wall_ms},
+              repository_writes:$writes,local_tests_run:0,cross_project_required_gates:0,generator_authority:false,
+              central_orchestration_authorized:false,go_fix_module_roots:$module_roots}' > "$RUNNER_TEMP/runtime.json"
+      - name: Evaluate accumulation and child resolution propagation
+        run: |
+          set -euo pipefail
+          evaluator=scripts/observe-cross-consumer-primitive-adoption-v3.sh
+          baseline=$(cat "$RUNNER_TEMP/baseline-report-path")
+          infra_root=$(cat "$RUNNER_TEMP/infra-root-path")
+          common=("$GITHUB_WORKSPACE" "$RUNNER_TEMP/graph.json" "$baseline")
+          bash "$evaluator" "${common[@]}" "$infra_root/report.json" "$infra_root/missing-receipt.json" \
+            "$infra_root/tampered-unknown.json" "$infra_root/authority-escalation.json" "$RUNNER_TEMP/runtime.json" \
+            "$RUNNER_TEMP/report.json" "$SUBJECT_SHA" complete
+          jq -e '.decision=="FOURTH_DIRECT_PRIMITIVE_MAPPING_OBSERVED" and .summary.closed_cells==12 and .summary.total_cells==12 and
+            .summary.unknown_cells==0 and .summary.refuted_cells==0 and .summary.direct_mappings==4 and .summary.mapping_denominator==30 and
+            .summary.mapping_remaining==26 and .summary.independent_consumer_adoptions==3 and
+            .summary.infra_claim_scenarios_observed==3 and .summary.infra_claim_scenarios_total==3 and
+            .summary.infra_released_claim_fields_observed==18 and .summary.infra_released_claim_fields_total==18 and
+            .summary.infra_core_claim_fields_observed==18 and .summary.infra_core_claim_fields_total==18 and
+            .summary.infra_invalid_tuples_rejected==2 and .summary.infra_invalid_tuple_total==2 and
+            .summary.infra_meta_activities_observed==12 and .summary.infra_meta_activity_total==12 and
+            .summary.infra_adverse_unknown_paths==1 and .summary.infra_adverse_refuted_paths==2 and
+            .summary.link_meta_activities_observed==12 and .summary.link_meta_activity_total==12 and
+            ([.proofs[]|select(.closed==4 and .total==4)]|length)==3 and ([.indicator_classes[]|select(.closed==4 and .total==4)]|length)==3 and
+            .authority.common_generator_authorized==false and .authority.central_orchestration_authorized==false and
+            .authority.generator_authority==false and .authority.cross_project_required_gates==0 and .authority.local_tests_run==0 and
+            .authority.source_repository_writes==0 and .authority.go_fix_module_roots==0 and .authority.root_readme_readiness=="EXCLUDED"' "$RUNNER_TEMP/report.json" >/dev/null
+
+          bash "$evaluator" "${common[@]}" "$infra_root/missing-receipt.json" "$infra_root/missing-receipt.json" \
+            "$infra_root/tampered-unknown.json" "$infra_root/authority-escalation.json" "$RUNNER_TEMP/runtime.json" \
+            "$RUNNER_TEMP/child-unknown.json" "$SUBJECT_SHA" child-unknown
+          jq -e '.decision=="FOURTH_MAPPING_OBSERVATION_UNKNOWN" and .summary.closed_cells==8 and .summary.unknown_cells==4 and .summary.refuted_cells==0 and
+            .summary.direct_mappings==3 and .summary.mapping_remaining==27 and .claim=={next_operation:"PROVIDE_CORE_CLAIM_RESOLUTION_RECEIPT",reason:"CORE_CLAIM_RESOLUTION_RECEIPT_UNAVAILABLE",stage:"CORE_RECEIPT",state:"UNKNOWN",step:"OBSERVE_CLAIM_RESOLUTION_RECEIPT",unknown_class:"DIRECT_MISSING"}' "$RUNNER_TEMP/child-unknown.json" >/dev/null
+
+          bash "$evaluator" "${common[@]}" "$infra_root/tampered-unknown.json" "$infra_root/missing-receipt.json" \
+            "$infra_root/tampered-unknown.json" "$infra_root/authority-escalation.json" "$RUNNER_TEMP/runtime.json" \
+            "$RUNNER_TEMP/child-refuted.json" "$SUBJECT_SHA" child-refuted
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==8 and .summary.refuted_cells==4 and
+            .claim.reason=="RELEASED_INFRA_UNKNOWN_CLAIM_MISMATCH" and .claim.state=="REFUTED"' "$RUNNER_TEMP/child-refuted.json" >/dev/null
+
+          bash "$evaluator" "${common[@]}" "$infra_root/authority-escalation.json" "$infra_root/missing-receipt.json" \
+            "$infra_root/tampered-unknown.json" "$infra_root/authority-escalation.json" "$RUNNER_TEMP/runtime.json" \
+            "$RUNNER_TEMP/child-authority-refuted.json" "$SUBJECT_SHA" child-authority-refuted
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==8 and .summary.refuted_cells==4 and
+            .claim.reason=="ADOPTION_AUTHORITY_BOUNDARY_VIOLATED" and .claim.state=="REFUTED"' "$RUNNER_TEMP/child-authority-refuted.json" >/dev/null
+
+          jq '.summary.direct_mappings=2' "$baseline" > "$RUNNER_TEMP/tampered-baseline.json"
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/graph.json" "$RUNNER_TEMP/tampered-baseline.json" \
+            "$infra_root/report.json" "$infra_root/missing-receipt.json" "$infra_root/tampered-unknown.json" "$infra_root/authority-escalation.json" \
+            "$RUNNER_TEMP/runtime.json" "$RUNNER_TEMP/baseline-refuted.json" "$SUBJECT_SHA" baseline-refuted
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==10 and .summary.refuted_cells==2 and
+            .claim.stage=="BASELINE" and .claim.reason=="BASELINE_MAPPING_COUNT_MISMATCH"' "$RUNNER_TEMP/baseline-refuted.json" >/dev/null
+
+          jq '.adoption.candidate_id="gooo.primitive.other.v1"' "$infra_root/report.json" > "$RUNNER_TEMP/candidate-tampered.json"
+          bash "$evaluator" "${common[@]}" "$RUNNER_TEMP/candidate-tampered.json" "$infra_root/missing-receipt.json" \
+            "$infra_root/tampered-unknown.json" "$infra_root/authority-escalation.json" "$RUNNER_TEMP/runtime.json" \
+            "$RUNNER_TEMP/candidate-refuted.json" "$SUBJECT_SHA" candidate-refuted
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==9 and .summary.refuted_cells==3 and
+            .claim.stage=="ADOPTION" and .claim.reason=="INFRA_DIRECT_MAPPING_MISMATCH"' "$RUNNER_TEMP/candidate-refuted.json" >/dev/null
+      - name: Publish exact human-readable indicators
+        run: |
+          {
+            echo '## Fourth direct primitive mapping'
+            echo
+            jq -r '"- decision: \(.decision)",
+              "- cells: \(.summary.closed_cells)/\(.summary.total_cells) CLOSED; UNKNOWN \(.summary.unknown_cells); REFUTED \(.summary.refuted_cells)",
+              "- direct mappings: \(.summary.direct_mappings)/\(.summary.mapping_denominator)",
+              "- mapping remaining: \(.summary.mapping_remaining)/\(.summary.mapping_denominator)",
+              "- independent consumer adoptions: \(.summary.independent_consumer_adoptions)/3",
+              "- Infra scenarios: \(.summary.infra_claim_scenarios_observed)/\(.summary.infra_claim_scenarios_total)",
+              "- Infra released claim fields: \(.summary.infra_released_claim_fields_observed)/\(.summary.infra_released_claim_fields_total)",
+              "- Infra core claim fields: \(.summary.infra_core_claim_fields_observed)/\(.summary.infra_core_claim_fields_total)",
+              "- Infra invalid tuples rejected: \(.summary.infra_invalid_tuples_rejected)/\(.summary.infra_invalid_tuple_total)",
+              "- Link Gooo meta activities: \(.summary.link_meta_activities_observed)/\(.summary.link_meta_activity_total)",
+              "- repository files: \(.inventory.repository_files)",
+              "- descendant directories: \(.inventory.descendant_directories)",
+              "- Go: \(.inventory.go.files) files, \(.inventory.go.lines) lines",
+              "- Gooo: \(.inventory.gooo.files) files, \(.inventory.gooo.lines) lines",
+              "- graph peak RSS: \(.performance.graph_peak_rss_kib) KiB",
+              "- graph wall time: \(.performance.graph_wall_ms) ms",
+              "- repository writes: \(.authority.source_repository_writes)",
+              "- local tests: \(.authority.local_tests_run)",
+              "- cross-project required gates: \(.authority.cross_project_required_gates)",
+              "- generator authority: \(.authority.generator_authority)",
+              "- root README readiness: \(.authority.root_readme_readiness)",
+              "",
+              "### Per-file language lines",
+              (.inventory.per_file[]|"- \(.path): \(.lines) \(.language) lines")' "$RUNNER_TEMP/report.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Enforce read-only repository effect
+        run: test -z "$(git status --porcelain=v1 --untracked-files=all)"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: fourth-primitive-adoption-${{ env.SUBJECT_SHA }}
+          path: |
+            ${{ runner.temp }}/report.json
+            ${{ runner.temp }}/runtime.json
+            ${{ runner.temp }}/graph.json
+            ${{ runner.temp }}/child-unknown.json
+            ${{ runner.temp }}/child-refuted.json
+            ${{ runner.temp }}/child-authority-refuted.json
+            ${{ runner.temp }}/baseline-refuted.json
+            ${{ runner.temp }}/candidate-refuted.json
+            ${{ runner.temp }}/syntax.json
+            ${{ runner.temp }}/semantic.json
