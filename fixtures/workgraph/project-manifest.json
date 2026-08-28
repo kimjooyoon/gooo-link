@@ -1,0 +1,9 @@
+{
+  "schema":"gooo/link/project-manifest/v1",
+  "project":{"id":"gooo://project/workgraph","repository":"kimjooyoon/gooo-workgraph","release":{"tag":"v0.1.0-dev","tag_object_sha":"953187488d3b49857405cbb7818013ac8809254d","target_commit_sha":"c18a75881b75b8499179bda403a4f590562c7a25"}},
+  "source":{"path":"examples/read-only-observer/main.gooo","digest":"sha256:9477f9a6cd7b83ecad5f74c6c41ab5c6017ece90151671c3f5c30707dce18929","semantic_ir_digest":"sha256:00ead0456f58b46411f3d97bbb557c9560b46c7f672715971957971ab2e38740","graph_hash":"sha256:1f79e4f99c4282fa471403c7cc2c37f552a54781269a9382c6a842fe49bebc2f"},
+  "core":{"tag":"v0.1.0-dev","target_commit_sha":"cf07bc02cda5cc0a05019d2ad63faeb3fa9edb28","cli_asset_digest":"sha256:1995a3243845531e58260e2865ac75552a6c36925e24ee49dc162c64f62f27b4","schemas":{"version":"gooo-version/v1","check":"gooo/diagnostics/v1","graph":"gooo-graph/v1"}},
+  "contracts":[{"id":"gooo://contract/workgraph-readiness-v3","kind":"RELEASE_REPORT","digest":"sha256:460ca52cc1278ad2d9076f94ee74d996fa42205ef46dcf4f23d9760d84e36686"}],
+  "evidence_refs":[{"id":"workgraph://evidence/readiness","required":true,"asset":"workgraph-report.json","digest":"sha256:460ca52cc1278ad2d9076f94ee74d996fa42205ef46dcf4f23d9760d84e36686"}],
+  "links":[{"relation":"OPTIONAL_EVIDENCE","required":false,"project":"gooo://project/design-evidence","evidence":"design://evidence/readiness","digest":"sha256:ee2aeccd5473060cb45a235891a68d0fcc97689c727c75b6f2bcef17ec6f3f3f"}]
+}

@@ -1,0 +1,241 @@
+name: Gooo Link conformance
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    env:
+      SUBJECT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SUBJECT_SHA }}
+
+      - name: Bind exact subject identity
+        run: test "$(git rev-parse HEAD)" = "$SUBJECT_SHA"
+
+      - name: Observe exact public releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          observe_release() {
+            repository=$1
+            tag=$2
+            output=$3
+            if gh api "repos/$repository/releases/tags/$tag" > "$RUNNER_TEMP/release.json" 2> "$RUNNER_TEMP/release.err"; then
+              gh api "repos/$repository/git/ref/tags/$tag" > "$RUNNER_TEMP/ref.json"
+              object_sha=$(jq -r '.object.sha' "$RUNNER_TEMP/ref.json")
+              if jq -e '.object.type == "tag"' "$RUNNER_TEMP/ref.json" >/dev/null; then
+                gh api "repos/$repository/git/tags/$object_sha" > "$RUNNER_TEMP/tag.json"
+              else
+                jq -n --arg sha "$object_sha" '{object:{type:"commit",sha:$sha}}' > "$RUNNER_TEMP/tag.json"
+              fi
+              jq -n --arg repository "$repository" \
+                --slurpfile release "$RUNNER_TEMP/release.json" \
+                --slurpfile ref "$RUNNER_TEMP/ref.json" \
+                --slurpfile tag "$RUNNER_TEMP/tag.json" \
+                '{repository:$repository,available:true,tag:$release[0].tag_name,draft:$release[0].draft,
+                  prerelease:$release[0].prerelease,tag_object_type:$ref[0].object.type,
+                  tag_object_sha:$ref[0].object.sha,target_commit_sha:$tag[0].object.sha,
+                  assets:[$release[0].assets[]|{name,digest,size,url:.browser_download_url}]}' > "$output"
+            elif grep -Fq 'HTTP 404' "$RUNNER_TEMP/release.err"; then
+              jq -n --arg repository "$repository" --arg tag "$tag" \
+                '{repository:$repository,available:false,tag:$tag,assets:[]}' > "$output"
+            else
+              cat "$RUNNER_TEMP/release.err" >&2
+              exit 1
+            fi
+          }
+
+          observe_release kimjooyoon/meta-ontology-go v0.1.0-dev "$RUNNER_TEMP/core-release.json"
+          observe_release kimjooyoon/gooo-workgraph v0.1.0-dev "$RUNNER_TEMP/workgraph-release.json"
+          observe_release kimjooyoon/gooo-design-evidence v0.1.0-dev "$RUNNER_TEMP/design-release.json"
+          jq -n \
+            --slurpfile core "$RUNNER_TEMP/core-release.json" \
+            --slurpfile workgraph "$RUNNER_TEMP/workgraph-release.json" \
+            --slurpfile design "$RUNNER_TEMP/design-release.json" \
+            '{schema:"gooo/link/release-observations/v1",core:$core[0],projects:[$workgraph[0],$design[0]]}' \
+            > "$RUNNER_TEMP/releases.json"
+
+      - name: Download digest-locked public bytes
+        run: |
+          set -euo pipefail
+          assets="$RUNNER_TEMP/assets"
+          mkdir -p "$assets/core" "$assets/workgraph" "$assets/design-evidence"
+
+          download_release_assets() {
+            repository=$1
+            key=$2
+            jq -r --arg repository "$repository" '.projects[]|select(.repository==$repository)|.assets[]|[.name,.url]|@tsv' "$RUNNER_TEMP/releases.json" |
+              while IFS=$'\t' read -r name url; do
+                curl --fail --location --retry 3 "$url" --output "$assets/$key/$name"
+              done
+          }
+
+          download_release_assets kimjooyoon/gooo-workgraph workgraph
+          download_release_assets kimjooyoon/gooo-design-evidence design-evidence
+          (cd "$assets/workgraph" && sha256sum -c SHA256SUMS)
+          (cd "$assets/design-evidence" && sha256sum -c SHA256SUMS)
+
+          binary=$(jq -r '.consumer.binary_asset' contracts/core-release-lock-v1.json)
+          checksums=$(jq -r '.consumer.checksum_asset' contracts/core-release-lock-v1.json)
+          binary_url=$(jq -r --arg name "$binary" '.core.assets[]|select(.name==$name)|.url' "$RUNNER_TEMP/releases.json")
+          checksums_url=$(jq -r --arg name "$checksums" '.core.assets[]|select(.name==$name)|.url' "$RUNNER_TEMP/releases.json")
+          curl --fail --location --retry 3 "$binary_url" --output "$assets/core/$binary"
+          curl --fail --location --retry 3 "$checksums_url" --output "$assets/core/$checksums"
+
+      - name: Execute only the released Gooo CLI
+        run: |
+          set -euo pipefail
+          assets="$RUNNER_TEMP/assets"
+          lock=contracts/core-release-lock-v1.json
+          binary=$(jq -r '.consumer.binary_asset' "$lock")
+          checksums=$(jq -r '.consumer.checksum_asset' "$lock")
+          actual="sha256:$(sha256sum "$assets/core/$binary" | awk '{print $1}')"
+          locked=$(jq -r --arg name "$binary" '.assets[]|select(.name==$name)|.digest' "$lock")
+          advertised=$(jq -r --arg name "$binary" '.core.assets[]|select(.name==$name)|.digest' "$RUNNER_TEMP/releases.json")
+          indexed="sha256:$(awk -v name="$binary" '$2==name {print $1}' "$assets/core/$checksums")"
+          test "$actual" = "$locked"
+          test "$actual" = "$advertised"
+          test "$actual" = "$indexed"
+
+          extract="$RUNNER_TEMP/gooo"
+          mkdir -p "$extract"
+          tar -xzf "$assets/core/$binary" -C "$extract"
+
+          before="$RUNNER_TEMP/repository-before.bin"
+          after="$RUNNER_TEMP/repository-after.bin"
+          git status --porcelain=v1 -z --untracked-files=all > "$before"
+
+          core_source_imports=$({ find . -type f \( -name '*.go' -o -name 'go.mod' \) -print0 | xargs -0 -r grep -l 'github.com/kimjooyoon/meta-ontology-go/internal' || true; } | wc -l | tr -d ' ')
+          sibling_source_imports=$({ find . -type f \( -name '*.go' -o -name 'go.mod' \) -print0 | xargs -0 -r grep -l 'github.com/kimjooyoon/gooo-\(workgraph\|design-evidence\)' || true; } | wc -l | tr -d ' ')
+          branch_dependencies=$({ find fixtures contracts -type f -print0 | xargs -0 grep -El 'refs/heads/|/tree/(main|dev)|"branch"' || true; } | wc -l | tr -d ' ')
+
+          "$extract/gooo" version --json > "$RUNNER_TEMP/version.json"
+          "$extract/gooo" check --json examples/two-consumer-link/main.gooo > "$RUNNER_TEMP/syntax-check.json"
+          "$extract/gooo" check --semantic --json examples/two-consumer-link/main.gooo > "$RUNNER_TEMP/semantic-check.json"
+          "$extract/gooo" graph dump examples/two-consumer-link/main.gooo > "$RUNNER_TEMP/graph.json"
+
+          git status --porcelain=v1 -z --untracked-files=all > "$after"
+          if cmp -s "$before" "$after"; then writes=0; else writes=1; fi
+          before_digest="sha256:$(sha256sum "$before" | awk '{print $1}')"
+          after_digest="sha256:$(sha256sum "$after" | awk '{print $1}')"
+          source_digest="sha256:$(sha256sum examples/two-consumer-link/main.gooo | awk '{print $1}')"
+
+          jq -n \
+            --arg head "$SUBJECT_SHA" \
+            --arg asset "$binary" \
+            --arg digest "$actual" \
+            --arg source_digest "$source_digest" \
+            --arg before_digest "$before_digest" \
+            --arg after_digest "$after_digest" \
+            --argjson writes "$writes" \
+            --argjson core_source_imports "$core_source_imports" \
+            --argjson sibling_source_imports "$sibling_source_imports" \
+            --argjson branch_dependencies "$branch_dependencies" \
+            --slurpfile version "$RUNNER_TEMP/version.json" \
+            --slurpfile syntax "$RUNNER_TEMP/syntax-check.json" \
+            --slurpfile semantic "$RUNNER_TEMP/semantic-check.json" \
+            --slurpfile graph "$RUNNER_TEMP/graph.json" \
+            '{schema:"gooo/link/runtime-observation/v1",available:true,subject_sha:$head,
+              binary:{asset_name:$asset,digest:$digest,checksum_verified:true},
+              version:$version[0],syntax_check:$syntax[0],semantic_check:$semantic[0],graph:$graph[0],
+              source:{path:"examples/two-consumer-link/main.gooo",digest:$source_digest},
+              boundary:{core_source_imports:$core_source_imports,sibling_source_imports:$sibling_source_imports,branch_dependencies:$branch_dependencies},
+              repository:{before_digest:$before_digest,after_digest:$after_digest,writes:$writes}}' \
+            > "$RUNNER_TEMP/runtime.json"
+
+      - name: Evaluate transition and counterexamples
+        run: |
+          set -euo pipefail
+          jq -n '{schema:"gooo/link/isolation-receipt/v1",observed:false}' > "$RUNNER_TEMP/no-isolation.json"
+          jq -n '{schema:"gooo/link/replay-receipt/v1",observed:false}' > "$RUNNER_TEMP/no-replay.json"
+
+          bash scripts/evaluate.sh "$GITHUB_WORKSPACE" "$RUNNER_TEMP/releases.json" "$RUNNER_TEMP/assets" "$RUNNER_TEMP/runtime.json" "$RUNNER_TEMP/no-isolation.json" "$RUNNER_TEMP/no-replay.json" "$RUNNER_TEMP/initial.json" "$SUBJECT_SHA" initial
+          jq -e '.decision=="INCOMPLETE" and .summary=={total:12,closed:10,unknown:2,refuted:0,repository_writes:0} and
+            .claim.stage=="REPLAY" and .claim.step=="REPLAY_LINK_EVALUATION" and .claim.reason=="REPLAY_NOT_OBSERVED"' "$RUNNER_TEMP/initial.json" >/dev/null
+
+          cp -R "$RUNNER_TEMP/assets" "$RUNNER_TEMP/assets-missing"
+          rm "$RUNNER_TEMP/assets-missing/workgraph/workgraph-report.json"
+          bash scripts/evaluate.sh "$GITHUB_WORKSPACE" "$RUNNER_TEMP/releases.json" "$RUNNER_TEMP/assets-missing" "$RUNNER_TEMP/runtime.json" "$RUNNER_TEMP/no-isolation.json" "$RUNNER_TEMP/no-replay.json" "$RUNNER_TEMP/missing-required.json" "$SUBJECT_SHA" missing-required
+          jq -e '.decision=="INCOMPLETE" and
+            (.projects[]|select(.id=="gooo://project/workgraph")|.state=="UNKNOWN" and .stage=="EVIDENCE" and .step=="VERIFY_REQUIRED_ASSET" and .reason=="REQUIRED_EVIDENCE_UNAVAILABLE") and
+            (.projects[]|select(.id=="gooo://project/design-evidence")|.state=="CLOSED")' "$RUNNER_TEMP/missing-required.json" >/dev/null
+
+          scenario_digest="sha256:$(sha256sum "$RUNNER_TEMP/missing-required.json" | awk '{print $1}')"
+          jq -n --arg digest "$scenario_digest" \
+            '{schema:"gooo/link/isolation-receipt/v1",observed:true,scenario_report_digest:$digest,
+              affected_project:"gooo://project/workgraph",affected_state:"UNKNOWN",
+              independent_project:"gooo://project/design-evidence",independent_state:"CLOSED",
+              stage:"EVIDENCE",step:"VERIFY_REQUIRED_ASSET",reason:"REQUIRED_EVIDENCE_UNAVAILABLE"}' \
+            > "$RUNNER_TEMP/isolation.json"
+
+          bash scripts/evaluate.sh "$GITHUB_WORKSPACE" "$RUNNER_TEMP/releases.json" "$RUNNER_TEMP/assets" "$RUNNER_TEMP/runtime.json" "$RUNNER_TEMP/isolation.json" "$RUNNER_TEMP/no-replay.json" "$RUNNER_TEMP/candidate-a.json" "$SUBJECT_SHA" candidate
+          bash scripts/evaluate.sh "$GITHUB_WORKSPACE" "$RUNNER_TEMP/releases.json" "$RUNNER_TEMP/assets" "$RUNNER_TEMP/runtime.json" "$RUNNER_TEMP/isolation.json" "$RUNNER_TEMP/no-replay.json" "$RUNNER_TEMP/candidate-b.json" "$SUBJECT_SHA" candidate
+          cmp -s "$RUNNER_TEMP/candidate-a.json" "$RUNNER_TEMP/candidate-b.json"
+          candidate_digest="sha256:$(sha256sum "$RUNNER_TEMP/candidate-a.json" | awk '{print $1}')"
+          jq -n --arg digest "$candidate_digest" \
+            '{schema:"gooo/link/replay-receipt/v1",observed:true,first_digest:$digest,second_digest:$digest,equal:true}' \
+            > "$RUNNER_TEMP/replay-receipt.json"
+
+          bash scripts/evaluate.sh "$GITHUB_WORKSPACE" "$RUNNER_TEMP/releases.json" "$RUNNER_TEMP/assets" "$RUNNER_TEMP/runtime.json" "$RUNNER_TEMP/isolation.json" "$RUNNER_TEMP/replay-receipt.json" "$RUNNER_TEMP/report.json" "$SUBJECT_SHA" final
+          bash scripts/evaluate.sh "$GITHUB_WORKSPACE" "$RUNNER_TEMP/releases.json" "$RUNNER_TEMP/assets" "$RUNNER_TEMP/runtime.json" "$RUNNER_TEMP/isolation.json" "$RUNNER_TEMP/replay-receipt.json" "$RUNNER_TEMP/replay.json" "$SUBJECT_SHA" final
+          cmp -s "$RUNNER_TEMP/report.json" "$RUNNER_TEMP/replay.json"
+          jq -e '.decision=="CONFORMANT" and .summary=={total:12,closed:12,unknown:0,refuted:0,repository_writes:0} and
+            .authority.activity_bindings==12 and .authority.activity_total==12 and
+            ([.proofs[]|select(.closed==.total)]|length)==3 and
+            (.indicators[]|select(.id=="gooo.metric.link.release-locks.v1")|.value==3 and .total==3) and
+            (.indicators[]|select(.id=="gooo.metric.link.released-cli-receipts.v1")|.value==4 and .total==4) and
+            (.indicators[]|select(.id=="gooo.metric.link.required-assets.v1")|.value==10 and .total==10) and
+            (.indicators[]|select(.id=="gooo.metric.link.project-evidence.v1")|.value==2 and .total==2)' "$RUNNER_TEMP/report.json" >/dev/null
+
+          cp -R "$RUNNER_TEMP/assets" "$RUNNER_TEMP/assets-tampered"
+          jq '.summary.closed_tasks=11' "$RUNNER_TEMP/assets-tampered/workgraph/workgraph-report.json" > "$RUNNER_TEMP/tampered.json"
+          mv "$RUNNER_TEMP/tampered.json" "$RUNNER_TEMP/assets-tampered/workgraph/workgraph-report.json"
+          bash scripts/evaluate.sh "$GITHUB_WORKSPACE" "$RUNNER_TEMP/releases.json" "$RUNNER_TEMP/assets-tampered" "$RUNNER_TEMP/runtime.json" "$RUNNER_TEMP/no-isolation.json" "$RUNNER_TEMP/no-replay.json" "$RUNNER_TEMP/digest-refuted.json" "$SUBJECT_SHA" digest-refuted
+          jq -e '.decision=="FAIL_CLOSED" and .claim.stage=="DIGEST" and .claim.step=="VERIFY_ASSET_DIGEST" and
+            .claim.reason=="PROJECT_RELEASE_ASSET_DIGEST_MISMATCH" and .summary.refuted>0' "$RUNNER_TEMP/digest-refuted.json" >/dev/null
+
+      - name: Publish exact human-readable indicators
+        run: |
+          {
+            echo '## Gooo Link v1 conformance'
+            echo
+            jq -r '"- transition: 10/12 CLOSED, 2 UNKNOWN -> \(.summary.closed)/\(.summary.total) CLOSED, UNKNOWN \(.summary.unknown), REFUTED \(.summary.refuted)",
+              (.proofs[] | "- \(.choice): \(.closed)/\(.total)"),
+              (.indicators[] | "- \(.id): \(.value)/\(.total) [\(.state)]"),
+              "- source spans: \(.authority.source_spans)",
+              "- cross-project semantic equivalence: \(.authority.cross_project_semantic_equivalence)",
+              "- publisher signatures: \(.authority.publisher_signatures)",
+              "- repository writes: \(.summary.repository_writes)",
+              "- deterministic replay: true",
+              "- local test executions: 0"' "$RUNNER_TEMP/report.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce read-only repository effect
+        run: test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: gooo-link-conformance-${{ env.SUBJECT_SHA }}
+          path: |
+            ${{ runner.temp }}/releases.json
+            ${{ runner.temp }}/runtime.json
+            ${{ runner.temp }}/initial.json
+            ${{ runner.temp }}/missing-required.json
+            ${{ runner.temp }}/isolation.json
+            ${{ runner.temp }}/candidate-a.json
+            ${{ runner.temp }}/replay-receipt.json
+            ${{ runner.temp }}/report.json
+            ${{ runner.temp }}/replay.json
+            ${{ runner.temp }}/digest-refuted.json

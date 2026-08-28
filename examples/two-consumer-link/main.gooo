@@ -1,0 +1,30 @@
+package link
+namespace gooolink
+
+entity LinkManifest id "gooo://link/entity/manifest"
+entity WireDecision id "gooo://link/entity/wire-decision"
+entity BoundaryObservation id "gooo://link/entity/boundary-observation"
+entity ReleaseLockSet id "gooo://link/entity/release-lock-set"
+entity DigestSet id "gooo://link/entity/digest-set"
+entity CLIReceiptSet id "gooo://link/entity/cli-receipt-set"
+entity SourceIdentitySet id "gooo://link/entity/source-identity-set"
+entity ArtifactProvenanceSet id "gooo://link/entity/artifact-provenance-set"
+entity ReadOnlyObservation id "gooo://link/entity/read-only-observation"
+entity ReplayReceipt id "gooo://link/entity/replay-receipt"
+entity CompatibilityClaimSet id "gooo://link/entity/compatibility-claim-set"
+entity OptionalEvidenceSet id "gooo://link/entity/optional-evidence-set"
+entity FailureIsolationReceipt id "gooo://link/entity/failure-isolation-receipt"
+entity ConformanceDecision id "gooo://link/entity/conformance-decision"
+
+activity ValidateWireShape(LinkManifest) -> WireDecision
+activity EnforceIndependentBoundary(BoundaryObservation) -> ConformanceDecision
+activity ObservePublicReleaseLocks(ReleaseLockSet) -> ConformanceDecision
+activity VerifyDigestCoverage(DigestSet) -> ConformanceDecision
+activity ExecuteReleasedCLI(CLIReceiptSet) -> ConformanceDecision
+activity BindSourceIdentity(SourceIdentitySet) -> ConformanceDecision
+activity BindArtifactProvenance(ArtifactProvenanceSet) -> ConformanceDecision
+activity ObserveReadOnlyEffect(ReadOnlyObservation) -> ConformanceDecision
+activity ReplayLinkEvaluation(ReplayReceipt) -> ConformanceDecision
+activity EvaluateCompatibilityClaim(CompatibilityClaimSet) -> ConformanceDecision
+activity IsolateOptionalEvidence(OptionalEvidenceSet) -> ConformanceDecision
+activity PreserveFailureIsolation(FailureIsolationReceipt) -> ConformanceDecision

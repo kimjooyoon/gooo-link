@@ -1,0 +1,9 @@
+{
+  "schema":"gooo/link/project-manifest/v1",
+  "project":{"id":"gooo://project/design-evidence","repository":"kimjooyoon/gooo-design-evidence","release":{"tag":"v0.1.0-dev","tag_object_sha":"710b0ed12dd5b96ffc9c1e9bc4891d5f1de3d3dc","target_commit_sha":"3eedfce13bf9160cb39b110b051d92744c2a6327"}},
+  "source":{"path":"examples/button-system/main.gooo","digest":"sha256:92a4c038f147b5aa5d1a670b55939ae4d798bd9eab891365893ac25dd7dd12d3","semantic_ir_digest":"sha256:54ee2d8c2386e6b8027e6674e10cb106a5975cd1706ce596c65f0524329e655b","graph_hash":"sha256:8790860b2fbb5653b3c30792347f3d5a9cdecc303b7527e209c4525d8b394a16"},
+  "core":{"tag":"v0.1.0-dev","target_commit_sha":"cf07bc02cda5cc0a05019d2ad63faeb3fa9edb28","cli_asset_digest":"sha256:1995a3243845531e58260e2865ac75552a6c36925e24ee49dc162c64f62f27b4","schemas":{"version":"gooo-version/v1","check":"gooo/diagnostics/v1","graph":"gooo-graph/v1"}},
+  "contracts":[{"id":"gooo://contract/design-evidence-readiness-v3","kind":"RELEASE_REPORT","digest":"sha256:ee2aeccd5473060cb45a235891a68d0fcc97689c727c75b6f2bcef17ec6f3f3f"}],
+  "evidence_refs":[{"id":"design://evidence/readiness","required":true,"asset":"design-evidence-report.json","digest":"sha256:ee2aeccd5473060cb45a235891a68d0fcc97689c727c75b6f2bcef17ec6f3f3f"}],
+  "links":[{"relation":"OPTIONAL_EVIDENCE","required":false,"project":"gooo://project/workgraph","evidence":"workgraph://evidence/readiness","digest":"sha256:460ca52cc1278ad2d9076f94ee74d996fa42205ef46dcf4f23d9760d84e36686"}]
+}

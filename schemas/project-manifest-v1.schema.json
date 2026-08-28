@@ -1,0 +1,11 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://gooo.dev/schemas/link/project-manifest-v1.schema.json","title":"Gooo Link project manifest v1","type":"object",
+  "required":["schema","project","source","core","contracts","evidence_refs","links"],
+  "properties":{
+    "schema":{"const":"gooo/link/project-manifest/v1"},
+    "project":{"type":"object","required":["id","repository","release"],"properties":{"id":{"type":"string"},"repository":{"type":"string"},"release":{"type":"object","required":["tag","tag_object_sha","target_commit_sha"]}}},
+    "source":{"type":"object","required":["path","digest","semantic_ir_digest","graph_hash"]},
+    "core":{"type":"object","required":["tag","target_commit_sha","cli_asset_digest","schemas"]},
+    "contracts":{"type":"array","minItems":1},"evidence_refs":{"type":"array","minItems":1},"links":{"type":"array"}
+  }
+}

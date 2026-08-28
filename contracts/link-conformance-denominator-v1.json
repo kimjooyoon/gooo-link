@@ -1,0 +1,25 @@
+{
+  "schema": "gooo/link/conformance-denominator/v1",
+  "id": "gooo://denominator/link-v1-conformance",
+  "version": 1,
+  "target_cells": 12,
+  "cells": [
+    {"ordinal":1,"id":"WIRE_SHAPE","activity":"ValidateWireShape","stage":"WIRE","step":"VALIDATE_WIRE_SHAPE","proof_choice":"FOUNDATION","closed_reason":"WIRE_SHAPE_VALID","unknown_reason":"WIRE_SHAPE_UNSUPPORTED","next_operation":"PROVIDE_SUPPORTED_WIRE_SCHEMA"},
+    {"ordinal":2,"id":"INDEPENDENT_BOUNDARY","activity":"EnforceIndependentBoundary","stage":"BOUNDARY","step":"ENFORCE_INDEPENDENT_BOUNDARY","proof_choice":"FOUNDATION","closed_reason":"INDEPENDENT_BOUNDARY_OBSERVED","unknown_reason":"INDEPENDENT_BOUNDARY_NOT_OBSERVED","next_operation":"OBSERVE_SOURCE_BOUNDARY"},
+    {"ordinal":3,"id":"PUBLIC_RELEASE_LOCK","activity":"ObservePublicReleaseLocks","stage":"RELEASE","step":"OBSERVE_PUBLIC_RELEASE_LOCKS","proof_choice":"FOUNDATION","closed_reason":"PUBLIC_RELEASE_LOCKS_MATCH","unknown_reason":"PUBLIC_RELEASE_UNAVAILABLE","next_operation":"FETCH_PINNED_RELEASES"},
+    {"ordinal":4,"id":"DIGEST_COVERAGE","activity":"VerifyDigestCoverage","stage":"DIGEST","step":"VERIFY_ASSET_DIGEST","proof_choice":"FOUNDATION","closed_reason":"REQUIRED_ASSET_DIGESTS_MATCH","unknown_reason":"REQUIRED_EVIDENCE_UNAVAILABLE","next_operation":"DOWNLOAD_PINNED_ASSET"},
+    {"ordinal":5,"id":"RELEASED_CLI_ONLY","activity":"ExecuteReleasedCLI","stage":"COMPILER","step":"EXECUTE_RELEASED_CLI","proof_choice":"FOUNDATION","closed_reason":"RELEASED_CLI_RECEIPTS_OBSERVED","unknown_reason":"RELEASED_CLI_UNAVAILABLE","next_operation":"FETCH_PINNED_GOOO_RELEASE"},
+    {"ordinal":6,"id":"SOURCE_BINDING","activity":"BindSourceIdentity","stage":"SOURCE","step":"BIND_SOURCE_IDENTITY","proof_choice":"COHERENCE","closed_reason":"SOURCE_IDENTITIES_BOUND","unknown_reason":"SOURCE_BINDING_UNAVAILABLE","next_operation":"OBSERVE_PROJECT_RUNTIME_RECEIPTS"},
+    {"ordinal":7,"id":"ARTIFACT_PROVENANCE","activity":"BindArtifactProvenance","stage":"EVIDENCE","step":"BIND_ARTIFACT_PROVENANCE","proof_choice":"COHERENCE","closed_reason":"ARTIFACT_PROVENANCE_BOUND","unknown_reason":"REQUIRED_EVIDENCE_UNAVAILABLE","next_operation":"DOWNLOAD_PINNED_ASSET"},
+    {"ordinal":8,"id":"READ_ONLY_EFFECT","activity":"ObserveReadOnlyEffect","stage":"EFFECT","step":"OBSERVE_READ_ONLY_EFFECT","proof_choice":"REGRESSION","closed_reason":"REPOSITORY_ZERO_WRITE_OBSERVED","unknown_reason":"REPOSITORY_EFFECT_NOT_OBSERVED","next_operation":"COMPARE_REPOSITORY_SNAPSHOTS"},
+    {"ordinal":9,"id":"REPLAY_STABILITY","activity":"ReplayLinkEvaluation","stage":"REPLAY","step":"REPLAY_LINK_EVALUATION","proof_choice":"REGRESSION","closed_reason":"BYTE_IDENTICAL_REPLAY_OBSERVED","unknown_reason":"REPLAY_NOT_OBSERVED","next_operation":"REPLAY_LINK_EVALUATION"},
+    {"ordinal":10,"id":"COMPATIBILITY_CLAIM","activity":"EvaluateCompatibilityClaim","stage":"COMPATIBILITY","step":"EVALUATE_COMPATIBILITY_CLAIM","proof_choice":"COHERENCE","closed_reason":"COMPATIBILITY_CLAIMS_BOUND","unknown_reason":"COMPATIBILITY_CLAIM_UNSUPPORTED","next_operation":"PROVIDE_EXACT_COMPATIBILITY_CLAIM"},
+    {"ordinal":11,"id":"OPTIONAL_EVIDENCE","activity":"IsolateOptionalEvidence","stage":"LINK","step":"ISOLATE_OPTIONAL_EVIDENCE","proof_choice":"COHERENCE","closed_reason":"OPTIONAL_EVIDENCE_ISOLATED","unknown_reason":"OPTIONAL_EVIDENCE_POLICY_UNOBSERVED","next_operation":"DECLARE_OPTIONAL_LINK_POLICY"},
+    {"ordinal":12,"id":"FAILURE_ISOLATION","activity":"PreserveFailureIsolation","stage":"ISOLATION","step":"PRESERVE_FAILURE_ISOLATION","proof_choice":"REGRESSION","closed_reason":"PROJECT_FAILURE_ISOLATED","unknown_reason":"FAILURE_ISOLATION_NOT_OBSERVED","next_operation":"REMOVE_ONE_REQUIRED_ASSET_AND_REEVALUATE"}
+  ],
+  "proof_totals": [
+    {"proof_choice":"FOUNDATION","total":5},
+    {"proof_choice":"COHERENCE","total":4},
+    {"proof_choice":"REGRESSION","total":3}
+  ]
+}

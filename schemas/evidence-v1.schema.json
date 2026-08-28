@@ -1,0 +1,5 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://gooo.dev/schemas/link/evidence-v1.schema.json","title":"Gooo Link evidence record v1","type":"object",
+  "required":["schema","record_id","subject_project","claim_id","status","materials","products","producer","reason","next_operation"],
+  "properties":{"schema":{"const":"gooo/link/evidence/v1"},"status":{"enum":["CLOSED","UNKNOWN","REFUTED","NOT_CLAIMED"]},"materials":{"type":"array"},"products":{"type":"array"},"blocked_by":{"type":"array"}}
+}
