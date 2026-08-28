@@ -1,0 +1,107 @@
+name: Released adoption promotion observation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  observation:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Bind exact subject
+        run: echo "SUBJECT_SHA=${{ github.event.pull_request.head.sha || github.sha }}" >> "$GITHUB_ENV"
+
+      - name: Acquire immutable core and adoption archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          core_lock=contracts/core-activity-cardinality-release-lock-v1.json
+          core_repo=$(jq -r .repository "$core_lock"); core_tag=$(jq -r .tag "$core_lock"); core_tag_object=$(jq -r .tag_object_sha "$core_lock"); core_target=$(jq -r .target_commit_sha "$core_lock"); core_asset=$(jq -r .consumer.binary_asset "$core_lock"); core_sha=$(jq -r --arg name "$core_asset" '.assets[]|select(.name==$name)|.digest|sub("^sha256:";"")' "$core_lock")
+          gh api "repos/$core_repo/git/ref/tags/$core_tag" > "$RUNNER_TEMP/core-ref.json"; jq -e --arg sha "$core_tag_object" '.object.type=="tag" and .object.sha==$sha' "$RUNNER_TEMP/core-ref.json" >/dev/null
+          gh api "repos/$core_repo/git/tags/$core_tag_object" > "$RUNNER_TEMP/core-tag.json"; jq -e --arg sha "$core_target" '.object.type=="commit" and .object.sha==$sha' "$RUNNER_TEMP/core-tag.json" >/dev/null
+          gh api "repos/$core_repo/releases/tags/$core_tag" > "$RUNNER_TEMP/core-release.json"; core_id=$(jq -r --arg name "$core_asset" '.assets[]|select(.name==$name)|.id' "$RUNNER_TEMP/core-release.json")
+          gh api -H 'Accept: application/octet-stream' "repos/$core_repo/releases/assets/$core_id" > "$RUNNER_TEMP/$core_asset"; printf '%s  %s\n' "$core_sha" "$RUNNER_TEMP/$core_asset" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/core"; tar -xzf "$RUNNER_TEMP/$core_asset" -C "$RUNNER_TEMP/core"; chmod +x "$RUNNER_TEMP/core/gooo"
+
+          locks=contracts/released-adoption-locks-v1.json; mkdir -p "$RUNNER_TEMP/adoption-inputs" "$RUNNER_TEMP/release-observations"
+          while IFS= read -r consumer; do
+            id=$(jq -r .id <<<"$consumer"); repo=$(jq -r .repository <<<"$consumer"); tag=$(jq -r .tag <<<"$consumer"); tag_object=$(jq -r .tag_object_sha <<<"$consumer"); target=$(jq -r .target_commit_sha <<<"$consumer"); asset=$(jq -r .archive.name <<<"$consumer"); digest=$(jq -r .archive.sha256 <<<"$consumer")
+            gh api "repos/$repo/git/ref/tags/$tag" > "$RUNNER_TEMP/$id-ref.json"; jq -e --arg sha "$tag_object" '.object.type=="tag" and .object.sha==$sha' "$RUNNER_TEMP/$id-ref.json" >/dev/null
+            gh api "repos/$repo/git/tags/$tag_object" > "$RUNNER_TEMP/$id-tag.json"; jq -e --arg sha "$target" '.object.type=="commit" and .object.sha==$sha' "$RUNNER_TEMP/$id-tag.json" >/dev/null
+            gh api "repos/$repo/releases/tags/$tag" > "$RUNNER_TEMP/$id-release.json"; asset_id=$(jq -r --arg name "$asset" '.assets[]|select(.name==$name)|.id' "$RUNNER_TEMP/$id-release.json")
+            gh api -H 'Accept: application/octet-stream' "repos/$repo/releases/assets/$asset_id" > "$RUNNER_TEMP/$asset"; printf '%s  %s\n' "$digest" "$RUNNER_TEMP/$asset" | sha256sum -c -
+            mkdir -p "$RUNNER_TEMP/adoption-inputs/$id"; unzip -q "$RUNNER_TEMP/$asset" -d "$RUNNER_TEMP/adoption-inputs/$id"
+            jq -S -n --arg id "$id" --arg repository "$repo" --arg tag "$tag" --arg tag_object_sha "$tag_object" --arg target_commit_sha "$target" --arg archive "$asset" --arg sha256 "$digest" '{id:$id,repository:$repository,tag:$tag,tag_object_sha:$tag_object_sha,target_commit_sha:$target_commit_sha,archive:{name:$archive,sha256:$sha256},identity_verified:true,archive_verified:true}' > "$RUNNER_TEMP/release-observations/$id.json"
+          done < <(jq -c '.consumers[]' "$locks")
+          jq -S -s --arg expected_specification_report_sha256 "$(jq -r .expected_specification_report_sha256 "$locks")" '{schema:"gooo/link/released-adoption-release-observation/v1",expected_specification_report_sha256:$expected_specification_report_sha256,consumers:.}' "$RUNNER_TEMP"/release-observations/*.json > "$RUNNER_TEMP/release-observation.json"
+
+      - name: Resolve observation activities through released Gooo
+        shell: bash
+        run: |
+          set -euo pipefail
+          gooo="$RUNNER_TEMP/core/gooo"; source=examples/released-adoption-observation/main.gooo; denominator=contracts/released-adoption-observation-denominator-v1.json
+          "$gooo" check --json "$source" > "$RUNNER_TEMP/syntax.json"; "$gooo" check --semantic --json "$source" > "$RUNNER_TEMP/semantic.json"; "$gooo" graph dump "$source" > "$RUNNER_TEMP/graph.json"
+          jq -e '.status=="ok"' "$RUNNER_TEMP/syntax.json" "$RUNNER_TEMP/semantic.json" >/dev/null; jq -e '([.nodes[]|select(.kind=="Activity")]|length)==12' "$RUNNER_TEMP/graph.json" >/dev/null
+          mkdir -p "$RUNNER_TEMP/core-resolutions"
+          while IFS=$'\t' read -r ordinal activity; do
+            printf -v receipt '%s/core-resolutions/%02d-%s.json' "$RUNNER_TEMP" "$ordinal" "$activity"
+            "$gooo" graph resolve-activity "$source" --name "$activity" > "$receipt"
+            jq -e --arg activity "$activity" '.schema=="gooo/activity-cardinality-resolution/v1" and .selector.name==$activity and .decision=="CLOSED" and .occurrences==1 and .claim.state=="CLOSED"' "$receipt" >/dev/null
+          done < <(jq -r '.cells[]|[.ordinal,.activity]|@tsv' "$denominator")
+          jq -S -s '.' "$RUNNER_TEMP"/core-resolutions/*.json > "$RUNNER_TEMP/core-receipts.json"
+          jq -S -n --slurpfile lock contracts/core-activity-cardinality-release-lock-v1.json --slurpfile receipts "$RUNNER_TEMP/core-receipts.json" '($receipts[0]) as $r|{schema:"gooo/link/released-adoption-core-resolution/v1",core_release:{repository:$lock[0].repository,tag:$lock[0].tag,tag_object_sha:$lock[0].tag_object_sha,target_commit_sha:$lock[0].target_commit_sha,binary_asset:$lock[0].consumer.binary_asset,binary_sha256:($lock[0].assets[]|select(.name==$lock[0].consumer.binary_asset)|.digest|sub("^sha256:";"")),resolution_schema:$lock[0].schemas.activity_cardinality_resolution},summary:{expected:12,observed:($r|length),closed:([$r[]|select(.decision=="CLOSED")]|length)},receipts:$r}' > "$RUNNER_TEMP/core-resolution-observation.json"
+
+      - name: Observe promotion and adversarial resolution
+        shell: bash
+        run: |
+          set -euo pipefail
+          snapshot() { find "$GITHUB_WORKSPACE" -path "$GITHUB_WORKSPACE/.git" -prune -o -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}'; }
+          before=$(snapshot); observer=scripts/observe-released-adoptions.sh; denominator=contracts/released-adoption-observation-denominator-v1.json; core_lock=contracts/core-activity-cardinality-release-lock-v1.json
+          start_ns=$(date +%s%N)
+          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/observer-rss" bash "$observer" "$RUNNER_TEMP/graph.json" "$RUNNER_TEMP/core-resolution-observation.json" "$denominator" "$core_lock" "$RUNNER_TEMP/release-observation.json" "$RUNNER_TEMP/adoption-inputs" "$RUNNER_TEMP/adoption-observation.json" "$SUBJECT_SHA" released-adoptions
+          end_ns=$(date +%s%N); echo $(( (end_ns-start_ns)/1000000 )) > "$RUNNER_TEMP/observer-wall-ms"
+          bash "$observer" "$RUNNER_TEMP/graph.json" "$RUNNER_TEMP/core-resolution-observation.json" "$denominator" "$core_lock" "$RUNNER_TEMP/release-observation.json" "$RUNNER_TEMP/adoption-inputs" "$RUNNER_TEMP/replay.json" "$SUBJECT_SHA" released-adoptions
+          cmp -s "$RUNNER_TEMP/adoption-observation.json" "$RUNNER_TEMP/replay.json"
+          jq -e '.decision=="CONNECTOR_PROMOTION_ELIGIBLE" and .summary=={closed:12,dependency_blocked:0,direct_missing:0,domains:3,refuted:0,scenarios:12,total:12,unknown:0} and .promotion=={connector_implementation:"NOT_STARTED",next_operation:"IMPLEMENT_ADVISORY_CONNECTOR",state:"ELIGIBLE"} and .observations.release_identities=={observed:3,total:3} and .observations.archives=={observed:3,total:3} and .observations.canonical_bundles=={observed:3,total:3} and .observations.specification_anchors=={observed:3,total:3} and .observations.relation_endpoints=={resolved:6,total:6,unknown:0} and .observations.conformant_bundles=={observed:3,total:3} and .observations.deterministic_replays=={observed:3,total:3} and .observations.unknown_guards=={observed:3,total:3} and .observations.checksum_guards=={observed:3,total:3} and .observations.self_adoptions=={observed:3,total:3} and .observations.scenarios=={minimum:6,observed:12} and ([.proofs[]|select(.closed==4 and .total==4)]|length)==3 and .indicator_classes==[{class:"OUTCOME",closed:3,total:3},{class:"DRIVER",closed:5,total:5},{class:"GUARDRAIL",closed:4,total:4}]' "$RUNNER_TEMP/adoption-observation.json" >/dev/null
+
+          cp -R "$RUNNER_TEMP/adoption-inputs" "$RUNNER_TEMP/missing-input"; mv "$RUNNER_TEMP/missing-input/design-evidence" "$RUNNER_TEMP/design-evidence-held"
+          bash "$observer" "$RUNNER_TEMP/graph.json" "$RUNNER_TEMP/core-resolution-observation.json" "$denominator" "$core_lock" "$RUNNER_TEMP/release-observation.json" "$RUNNER_TEMP/missing-input" "$RUNNER_TEMP/missing-domain.json" "$SUBJECT_SHA" missing-design-domain
+          jq -e '.decision=="INCOMPLETE" and .summary.closed==3 and .summary.unknown==9 and .summary.direct_missing==1 and .summary.dependency_blocked==8 and .claim.stage=="BUNDLE" and .claim.step=="OBSERVE_CANONICAL_BUNDLES" and .claim.reason=="CANONICAL_BUNDLE_UNAVAILABLE"' "$RUNNER_TEMP/missing-domain.json" >/dev/null
+
+          cp -R "$RUNNER_TEMP/adoption-inputs" "$RUNNER_TEMP/mismatched-input"
+          for bundle in bundle-a bundle-b; do jq -c '.right.id="gooo://interchange/specification/mismatched"' "$RUNNER_TEMP/mismatched-input/design-evidence/$bundle/relations.ndjson" > "$RUNNER_TEMP/relation.next"; mv "$RUNNER_TEMP/relation.next" "$RUNNER_TEMP/mismatched-input/design-evidence/$bundle/relations.ndjson"; done
+          bash "$observer" "$RUNNER_TEMP/graph.json" "$RUNNER_TEMP/core-resolution-observation.json" "$denominator" "$core_lock" "$RUNNER_TEMP/release-observation.json" "$RUNNER_TEMP/mismatched-input" "$RUNNER_TEMP/mismatched-anchor.json" "$SUBJECT_SHA" mismatched-specification-anchor
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed==4 and .summary.refuted==8 and .claim.stage=="SPEC_ANCHOR" and .claim.reason=="SPECIFICATION_ANCHOR_MISMATCH"' "$RUNNER_TEMP/mismatched-anchor.json" >/dev/null
+
+          jq '.receipts[0].decision="FIXED_POINT"' "$RUNNER_TEMP/core-resolution-observation.json" > "$RUNNER_TEMP/invalid-core-observation.json"
+          bash "$observer" "$RUNNER_TEMP/graph.json" "$RUNNER_TEMP/invalid-core-observation.json" "$denominator" "$core_lock" "$RUNNER_TEMP/release-observation.json" "$RUNNER_TEMP/adoption-inputs" "$RUNNER_TEMP/invalid-core-decision.json" "$SUBJECT_SHA" invalid-core-decision
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed==0 and .summary.refuted==12 and .claim.stage=="RESOLUTION" and .claim.step=="RESOLVE_ACTIVITY_CARDINALITY" and .claim.reason=="UNRECOGNIZED_CORE_ACTIVITY_RESOLUTION_DECISION"' "$RUNNER_TEMP/invalid-core-decision.json" >/dev/null
+
+          after=$(snapshot); if test "$before" = "$after"; then writes=0; else writes=1; fi
+          jq -S -n --arg subject_sha "$SUBJECT_SHA" --arg before "$before" --arg after "$after" --argjson writes "$writes" --argjson peak_rss_kib "$(cat "$RUNNER_TEMP/observer-rss")" --argjson wall_ms "$(cat "$RUNNER_TEMP/observer-wall-ms")" '{schema:"gooo/link/released-adoption-observation-runtime/v1",subject_sha:$subject_sha,observer:{peak_rss_kib:$peak_rss_kib,wall_ms:$wall_ms},repository:{before_digest:$before,after_digest:$after,writes:$writes},deterministic_replay:true,local_tests_run:0}' > "$RUNNER_TEMP/runtime.json"
+          jq -e '.repository.writes==0 and .deterministic_replay==true and .local_tests_run==0' "$RUNNER_TEMP/runtime.json" >/dev/null
+          { echo '## Released canonical adoption promotion'; jq -r '"- promotion: \(.promotion.state)","- next operation: \(.promotion.next_operation)","- connector implementation: \(.promotion.connector_implementation)","- meta cells: \(.summary.closed)/\(.summary.total)","- domains: \(.summary.domains)/3","- canonical bundles: \(.observations.canonical_bundles.observed)/\(.observations.canonical_bundles.total)","- relation endpoints: \(.observations.relation_endpoints.resolved)/\(.observations.relation_endpoints.total); UNKNOWN \(.observations.relation_endpoints.unknown)","- deterministic replays: \(.observations.deterministic_replays.observed)/\(.observations.deterministic_replays.total)","- UNKNOWN guards: \(.observations.unknown_guards.observed)/\(.observations.unknown_guards.total)","- checksum guards: \(.observations.checksum_guards.observed)/\(.observations.checksum_guards.total)","- released scenarios: \(.observations.scenarios.observed); minimum \(.observations.scenarios.minimum)","- cross-project required gates: \(.authority.cross_project_required_gates)"' "$RUNNER_TEMP/adoption-observation.json"; jq -r '"- repository writes: \(.repository.writes)","- local test executions: \(.local_tests_run)","- observer peak RSS: \(.observer.peak_rss_kib) KiB","- observer wall time: \(.observer.wall_ms) ms"' "$RUNNER_TEMP/runtime.json"; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload released adoption observation
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: released-adoption-observation-${{ github.event.pull_request.head.sha || github.sha }}
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/adoption-observation.json
+            ${{ runner.temp }}/replay.json
+            ${{ runner.temp }}/missing-domain.json
+            ${{ runner.temp }}/mismatched-anchor.json
+            ${{ runner.temp }}/invalid-core-decision.json
+            ${{ runner.temp }}/release-observation.json
+            ${{ runner.temp }}/core-resolution-observation.json
+            ${{ runner.temp }}/runtime.json
+            ${{ runner.temp }}/graph.json

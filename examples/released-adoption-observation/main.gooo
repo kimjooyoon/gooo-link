@@ -1,0 +1,29 @@
+package releasedadoptions
+namespace releasedadoptions
+
+entity ReleasedGoooIdentity id "gooo://link/adoption/entity/released-gooo-identity"
+entity AdoptionReleaseSet id "gooo://link/adoption/entity/release-set"
+entity AdoptionArchiveSet id "gooo://link/adoption/entity/archive-set"
+entity CanonicalBundleSet id "gooo://link/adoption/entity/canonical-bundle-set"
+entity SpecificationAnchorSet id "gooo://link/adoption/entity/specification-anchor-set"
+entity RelationEndpointSet id "gooo://link/adoption/entity/relation-endpoint-set"
+entity ConformantBundleSet id "gooo://link/adoption/entity/conformant-bundle-set"
+entity ReplayReceiptSet id "gooo://link/adoption/entity/replay-receipt-set"
+entity UnknownGuardSet id "gooo://link/adoption/entity/unknown-guard-set"
+entity ChecksumGuardSet id "gooo://link/adoption/entity/checksum-guard-set"
+entity DomainScopedClaimSet id "gooo://link/adoption/entity/domain-scoped-claim-set"
+entity ConnectorPromotionEvidence id "gooo://link/adoption/entity/connector-promotion-evidence"
+entity AdoptionObservationDecision id "gooo://link/adoption/entity/observation-decision"
+
+activity ObserveReleasedGoooIdentity(ReleasedGoooIdentity) -> AdoptionObservationDecision
+activity ObserveAdoptionReleaseIdentities(AdoptionReleaseSet) -> AdoptionObservationDecision
+activity VerifyAdoptionArchiveDigests(AdoptionArchiveSet) -> AdoptionObservationDecision
+activity ObserveThreeCanonicalBundles(CanonicalBundleSet) -> AdoptionObservationDecision
+activity CompareSpecificationAnchors(SpecificationAnchorSet) -> AdoptionObservationDecision
+activity CountRelationEndpoints(RelationEndpointSet) -> AdoptionObservationDecision
+activity CountConformantBundles(ConformantBundleSet) -> AdoptionObservationDecision
+activity CountDeterministicReplays(ReplayReceiptSet) -> AdoptionObservationDecision
+activity CountUnknownGuards(UnknownGuardSet) -> AdoptionObservationDecision
+activity CountChecksumGuards(ChecksumGuardSet) -> AdoptionObservationDecision
+activity PreserveDomainScopedClaims(DomainScopedClaimSet) -> AdoptionObservationDecision
+activity DecideConnectorPromotion(ConnectorPromotionEvidence) -> AdoptionObservationDecision

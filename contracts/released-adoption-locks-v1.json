@@ -1,0 +1,15 @@
+{
+  "schema": "gooo/link/released-adoption-locks/v1",
+  "observed_domains": 3,
+  "selected_archives": 3,
+  "expected_bundle_files_per_domain": 5,
+  "expected_local_checks_per_domain": 6,
+  "expected_relation_endpoints": 6,
+  "minimum_scenarios": 6,
+  "expected_specification_report_sha256": "09f14c7364ee783a045305c6e3dea4b742d4366f831b1e0212c204d33fb401ca",
+  "consumers": [
+    {"ordinal":1,"id":"local-ledger","repository":"kimjooyoon/gooo-local-ledger","tag":"v0.4.0-dev","tag_object_sha":"10c375038c3d5fede088e618657b129ab4a7ac3d","target_commit_sha":"c90d3b53b9b6f9722b690daf14f416226122accf","archive":{"name":"gooo-local-ledger-interchange-v0.4.0-dev.zip","sha256":"306f14afc25da2d4416985c599278f85167c0a79bdf6258ef0db69e3e5130f56"}},
+    {"ordinal":2,"id":"design-evidence","repository":"kimjooyoon/gooo-design-evidence","tag":"v0.4.0-dev","tag_object_sha":"78bea099f784b83de7860074dc27758ab98ff7fa","target_commit_sha":"26426e1fa82db516cce332f679ec9a79f9f2a1e3","archive":{"name":"gooo-design-evidence-interchange-v0.4.0-dev.zip","sha256":"6e3cf1dd7ffee1ddefca9d2b773d7f2971a8be858a81022b171bd9f406885bc5"}},
+    {"ordinal":3,"id":"infra-evidence","repository":"kimjooyoon/gooo-infra-evidence","tag":"v0.4.0-dev","tag_object_sha":"2c1a35f45877f67acff151050cbf292d6f535979","target_commit_sha":"8869e00b00f74428b22e430653fb837ce3f29abb","archive":{"name":"gooo-infra-evidence-interchange-v0.4.0-dev.zip","sha256":"3a1585b596d667e5faa5d4d1da267b56c1f695fa9e4ae1d76aa6b5a92c99dff1"}}
+  ]
+}
