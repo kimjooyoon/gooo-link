@@ -290,7 +290,11 @@ result=$(
       product_release_identities: {
         expected: 3,
         observed: ([$r[0].products[] | select(.identity_verified == true)] | length),
-        closed: ([$states[] | select(.cell_id | endswith("_RELEASE_IDENTITY")) | select(.state == "CLOSED")] | length)
+        closed: ([$states[] |
+          select(.cell_id == "LOCAL_RELEASE_IDENTITY" or
+            .cell_id == "DESIGN_RELEASE_IDENTITY" or
+            .cell_id == "INFRA_RELEASE_IDENTITY") |
+          select(.state == "CLOSED")] | length)
       },
       product_assets: {
         expected: 3,
@@ -320,8 +324,8 @@ result=$(
         contract_valid: $graph_contract_ok,
         edge_comparison: {
           exact_pair_count: $exact_causal_pair_count,
-          before: (if $exact_causal_pair_count == 0 then null else {activity_bindings: 12, output_generations: 12, causal_dependency_pairs: 19} end),
-          after: (if $exact_causal_pair_count == 0 then null else {activity_bindings: $activity_binding_count, output_generations: $generated_activity_count, causal_dependency_pairs: $exact_causal_pair_count} end)
+          expected: (if $exact_causal_pair_count == 0 then null else {activity_bindings: 12, output_generations: 12, causal_dependency_pairs: 19} end),
+          observed: (if $exact_causal_pair_count == 0 then null else {activity_bindings: $activity_binding_count, output_generations: $generated_activity_count, causal_dependency_pairs: $exact_causal_pair_count} end)
         },
         isolated_self_loop_count: graph_self_loops
       },
@@ -365,8 +369,8 @@ result=$(
         state: "UNKNOWN",
         observed: 0,
         total: 1,
-        before: 0,
-        after: 1,
+        before: null,
+        after: null,
         pair_observed: 0,
         pair_total: 1
       },
@@ -374,8 +378,8 @@ result=$(
         state: "UNKNOWN",
         observed: 0,
         total: 1,
-        before: 0,
-        after: 1,
+        before: null,
+        after: null,
         pair_observed: 0,
         pair_total: 1
       },
@@ -412,7 +416,7 @@ printf '%s\n' "$result" > "$output"
 
 case "$scenario" in
   normal)
-    if ! jq -e '.decision == "CLOSED" and .summary.total == 12 and .summary.closed == 12 and .summary.unknown == 0 and .summary.refuted == 0 and .graph.contract_valid == true and .graph.released_activity_node_count == 12 and .graph.output_entity_count == 12 and .graph.activity_node_count == 12 and .graph.used_activity_count == 12 and .graph.generated_activity_count == 12 and .graph.output_generation_count == 12 and .graph.activity_binding_count == 12 and .graph.causal_dependency_pair_count == 19 and .graph.exact_causal_dependency_pair_count == 19 and .graph.causal_edge_checks == 38 and .graph.isolated_self_loop_count == 0' <<<"$result" >/dev/null; then
+    if ! jq -e '.decision == "CLOSED" and .summary.total == 12 and .summary.closed == 12 and .summary.unknown == 0 and .summary.refuted == 0 and .product_release_identities.expected == 3 and .product_release_identities.observed == 3 and .product_release_identities.closed == 3 and .external_utility.pair_observed == 0 and .external_utility.before == null and .external_utility.after == null and .exact_improvement.pair_observed == 0 and .exact_improvement.before == null and .exact_improvement.after == null and .graph.contract_valid == true and .graph.released_activity_node_count == 12 and .graph.output_entity_count == 12 and .graph.activity_node_count == 12 and .graph.used_activity_count == 12 and .graph.generated_activity_count == 12 and .graph.output_generation_count == 12 and .graph.activity_binding_count == 12 and .graph.causal_dependency_pair_count == 19 and .graph.exact_causal_dependency_pair_count == 19 and .graph.causal_edge_checks == 38 and .graph.isolated_self_loop_count == 0' <<<"$result" >/dev/null; then
       printf '%s\n' "$result" >&2
       exit 1
     fi
@@ -424,7 +428,7 @@ case "$scenario" in
     jq -e '.decision == "REFUTED" and .summary.total == 12 and .summary.unknown == 0 and .summary.refuted == 6 and .summary.refuted_over_unknown == true and .graph.isolated_self_loop_count == 0' <<<"$result" >/dev/null
     ;;
   graph-edge-*)
-    jq -e '.decision == "REFUTED" and .summary.total == 12 and .summary.refuted == 12 and .graph.contract_valid == false and (.graph.activity_binding_count < 12 or .graph.exact_causal_dependency_pair_count < 19) and ((.graph.exact_causal_dependency_pair_count != 0) or (.graph.edge_comparison.before == null and .graph.edge_comparison.after == null))' <<<"$result" >/dev/null
+    jq -e '.decision == "REFUTED" and .summary.total == 12 and .summary.refuted == 12 and .graph.contract_valid == false and (.graph.activity_binding_count < 12 or .graph.exact_causal_dependency_pair_count < 19) and ((.graph.exact_causal_dependency_pair_count != 0) or (.graph.edge_comparison.expected == null and .graph.edge_comparison.observed == null))' <<<"$result" >/dev/null
     ;;
   *)
     fail "unknown scenario: $scenario"

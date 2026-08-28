@@ -65,7 +65,17 @@ jobs:
           timed_core() {
             local name=$1
             shift
-            /usr/bin/time -f '%e %M' -o "$root/core-$name.time" "$@" > "$root/core-$name.json"
+            local started_ns ended_ns elapsed_ns status peak_rss_kib
+            started_ns=$(date +%s%N)
+            set +e
+            /usr/bin/time -f '%M' -o "$root/core-$name.rss" "$@" > "$root/core-$name.json"
+            status=$?
+            set -e
+            ended_ns=$(date +%s%N)
+            elapsed_ns=$((ended_ns - started_ns))
+            peak_rss_kib=$(cat "$root/core-$name.rss")
+            printf '%s %s\n' "$elapsed_ns" "$peak_rss_kib" > "$root/core-$name.time"
+            return "$status"
           }
           timed_core version "$core_bin" version --json
           timed_core check "$core_bin" check --json "$example"
@@ -79,11 +89,14 @@ jobs:
           cp "$root/core-graph.json" "$root/three-product-graph.json"
           jq -c '{node_keys: ((.nodes[0] // {}) | keys), relation_keys: ((.relations[0] // {}) | keys), nodes: (.nodes // []), relations: (.relations // [])}' "$root/three-product-graph.json" >&2
           core_wall_ms=$(
-            awk '{total += $1 * 1000} END {printf "%d\n", total}' "$root"/core-*.time
+            awk '{total += $1} END {printf "%d\n", int((total + 999999) / 1000000)}' "$root"/core-*.time
           )
           core_peak_rss_kib=$(
             awk 'BEGIN {max=0} {if ($2 > max) max=$2} END {printf "%d\n", max}' "$root"/core-*.time
           )
+          test "$core_wall_ms" -gt 0
+          printf '%s\n' "$core_wall_ms" > "$root/core-wall-ms"
+          printf '%s\n' "$core_peak_rss_kib" > "$root/core-peak-rss-kib"
           jq -n \
             --arg schema "gooo/link/three-product-core-observation/v1" \
             --arg subject "$SUBJECT_SHA" \
@@ -579,8 +592,8 @@ jobs:
             .graph.generated_activity_count == 0 and
             .graph.causal_dependency_pair_count == 19 and
             .graph.exact_causal_dependency_pair_count == 0 and
-            .graph.edge_comparison.before == null and
-            .graph.edge_comparison.after == null
+            .graph.edge_comparison.expected == null and
+            .graph.edge_comparison.observed == null
           ' "$root/graph-edge-observation.json" >/dev/null
           jq -s '
             {
@@ -632,7 +645,7 @@ jobs:
           go_lines=$(find "$repo" -type f -name '*.go' ! -path "$repo/.git/*" -print0 | xargs -0 awk 'END {print NR + 0}')
           gooo_files=$(find "$repo" -type f -name '*.gooo' ! -path "$repo/.git/*" | wc -l | tr -d ' ')
           gooo_lines=$(find "$repo" -type f -name '*.gooo' ! -path "$repo/.git/*" -print0 | xargs -0 awk 'END {print NR + 0}')
-          core_wall_ms=$(cat "$root/core-wall-ms" 2>/dev/null || awk '{total += $1 * 1000} END {printf "%d\n", total}' "$root"/core-*.time)
+          core_wall_ms=$(cat "$root/core-wall-ms" 2>/dev/null || awk '{total += $1} END {printf "%d\n", int((total + 999999) / 1000000)}' "$root"/core-*.time)
           kit_wall_ms=$(cat "$root/kit-wall-ms")
           scenario_wall_ms=$(cat "$root/scenario-wall-ms")
           core_peak_rss_kib=$(cat "$root/core-peak-rss-kib" 2>/dev/null || awk 'BEGIN {max=0} {if ($2 > max) max=$2} END {printf "%d\n", max}' "$root"/core-*.time)
@@ -779,7 +792,17 @@ jobs:
           jq -e '
             .decision == "CLOSED" and .summary.total == 12 and .summary.closed == 12 and
             .summary.unknown == 0 and .summary.refuted == 0 and
+            .product_release_identities.expected == 3 and
+            .product_release_identities.observed == 3 and
+            .product_release_identities.closed == 3 and
+            .external_utility.pair_observed == 0 and
+            .external_utility.before == null and
+            .external_utility.after == null and
+            .exact_improvement.pair_observed == 0 and
+            .exact_improvement.before == null and
+            .exact_improvement.after == null and
             .runtime.current_link_checks.executions == 16 and
+            .runtime.current_link_checks.wall_ms > 0 and
             .runtime.kit_conformers.executions == 3 and
             .runtime.kit_conformers.checks == 30 and
             .runtime.scenario_evaluations.executions == 7 and
