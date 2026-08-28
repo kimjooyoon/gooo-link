@@ -1,0 +1,175 @@
+name: Three-domain envelope observation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  observation:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SUBJECT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SUBJECT_SHA }}
+      - name: Bind exact subject identity
+        run: test "$(git rev-parse HEAD)" = "$SUBJECT_SHA"
+      - name: Observe released Gooo meta activities
+        run: |
+          set -euo pipefail
+          lock=contracts/core-activity-cardinality-release-lock-v1.json
+          repository=$(jq -r .repository "$lock")
+          tag=$(jq -r .tag "$lock")
+          tag_object=$(jq -r .tag_object_sha "$lock")
+          target=$(jq -r .target_commit_sha "$lock")
+          asset=gooo-linux-amd64.tar.gz
+          digest=$(jq -r --arg name "$asset" '.assets[]|select(.name==$name)|(.sha256 // (.digest|sub("^sha256:";"")))' "$lock")
+          gh api "repos/$repository/git/ref/tags/$tag" > "$RUNNER_TEMP/core-ref.json"
+          jq -e --arg sha "$tag_object" '.object.type=="tag" and .object.sha==$sha' "$RUNNER_TEMP/core-ref.json" >/dev/null
+          gh api "repos/$repository/git/tags/$tag_object" > "$RUNNER_TEMP/core-tag.json"
+          jq -e --arg sha "$target" '.object.type=="commit" and .object.sha==$sha' "$RUNNER_TEMP/core-tag.json" >/dev/null
+          gh api "repos/$repository/releases/tags/$tag" > "$RUNNER_TEMP/core-release.json"
+          asset_id=$(jq -r --arg name "$asset" '.assets[]|select(.name==$name)|.id' "$RUNNER_TEMP/core-release.json")
+          gh api -H 'Accept: application/octet-stream' "repos/$repository/releases/assets/$asset_id" > "$RUNNER_TEMP/$asset"
+          test "$(sha256sum "$RUNNER_TEMP/$asset"|awk '{print $1}')" = "$digest"
+          mkdir -p "$RUNNER_TEMP/core"
+          tar -xzf "$RUNNER_TEMP/$asset" -C "$RUNNER_TEMP/core"
+          gooo="$RUNNER_TEMP/core/gooo"
+          source=examples/three-domain-envelope/main.gooo
+          "$gooo" check --json "$source" > "$RUNNER_TEMP/syntax.json"
+          "$gooo" check --semantic --json "$source" > "$RUNNER_TEMP/semantic.json"
+          "$gooo" graph dump "$source" > "$RUNNER_TEMP/graph.json"
+          jq -e '.status=="ok"' "$RUNNER_TEMP/syntax.json" "$RUNNER_TEMP/semantic.json" >/dev/null
+          denominator=contracts/three-domain-observation-denominator-v1.json
+          mkdir -p "$RUNNER_TEMP/core-resolutions"
+          while IFS=$'\t' read -r ordinal activity; do
+            printf -v receipt '%s/core-resolutions/%02d-%s.json' "$RUNNER_TEMP" "$ordinal" "$activity"
+            "$gooo" graph resolve-activity "$source" --name "$activity" > "$receipt"
+            jq -e --arg activity "$activity" '.schema=="gooo/activity-cardinality-resolution/v1" and .selector.name==$activity and .decision=="CLOSED" and .occurrences==1 and (.matches|length)==1 and .claim.state=="CLOSED" and .claim.reason=="ACTIVITY_UNIQUELY_RESOLVED"' "$receipt" >/dev/null
+          done < <(jq -r '.cells[]|[.ordinal,.activity]|@tsv' "$denominator")
+          jq -S -s '.' "$RUNNER_TEMP"/core-resolutions/*.json > "$RUNNER_TEMP/core-receipts.json"
+          jq -S -n --arg repository "$repository" --arg tag "$tag" --arg tag_object_sha "$tag_object" --arg target_commit_sha "$target" \
+            --arg binary_asset "$asset" --arg binary_sha256 "$digest" --arg resolution_schema "gooo/activity-cardinality-resolution/v1" \
+            --slurpfile receipts "$RUNNER_TEMP/core-receipts.json" '
+            ($receipts[0]) as $r|{schema:"gooo/link/three-domain-core-resolution-observation/v1",
+              core_release:{repository:$repository,tag:$tag,tag_object_sha:$tag_object_sha,target_commit_sha:$target_commit_sha,binary_asset:$binary_asset,binary_sha256:$binary_sha256,resolution_schema:$resolution_schema},
+              summary:{expected:12,observed:($r|length),closed:([$r[]|select(.decision=="CLOSED")]|length),unknown:([$r[]|select(.decision=="UNKNOWN")]|length),refuted:([$r[]|select(.decision=="REFUTED")]|length),unique_activity_selectors:([$r[].selector.name]|unique|length)},receipts:$r}' > "$RUNNER_TEMP/core-resolution-observation.json"
+          jq -e '.summary=={expected:12,observed:12,closed:12,unknown:0,refuted:0,unique_activity_selectors:12}' "$RUNNER_TEMP/core-resolution-observation.json" >/dev/null
+      - name: Download and verify three immutable domain releases
+        run: |
+          set -euo pipefail
+          locks=contracts/three-domain-release-locks-v1.json
+          input_root="$RUNNER_TEMP/domain-inputs"
+          mkdir -p "$input_root" "$RUNNER_TEMP/domain-observations"
+          while IFS= read -r consumer; do
+            id=$(jq -r .id <<<"$consumer")
+            repository=$(jq -r .repository <<<"$consumer")
+            tag=$(jq -r .tag <<<"$consumer")
+            tag_object=$(jq -r .tag_object_sha <<<"$consumer")
+            target=$(jq -r .target_commit_sha <<<"$consumer")
+            gh api "repos/$repository/git/ref/tags/$tag" > "$RUNNER_TEMP/$id-ref.json"
+            jq -e --arg sha "$tag_object" '.object.type=="tag" and .object.sha==$sha' "$RUNNER_TEMP/$id-ref.json" >/dev/null
+            gh api "repos/$repository/git/tags/$tag_object" > "$RUNNER_TEMP/$id-tag.json"
+            jq -e --arg sha "$target" '.object.type=="commit" and .object.sha==$sha' "$RUNNER_TEMP/$id-tag.json" >/dev/null
+            gh api "repos/$repository/releases/tags/$tag" > "$RUNNER_TEMP/$id-release.json"
+            jq -e '.draft==false and .prerelease==true' "$RUNNER_TEMP/$id-release.json" >/dev/null
+            mkdir -p "$input_root/$id"
+            selected=$(jq '.assets|length' <<<"$consumer")
+            verified=0
+            while IFS= read -r asset; do
+              name=$(jq -r .name <<<"$asset")
+              expected=$(jq -r .sha256 <<<"$asset")
+              asset_id=$(jq -r --arg name "$name" '.assets[]|select(.name==$name)|.id' "$RUNNER_TEMP/$id-release.json")
+              gh api -H 'Accept: application/octet-stream' "repos/$repository/releases/assets/$asset_id" > "$input_root/$id/$name"
+              test "$(sha256sum "$input_root/$id/$name"|awk '{print $1}')" = "$expected"
+              verified=$((verified+1))
+            done < <(jq -c '.assets[]' <<<"$consumer")
+            jq -S -n --arg id "$id" --arg repository "$repository" --arg tag "$tag" --arg tag_object_sha "$tag_object" --arg target_commit_sha "$target" \
+              --argjson selected_assets "$selected" --argjson verified_assets "$verified" \
+              '{id:$id,repository:$repository,tag:$tag,tag_object_sha:$tag_object_sha,target_commit_sha:$target_commit_sha,identity_verified:true,selected_assets:$selected_assets,verified_assets:$verified_assets}' > "$RUNNER_TEMP/domain-observations/$id.json"
+          done < <(jq -c '.consumers[]' "$locks")
+          jq -S -s '{schema:"gooo/link/three-domain-release-observation/v1",consumers:.}' "$RUNNER_TEMP"/domain-observations/*.json > "$RUNNER_TEMP/release-observation.json"
+          jq -e '(.consumers|length)==3 and ([.consumers[].selected_assets]|add)==9 and ([.consumers[].verified_assets]|add)==9 and all(.consumers[];.identity_verified)' "$RUNNER_TEMP/release-observation.json" >/dev/null
+      - name: Evaluate observed incompleteness and counterexamples
+        run: |
+          set -euo pipefail
+          snapshot() {
+            find "$GITHUB_WORKSPACE" -path "$GITHUB_WORKSPACE/.git" -prune -o -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}'
+          }
+          before=$(snapshot)
+          evaluator=scripts/observe-three-domain-envelope.sh
+          denominator=contracts/three-domain-observation-denominator-v1.json
+          core_lock=contracts/core-activity-cardinality-release-lock-v1.json
+          evaluate() { bash "$evaluator" "$RUNNER_TEMP/graph.json" "$1" "$denominator" "$core_lock" "$RUNNER_TEMP/release-observation.json" "$2" "$3" "$SUBJECT_SHA" "$4"; }
+          start_ns=$(date +%s%N)
+          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/observer-rss" bash "$evaluator" "$RUNNER_TEMP/graph.json" "$RUNNER_TEMP/core-resolution-observation.json" "$denominator" "$core_lock" "$RUNNER_TEMP/release-observation.json" "$RUNNER_TEMP/domain-inputs" "$RUNNER_TEMP/three-domain-observation.json" "$SUBJECT_SHA" released-evidence
+          end_ns=$(date +%s%N)
+          echo $(( (end_ns-start_ns)/1000000 )) > "$RUNNER_TEMP/observer-wall-ms"
+          evaluate "$RUNNER_TEMP/core-resolution-observation.json" "$RUNNER_TEMP/domain-inputs" "$RUNNER_TEMP/replay.json" released-evidence
+          cmp -s "$RUNNER_TEMP/three-domain-observation.json" "$RUNNER_TEMP/replay.json"
+          jq -e '.decision=="INCOMPLETE" and .summary=={total:12,closed:11,unknown:1,refuted:0,direct_missing:1,dependency_blocked:0,domains:3,selected_assets:9,verified_assets:9,degraded_scenarios:13} and
+            .promotion.machine_readable_replay=={observed:2,required:3} and .promotion.canonical_envelope_adoption=={observed:0,required:3} and
+            .claim.stage=="PROMOTION" and .claim.step=="EVALUATE_CONNECTOR_PROMOTION" and .claim.reason=="PUBLIC_PROMOTION_EVIDENCE_INCOMPLETE" and .claim.unknown_class=="DIRECT_MISSING" and
+            .repeated_relations.indicator_split_3_5_4=={observed:3,total:3} and .repeated_relations.zero_repository_writes=={observed:3,total:3}' "$RUNNER_TEMP/three-domain-observation.json" >/dev/null
+          cp -R "$RUNNER_TEMP/domain-inputs" "$RUNNER_TEMP/missing-infra-inputs"
+          rm "$RUNNER_TEMP/missing-infra-inputs/infra-evidence/infra-service-claim.json"
+          evaluate "$RUNNER_TEMP/core-resolution-observation.json" "$RUNNER_TEMP/missing-infra-inputs" "$RUNNER_TEMP/missing-infra.json" missing-infra-domain-report
+          jq -e '.decision=="INCOMPLETE" and .summary.closed==3 and .summary.unknown==9 and .summary.refuted==0 and .summary.direct_missing==1 and .summary.dependency_blocked==8 and
+            .claim.stage=="ENVELOPE" and .claim.step=="OBSERVE_DOMAIN_DOCUMENT_SCHEMAS" and .claim.reason=="DOMAIN_DOCUMENT_UNAVAILABLE"' "$RUNNER_TEMP/missing-infra.json" >/dev/null
+          cp -R "$RUNNER_TEMP/domain-inputs" "$RUNNER_TEMP/mutated-indicators-inputs"
+          jq '(.complete.indicators[]|select(.class=="DRIVER").total)=6' "$RUNNER_TEMP/mutated-indicators-inputs/local-ledger/core-receipt-adoption.json" > "$RUNNER_TEMP/mutated-local.json"
+          mv "$RUNNER_TEMP/mutated-local.json" "$RUNNER_TEMP/mutated-indicators-inputs/local-ledger/core-receipt-adoption.json"
+          evaluate "$RUNNER_TEMP/core-resolution-observation.json" "$RUNNER_TEMP/mutated-indicators-inputs" "$RUNNER_TEMP/mutated-indicators.json" mutated-indicator-denominator
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed==7 and .summary.refuted==5 and .claim.stage=="INDICATOR" and .claim.step=="COMPARE_INDICATOR_CLASS_DENOMINATORS" and .claim.reason=="INDICATOR_CLASS_DENOMINATOR_MISMATCH"' "$RUNNER_TEMP/mutated-indicators.json" >/dev/null
+          jq '.receipts[0].decision="FIXED_POINT"' "$RUNNER_TEMP/core-resolution-observation.json" > "$RUNNER_TEMP/invalid-core-observation.json"
+          evaluate "$RUNNER_TEMP/invalid-core-observation.json" "$RUNNER_TEMP/domain-inputs" "$RUNNER_TEMP/invalid-core-decision.json" invalid-core-decision
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed==0 and .summary.refuted==12 and .claim.stage=="RESOLUTION" and .claim.step=="RESOLVE_ACTIVITY_CARDINALITY" and .claim.reason=="UNRECOGNIZED_CORE_ACTIVITY_RESOLUTION_DECISION"' "$RUNNER_TEMP/invalid-core-decision.json" >/dev/null
+          after=$(snapshot)
+          if test "$before" = "$after"; then writes=0; else writes=1; fi
+          jq -S -n --arg subject_sha "$SUBJECT_SHA" --arg before "$before" --arg after "$after" --argjson writes "$writes" \
+            --argjson peak_rss_kib "$(cat "$RUNNER_TEMP/observer-rss")" --argjson wall_ms "$(cat "$RUNNER_TEMP/observer-wall-ms")" \
+            '{schema:"gooo/link/three-domain-observation-runtime/v1",subject_sha:$subject_sha,observer:{peak_rss_kib:$peak_rss_kib,wall_ms:$wall_ms},repository:{before_digest:$before,after_digest:$after,writes:$writes},deterministic_replay:true,local_tests_run:0}' > "$RUNNER_TEMP/runtime.json"
+          jq -e '.repository.writes==0 and .deterministic_replay==true and .local_tests_run==0' "$RUNNER_TEMP/runtime.json" >/dev/null
+      - name: Publish exact human-readable observation
+        run: |
+          {
+            echo '## Three-domain interchange observation'
+            echo
+            jq -r '"- decision: \(.decision)","- observation cells: \(.summary.closed)/\(.summary.total) CLOSED; UNKNOWN \(.summary.unknown); REFUTED \(.summary.refuted)",
+              "- public domains: \(.summary.domains)/3","- selected release assets: \(.summary.verified_assets)/\(.summary.selected_assets)","- degraded scenarios: \(.summary.degraded_scenarios)",
+              "- repeated core release: \(.repeated_relations.core_release.observed)/\(.repeated_relations.core_release.total)",
+              "- repeated one-anchor rule: \(.repeated_relations.identity_anchor_one.observed)/\(.repeated_relations.identity_anchor_one.total)",
+              "- repeated 12-cell rule: \(.repeated_relations.fixed_cells_twelve.observed)/\(.repeated_relations.fixed_cells_twelve.total)",
+              "- repeated indicator 3/5/4 rule: \(.repeated_relations.indicator_split_3_5_4.observed)/\(.repeated_relations.indicator_split_3_5_4.total)",
+              "- machine-readable replay receipts: \(.promotion.machine_readable_replay.observed)/\(.promotion.machine_readable_replay.required)",
+              "- canonical envelope adoptions: \(.promotion.canonical_envelope_adoption.observed)/\(.promotion.canonical_envelope_adoption.required)",
+              "- connector promotion: \(.promotion.state)","- next operation: \(.promotion.next_operation)","- cross-project required gates: \(.authority.cross_project_required_gates)"' "$RUNNER_TEMP/three-domain-observation.json"
+            jq -r '"- missing domain report: CLOSED \(.summary.closed), UNKNOWN \(.summary.unknown), direct \(.summary.direct_missing), blocked \(.summary.dependency_blocked)"' "$RUNNER_TEMP/missing-infra.json"
+            jq -r '"- mutated indicator denominator: CLOSED \(.summary.closed), REFUTED \(.summary.refuted), \(.claim.reason)"' "$RUNNER_TEMP/mutated-indicators.json"
+            jq -r '"- invalid core decision: CLOSED \(.summary.closed), REFUTED \(.summary.refuted), \(.claim.reason)"' "$RUNNER_TEMP/invalid-core-decision.json"
+            jq -r '"- observer peak RSS: \(.observer.peak_rss_kib) KiB","- observer wall time: \(.observer.wall_ms) ms","- repository writes: \(.repository.writes)","- deterministic replay: \(.deterministic_replay)","- local test executions: \(.local_tests_run)"' "$RUNNER_TEMP/runtime.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Enforce zero repository writes
+        run: test -z "$(git status --porcelain=v1 --untracked-files=all)"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: three-domain-envelope-${{ env.SUBJECT_SHA }}
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/three-domain-observation.json
+            ${{ runner.temp }}/replay.json
+            ${{ runner.temp }}/missing-infra.json
+            ${{ runner.temp }}/mutated-indicators.json
+            ${{ runner.temp }}/invalid-core-decision.json
+            ${{ runner.temp }}/release-observation.json
+            ${{ runner.temp }}/core-resolution-observation.json
+            ${{ runner.temp }}/graph.json
+            ${{ runner.temp }}/runtime.json
