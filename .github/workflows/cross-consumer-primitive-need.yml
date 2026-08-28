@@ -163,7 +163,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload cross-consumer evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: cross-consumer-primitive-need-${{ env.SUBJECT_SHA }}
           path: |
