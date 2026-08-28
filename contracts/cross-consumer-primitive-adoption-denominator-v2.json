@@ -1,0 +1,29 @@
+{
+  "schema": "gooo/link/cross-consumer-primitive-adoption-denominator/v2",
+  "candidate_id": "gooo.primitive.claim-resolution-tuple.v1",
+  "total": 12,
+  "proofs": [
+    {"choice":"FOUNDATION","total":4},
+    {"choice":"COHERENCE","total":4},
+    {"choice":"REGRESSION","total":4}
+  ],
+  "indicator_classes": [
+    {"class":"DRIVER","total":4},
+    {"class":"OUTCOME","total":4},
+    {"class":"GUARDRAIL","total":4}
+  ],
+  "cells": [
+    {"id":"BASELINE_ADOPTION_RELEASE_OBSERVED","activity":"ObserveBaselinePrimitiveAdoption","proof_choice":"FOUNDATION","indicator_class":"DRIVER","closed_reason":"BASELINE_TWO_MAPPING_RELEASE_OBSERVED"},
+    {"id":"LOCAL_ADOPTION_RELEASE_OBSERVED","activity":"ObserveLocalClaimResolutionAdoption","proof_choice":"FOUNDATION","indicator_class":"DRIVER","closed_reason":"LOCAL_CLAIM_RESOLUTION_ADOPTION_RELEASE_OBSERVED"},
+    {"id":"CANDIDATE_IDENTITY_BOUND","activity":"BindClaimResolutionCandidateIdentity","proof_choice":"FOUNDATION","indicator_class":"DRIVER","closed_reason":"CLAIM_RESOLUTION_CANDIDATE_IDENTITY_BOUND"},
+    {"id":"BASELINE_MAPPING_COUNT_OBSERVED","activity":"ObserveBaselineDirectMappingCount","proof_choice":"FOUNDATION","indicator_class":"OUTCOME","closed_reason":"BASELINE_DIRECT_MAPPINGS_2_OF_30_OBSERVED"},
+    {"id":"LOCAL_INDEPENDENT_ADOPTION_COUNTED","activity":"CountLocalIndependentAdoption","proof_choice":"COHERENCE","indicator_class":"OUTCOME","closed_reason":"LOCAL_INDEPENDENT_ADOPTION_1_OF_1_COUNTED"},
+    {"id":"LOCAL_CLAIM_EVIDENCE_OBSERVED","activity":"ObserveLocalClaimEvidence","proof_choice":"COHERENCE","indicator_class":"OUTCOME","closed_reason":"LOCAL_CLAIM_SCENARIOS_3_OF_3_OBSERVED"},
+    {"id":"LOCAL_INVENTORY_CONTEXT_OBSERVED","activity":"ObserveLocalInventoryContext","proof_choice":"COHERENCE","indicator_class":"OUTCOME","closed_reason":"LOCAL_INVENTORY_FACTS_4_OF_4_OBSERVED"},
+    {"id":"UNKNOWN_CLASS_BOUNDARY_PRESERVED","activity":"PreserveUnknownClassBoundary","proof_choice":"COHERENCE","indicator_class":"GUARDRAIL","closed_reason":"LOCAL_UNKNOWN_CLASS_BINDING_1_OF_1_PRESERVED"},
+    {"id":"ADVERSE_UNKNOWN_PATH_PRESERVED","activity":"PreserveLocalAdverseUnknown","proof_choice":"REGRESSION","indicator_class":"GUARDRAIL","closed_reason":"LOCAL_ADVERSE_UNKNOWN_PATH_1_OF_1_PRESERVED"},
+    {"id":"ADVERSE_REFUTATION_PATHS_PRESERVED","activity":"PreserveLocalAdverseRefutations","proof_choice":"REGRESSION","indicator_class":"GUARDRAIL","closed_reason":"LOCAL_ADVERSE_REFUTATIONS_4_OF_4_PRESERVED"},
+    {"id":"AUTHORITY_BOUNDARY_PRESERVED","activity":"PreserveObservationAuthorityBoundary","proof_choice":"REGRESSION","indicator_class":"GUARDRAIL","closed_reason":"PRODUCT_RELEASE_INDEPENDENCE_PRESERVED"},
+    {"id":"THIRD_DIRECT_MAPPING_RECORDED","activity":"RecordThirdDirectMapping","proof_choice":"REGRESSION","indicator_class":"DRIVER","closed_reason":"DIRECT_PRIMITIVE_MAPPINGS_3_OF_30_RECORDED"}
+  ]
+}

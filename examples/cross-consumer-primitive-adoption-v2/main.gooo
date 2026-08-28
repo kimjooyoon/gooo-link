@@ -1,0 +1,29 @@
+package cross_consumer_primitive_adoption_v2
+namespace gooolink
+
+entity BaselinePrimitiveAdoption id "gooo://link/primitive-adoption/v0.14.0-dev"
+entity LocalClaimResolutionAdoption id "gooo://local-ledger/claim-resolution-adoption/v0.6.0-dev"
+entity ClaimResolutionCandidateIdentity id "gooo://claim-resolution/gooo.primitive.claim-resolution-tuple.v1"
+entity BaselineDirectMappingCount id "gooo://claim-resolution/direct-mappings/2-of-30"
+entity LocalIndependentAdoption id "gooo://claim-resolution/local-independent-adoption/1-of-1"
+entity LocalClaimEvidence id "gooo://claim-resolution/local-scenarios/3-of-3"
+entity LocalInventoryContext id "gooo://claim-resolution/local-inventory/4-of-4"
+entity UnknownClassBoundary id "gooo://claim-resolution/local-unknown-class/1-of-1"
+entity LocalAdverseUnknown id "gooo://claim-resolution/local-adverse-unknown/1-of-1"
+entity LocalAdverseRefutations id "gooo://claim-resolution/local-adverse-refutations/4-of-4"
+entity ObservationAuthorityBoundary id "gooo://claim-resolution/observation-authority/v2"
+entity ThirdDirectMapping id "gooo://claim-resolution/direct-mappings/3-of-30"
+entity CrossConsumerPrimitiveAdoptionReport id "gooo://link/cross-consumer-primitive-adoption/v2"
+
+activity ObserveBaselinePrimitiveAdoption(BaselinePrimitiveAdoption) -> CrossConsumerPrimitiveAdoptionReport
+activity ObserveLocalClaimResolutionAdoption(LocalClaimResolutionAdoption) -> CrossConsumerPrimitiveAdoptionReport
+activity BindClaimResolutionCandidateIdentity(ClaimResolutionCandidateIdentity) -> CrossConsumerPrimitiveAdoptionReport
+activity ObserveBaselineDirectMappingCount(BaselineDirectMappingCount) -> CrossConsumerPrimitiveAdoptionReport
+activity CountLocalIndependentAdoption(LocalIndependentAdoption) -> CrossConsumerPrimitiveAdoptionReport
+activity ObserveLocalClaimEvidence(LocalClaimEvidence) -> CrossConsumerPrimitiveAdoptionReport
+activity ObserveLocalInventoryContext(LocalInventoryContext) -> CrossConsumerPrimitiveAdoptionReport
+activity PreserveUnknownClassBoundary(UnknownClassBoundary) -> CrossConsumerPrimitiveAdoptionReport
+activity PreserveLocalAdverseUnknown(LocalAdverseUnknown) -> CrossConsumerPrimitiveAdoptionReport
+activity PreserveLocalAdverseRefutations(LocalAdverseRefutations) -> CrossConsumerPrimitiveAdoptionReport
+activity PreserveObservationAuthorityBoundary(ObservationAuthorityBoundary) -> CrossConsumerPrimitiveAdoptionReport
+activity RecordThirdDirectMapping(ThirdDirectMapping) -> CrossConsumerPrimitiveAdoptionReport
