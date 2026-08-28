@@ -1,0 +1,26 @@
+{
+  "schema": "gooo/link/local-user-path-observation-release-lock/v1",
+  "core": {
+    "repository":"kimjooyoon/meta-ontology-go","tag":"v0.3.0-dev","release_id":378384811,
+    "target_commit_sha":"5b7af77549d88ba345550c1428323797e6ce1fd8","prerelease":true,
+    "asset":{"id":533579198,"name":"gooo-linux-amd64.tar.gz","size":7036826,"digest":"sha256:505608f28ccc92ba191d590b3cac160be14955405c159f9dc7fb3c8826985a5e"}
+  },
+  "baseline": {
+    "repository":"kimjooyoon/gooo-link","tag":"v0.17.0-dev","release_id":378475678,
+    "target_commit_sha":"7eaf829b65c278fd761ad0c32ee3aa46ca365984","prerelease":false,
+    "asset":{"id":533789525,"name":"fifth-primitive-adoption-7eaf829b65c278fd761ad0c32ee3aa46ca365984.zip","size":20888,"digest":"sha256:8767100867d3926ca5600f3f7c9648292e4d8da80749b79b0e2e089baa0399ec"},
+    "required_reports":["report.json"]
+  },
+  "local": {
+    "repository":"kimjooyoon/gooo-local-ledger","tag":"v0.7.0-dev","release_id":378485991,
+    "target_commit_sha":"0c9aa689334f13ee53221cd0547af807724d2ae2","prerelease":false,
+    "asset":{"id":533809179,"name":"readiness-claim-projection-0c9aa689334f13ee53221cd0547af807724d2ae2.zip","size":31481,"digest":"sha256:06f3cbffb02e6543f712b2d3b6fbfb7add99fe0f784a746b8f3281485103e04a"},
+    "required_reports":["projection-report.json","projection-unknown.json","projection-refuted.json","projection-runtime.json","projection-graph.json","evidence/replay.json","evidence/counterexamples/undeclared.json","evidence/counterexamples/duplicate.json"]
+  },
+  "authority": {
+    "observation_scope":"LOCAL_USER_PATH_ONLY","primitive_mapping_increment":0,
+    "product_release_independence_required":true,"cross_project_required_gates":0,
+    "source_repository_writes":0,"local_tests_run":0,"root_readme_readiness":"EXCLUDED",
+    "common_generator_authorized":false,"central_orchestration_authorized":false
+  }
+}

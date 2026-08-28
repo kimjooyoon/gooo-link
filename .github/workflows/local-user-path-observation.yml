@@ -1,0 +1,206 @@
+name: Local user-path observation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: local-user-path-observation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    env:
+      SUBJECT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      LOCK: contracts/local-user-path-observation-release-lock-v1.json
+      DENOMINATOR: contracts/local-user-path-observation-denominator-v1.json
+      SOURCE: examples/local-user-path-observation/main.gooo
+      OBSERVER: scripts/observe-local-user-path.sh
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.SUBJECT_SHA }}
+
+      - name: Bind exact subject identity
+        run: test "$(git rev-parse HEAD)" = "$SUBJECT_SHA"
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.0'
+
+      - name: Observe Go 1.27 and actual module roots
+        run: |
+          set -euo pipefail
+          test "$(go env GOVERSION)" = "go1.27.0"
+          git status --porcelain=v1 -z --untracked-files=all > "$RUNNER_TEMP/repository-before.bin"
+          modules=$(find . -type f -name go.mod -not -path './.git/*' | wc -l | tr -d ' ')
+          while IFS= read -r -d '' module; do (cd "$(dirname "$module")" && go fix ./...); done < <(find . -type f -name go.mod -not -path './.git/*' -print0)
+          jq -S -n --arg go_version "$(go env GOVERSION)" --argjson modules "$modules" \
+            '{schema:"gooo/link/local-user-path-go-fix/v1",go_version:$go_version,module_roots:$modules,go_fix_targets:$modules}' > "$RUNNER_TEMP/go-fix-observation.json"
+
+      - name: Observe three digest-locked releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for selector in core baseline local; do
+            repository=$(jq -r ".$selector.repository" "$LOCK")
+            tag=$(jq -r ".$selector.tag" "$LOCK")
+            gh api "repos/$repository/releases/tags/$tag" > "$RUNNER_TEMP/$selector-release.json"
+            jq -e --arg selector "$selector" --slurpfile lock "$LOCK" '
+              .id==$lock[0][$selector].release_id and .tag_name==$lock[0][$selector].tag and
+              .target_commitish==$lock[0][$selector].target_commit_sha and .prerelease==$lock[0][$selector].prerelease and
+              ([.assets[]|select(.id==$lock[0][$selector].asset.id and .name==$lock[0][$selector].asset.name and
+                .size==$lock[0][$selector].asset.size and .digest==$lock[0][$selector].asset.digest)]|length)==1
+            ' "$RUNNER_TEMP/$selector-release.json" >/dev/null
+          done
+
+      - name: Download released compiler, baseline, and Local evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for selector in core baseline local; do
+            repository=$(jq -r ".$selector.repository" "$LOCK")
+            id=$(jq -r ".$selector.asset.id" "$LOCK")
+            output="$RUNNER_TEMP/$(jq -r ".$selector.asset.name" "$LOCK")"
+            gh api -H 'Accept: application/octet-stream' "repos/$repository/releases/assets/$id" > "$output"
+            test "sha256:$(sha256sum "$output" | awk '{print $1}')" = "$(jq -r ".$selector.asset.digest" "$LOCK")"
+          done
+          mkdir -p "$RUNNER_TEMP/gooo" "$RUNNER_TEMP/baseline" "$RUNNER_TEMP/local"
+          tar -xzf "$RUNNER_TEMP/$(jq -r '.core.asset.name' "$LOCK")" -C "$RUNNER_TEMP/gooo"
+          unzip -q "$RUNNER_TEMP/$(jq -r '.baseline.asset.name' "$LOCK")" -d "$RUNNER_TEMP/baseline"
+          unzip -q "$RUNNER_TEMP/$(jq -r '.local.asset.name' "$LOCK")" -d "$RUNNER_TEMP/local"
+          while IFS= read -r report; do test -s "$RUNNER_TEMP/baseline/$report"; done < <(jq -r '.baseline.required_reports[]' "$LOCK")
+          while IFS= read -r report; do test -s "$RUNNER_TEMP/local/$report"; done < <(jq -r '.local.required_reports[]' "$LOCK")
+
+      - name: Conform Link observation authority
+        run: |
+          set -euo pipefail
+          gooo="$RUNNER_TEMP/gooo/gooo"
+          "$gooo" check --json "$SOURCE" > "$RUNNER_TEMP/local-user-path-syntax.json"
+          "$gooo" check --semantic --json "$SOURCE" > "$RUNNER_TEMP/local-user-path-semantic.json"
+          "$gooo" graph dump "$SOURCE" > "$RUNNER_TEMP/local-user-path-graph.json"
+
+      - name: Observe complete and adverse paths
+        run: |
+          set -euo pipefail
+          start_ns=$(date +%s%N)
+          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/observer-rss" \
+            bash "$OBSERVER" "$RUNNER_TEMP/local-user-path-graph.json" "$DENOMINATOR" "$RUNNER_TEMP/baseline" "$RUNNER_TEMP/local" "$RUNNER_TEMP/local-user-path-report.json" "$SUBJECT_SHA" complete
+          bash "$OBSERVER" "$RUNNER_TEMP/local-user-path-graph.json" "$DENOMINATOR" "$RUNNER_TEMP/baseline" "$RUNNER_TEMP/local" "$RUNNER_TEMP/local-user-path-replay.json" "$SUBJECT_SHA" complete
+          cmp -s "$RUNNER_TEMP/local-user-path-report.json" "$RUNNER_TEMP/local-user-path-replay.json"
+          cp -R "$RUNNER_TEMP/local" "$RUNNER_TEMP/local-missing"
+          printf 'null\n' > "$RUNNER_TEMP/local-missing/projection-report.json"
+          bash "$OBSERVER" "$RUNNER_TEMP/local-user-path-graph.json" "$DENOMINATOR" "$RUNNER_TEMP/baseline" "$RUNNER_TEMP/local-missing" "$RUNNER_TEMP/local-user-path-unknown.json" "$SUBJECT_SHA" missing-local-report
+          cp -R "$RUNNER_TEMP/baseline" "$RUNNER_TEMP/baseline-tampered"
+          jq '.summary.direct_mappings=6 | .summary.mapping_remaining=24' "$RUNNER_TEMP/baseline/report.json" > "$RUNNER_TEMP/baseline-tampered/report.json"
+          bash "$OBSERVER" "$RUNNER_TEMP/local-user-path-graph.json" "$DENOMINATOR" "$RUNNER_TEMP/baseline-tampered" "$RUNNER_TEMP/local" "$RUNNER_TEMP/local-user-path-baseline-refuted.json" "$SUBJECT_SHA" primitive-baseline-tamper
+          cp -R "$RUNNER_TEMP/local" "$RUNNER_TEMP/local-metric-tampered"
+          jq '.summary.source_claim_fields_observed=14' "$RUNNER_TEMP/local/projection-report.json" > "$RUNNER_TEMP/local-metric-tampered/projection-report.json"
+          bash "$OBSERVER" "$RUNNER_TEMP/local-user-path-graph.json" "$DENOMINATOR" "$RUNNER_TEMP/baseline" "$RUNNER_TEMP/local-metric-tampered" "$RUNNER_TEMP/local-user-path-metric-refuted.json" "$SUBJECT_SHA" local-metric-tamper
+          cp -R "$RUNNER_TEMP/local" "$RUNNER_TEMP/local-meta-missing"
+          jq '(.nodes)|=map(select(.name!="PublishReadinessResolutionReceipt"))' "$RUNNER_TEMP/local/projection-graph.json" > "$RUNNER_TEMP/local-meta-missing/projection-graph.json"
+          bash "$OBSERVER" "$RUNNER_TEMP/local-user-path-graph.json" "$DENOMINATOR" "$RUNNER_TEMP/baseline" "$RUNNER_TEMP/local-meta-missing" "$RUNNER_TEMP/local-user-path-meta-refuted.json" "$SUBJECT_SHA" missing-product-meta
+          cp -R "$RUNNER_TEMP/local" "$RUNNER_TEMP/local-scope"
+          jq '.authority.central_orchestration_authorized=true' "$RUNNER_TEMP/local/projection-report.json" > "$RUNNER_TEMP/local-scope/projection-report.json"
+          bash "$OBSERVER" "$RUNNER_TEMP/local-user-path-graph.json" "$DENOMINATOR" "$RUNNER_TEMP/baseline" "$RUNNER_TEMP/local-scope" "$RUNNER_TEMP/local-user-path-scope-refuted.json" "$SUBJECT_SHA" scope-escalation
+          jq '(.nodes)|=map(select(.name!="RecordOptionalLocalVerticalProgress"))' "$RUNNER_TEMP/local-user-path-graph.json" > "$RUNNER_TEMP/missing-link-activity.json"
+          if bash "$OBSERVER" "$RUNNER_TEMP/missing-link-activity.json" "$DENOMINATOR" "$RUNNER_TEMP/baseline" "$RUNNER_TEMP/local" "$RUNNER_TEMP/missing-link-meta.json" "$SUBJECT_SHA" complete; then
+            echo 'observer accepted missing Link Gooo activity' >&2; exit 1
+          fi
+          end_ns=$(date +%s%N)
+          printf '%s\n' "$(( (end_ns-start_ns)/1000000 ))" > "$RUNNER_TEMP/observer-wall-ms"
+
+      - name: Assert exact progress without primitive inflation
+        run: |
+          set -euo pipefail
+          jq -e '.decision=="LOCAL_USER_PATH_OBSERVED" and .summary.closed_cells==12 and
+            .summary.planned_user_verticals_observed==1 and .summary.planned_user_verticals_total==3 and
+            .summary.primitive_direct_mappings==5 and .summary.primitive_direct_mappings_total==30 and
+            .summary.primitive_mapping_increment==0 and .summary.independent_consumers==4 and
+            .summary.local_projection_cells==12 and .summary.source_claim_fields==15 and
+            .summary.projected_claim_fields==18 and .summary.generated_gooo_programs==3 and
+            .summary.projection_counterexamples==2 and .summary.replay_comparisons==9 and
+            .summary.repository_writes==0 and .summary.local_tests_run==0 and .summary.cross_project_required_gates==0' "$RUNNER_TEMP/local-user-path-report.json" >/dev/null
+          jq -e '.decision=="LOCAL_USER_PATH_OBSERVATION_UNKNOWN" and .summary.closed_cells==5 and .summary.unknown_cells==7 and
+            .claim.reason=="LOCAL_PROJECTION_REPORT_UNAVAILABLE" and .claim.unknown_class=="DIRECT_MISSING" and
+            .summary.planned_user_verticals_observed==0' "$RUNNER_TEMP/local-user-path-unknown.json" >/dev/null
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==10 and .summary.refuted_cells==2 and
+            .claim.reason=="PRIMITIVE_MAPPING_COUNT_INFLATED" and .summary.primitive_mapping_increment==0' "$RUNNER_TEMP/local-user-path-baseline-refuted.json" >/dev/null
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==10 and .summary.refuted_cells==2 and
+            .claim.reason=="SOURCE_CLAIM_FIELD_COUNT_MISMATCH"' "$RUNNER_TEMP/local-user-path-metric-refuted.json" >/dev/null
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==10 and .summary.refuted_cells==2 and
+            .claim.reason=="LOCAL_META_ACTIVITY_BINDING_MISMATCH"' "$RUNNER_TEMP/local-user-path-meta-refuted.json" >/dev/null
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==11 and .summary.refuted_cells==1 and
+            .claim.reason=="CENTRAL_ORCHESTRATION_AUTHORITY_ESCALATED"' "$RUNNER_TEMP/local-user-path-scope-refuted.json" >/dev/null
+
+      - name: Observe Link resources and inventory
+        run: |
+          set -euo pipefail
+          git status --porcelain=v1 -z --untracked-files=all > "$RUNNER_TEMP/repository-after.bin"
+          if cmp -s "$RUNNER_TEMP/repository-before.bin" "$RUNNER_TEMP/repository-after.bin"; then writes=0; else writes=1; fi
+          files=$(find . -type f -not -path './.git/*' | wc -l | tr -d ' ')
+          directories=$(find . -mindepth 1 -type d -not -path './.git*' | wc -l | tr -d ' ')
+          go_files=$(find . -type f -name '*.go' -not -path './.git/*' | wc -l | tr -d ' ')
+          gooo_files=$(find . -type f -name '*.gooo' -not -path './.git/*' | wc -l | tr -d ' ')
+          go_lines=$({ find . -type f -name '*.go' -not -path './.git/*' -print0 | xargs -0 -r cat || true; } | wc -l | tr -d ' ')
+          gooo_lines=$({ find . -type f -name '*.gooo' -not -path './.git/*' -print0 | xargs -0 -r cat || true; } | wc -l | tr -d ' ')
+          jq -S -n --arg subject_sha "$SUBJECT_SHA" --arg go_version "$(go env GOVERSION)" \
+            --argjson module_roots "$(jq '.module_roots' "$RUNNER_TEMP/go-fix-observation.json")" \
+            --argjson peak_rss_kib "$(cat "$RUNNER_TEMP/observer-rss")" --argjson wall_ms "$(cat "$RUNNER_TEMP/observer-wall-ms")" \
+            --argjson writes "$writes" --argjson files "$files" --argjson directories "$directories" \
+            --argjson go_files "$go_files" --argjson gooo_files "$gooo_files" --argjson go_lines "$go_lines" --argjson gooo_lines "$gooo_lines" '
+            {schema:"gooo/link/local-user-path-observation-runtime/v1",subject_sha:$subject_sha,go_version:$go_version,
+              go_fix_module_roots:$module_roots,peak_rss_kib:$peak_rss_kib,wall_ms:$wall_ms,
+              inventory:{repository_files:$files,descendant_directories:$directories,
+                go:{files:$go_files,physical_lines:$go_lines},gooo:{files:$gooo_files,physical_lines:$gooo_lines}},
+              repository_writes:$writes,local_tests_run:0,cross_project_required_gates:0}
+          ' > "$RUNNER_TEMP/local-user-path-runtime.json"
+
+      - name: Publish exact human-readable vertical progress
+        run: |
+          {
+            echo '## Optional Local user-path observation'
+            echo
+            jq -r '
+              "- observation cells: \(.summary.closed_cells)/\(.summary.total_cells) CLOSED",
+              "- planned user verticals: \(.summary.planned_user_verticals_observed)/\(.summary.planned_user_verticals_total)",
+              "- primitive mappings preserved: \(.summary.primitive_direct_mappings)/\(.summary.primitive_direct_mappings_total)",
+              "- primitive mapping increment: \(.summary.primitive_mapping_increment)",
+              "- independent consumers preserved: \(.summary.independent_consumers)",
+              "- Local projection cells / claim fields / Gooo programs: \(.summary.local_projection_cells)/12 / \(.summary.projected_claim_fields)/18 / \(.summary.generated_gooo_programs)/3",
+              "- Local counterexamples / replay: \(.summary.projection_counterexamples)/2 / \(.summary.replay_comparisons)/9",
+              "- repository writes / local tests / cross-project gates: \(.summary.repository_writes) / \(.summary.local_tests_run) / \(.summary.cross_project_required_gates)",
+              "- next operation: \(.claim.next_operation)"
+            ' "$RUNNER_TEMP/local-user-path-report.json"
+            jq -r '"- observer peak RSS / wall time: \(.peak_rss_kib) KiB / \(.wall_ms) ms", "- Link files / directories / Go lines / Gooo lines: \(.inventory.repository_files) / \(.inventory.descendant_directories) / \(.inventory.go.physical_lines) / \(.inventory.gooo.physical_lines)"' "$RUNNER_TEMP/local-user-path-runtime.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce zero Link repository writes
+        run: test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: local-user-path-observation-${{ env.SUBJECT_SHA }}
+          path: |
+            ${{ runner.temp }}/go-fix-observation.json
+            ${{ runner.temp }}/local-user-path-syntax.json
+            ${{ runner.temp }}/local-user-path-semantic.json
+            ${{ runner.temp }}/local-user-path-graph.json
+            ${{ runner.temp }}/local-user-path-report.json
+            ${{ runner.temp }}/local-user-path-replay.json
+            ${{ runner.temp }}/local-user-path-unknown.json
+            ${{ runner.temp }}/local-user-path-baseline-refuted.json
+            ${{ runner.temp }}/local-user-path-metric-refuted.json
+            ${{ runner.temp }}/local-user-path-meta-refuted.json
+            ${{ runner.temp }}/local-user-path-scope-refuted.json
+            ${{ runner.temp }}/local-user-path-runtime.json
+          if-no-files-found: warn
