@@ -1,0 +1,40 @@
+package localprojectplanconsumer
+namespace localprojectplanconsumer
+
+entity SixthMappingRelease id "gooo://link/release/v0.23.0-dev/sixth-mapping"
+entity CoreMetaToolRelease id "gooo://core/release/v0.4.0-dev/meta-tool"
+entity LocalProjectPlanRelease id "gooo://local-ledger/release/v0.8.0-dev/project-plan"
+entity EightLocalReleaseAssets id "gooo://local-ledger/release/v0.8.0-dev/assets/8-of-8"
+entity ProductTwelveCells id "gooo://local-ledger/project-plan/cells/12-of-12"
+entity ProductSixActivities id "gooo://local-ledger/project-plan/activities/6-of-6"
+entity ProductEightDependencies id "gooo://local-ledger/project-plan/dependencies/8-of-8"
+entity FirstIndependentConsumer id "gooo://claim-dependency/independent-consumers/1"
+entity ProductUtilityUnknown id "gooo://local-ledger/project-plan/utility/unknown"
+entity ProductResolutionBoundaries id "gooo://local-ledger/project-plan/resolution-boundaries"
+entity ConsumerMetaActivitySet id "gooo://link/local-product-consumer/meta-activities/12"
+entity OptionalConsumerBoundary id "gooo://link/local-product-consumer/optional-read-only"
+entity SixthMappingObserved id "gooo://link/local-product-consumer/cell/sixth-mapping"
+entity CoreMetaToolObserved id "gooo://link/local-product-consumer/cell/core-tool"
+entity LocalReleaseObserved id "gooo://link/local-product-consumer/cell/local-release"
+entity LocalAssetsBound id "gooo://link/local-product-consumer/cell/local-assets"
+entity ProductCellsBound id "gooo://link/local-product-consumer/cell/product-cells"
+entity ProductActivitiesBound id "gooo://link/local-product-consumer/cell/product-activities"
+entity ProductDependenciesBound id "gooo://link/local-product-consumer/cell/product-dependencies"
+entity IndependentConsumerRecorded id "gooo://link/local-product-consumer/cell/independent-consumer"
+entity UtilityUnknownPreserved id "gooo://link/local-product-consumer/cell/utility-unknown"
+entity ResolutionBoundariesPreserved id "gooo://link/local-product-consumer/cell/resolution-boundaries"
+entity ConsumerMetaActivitiesBound id "gooo://link/local-product-consumer/cell/meta-activities"
+entity OptionalConsumerBoundaryPreserved id "gooo://link/local-product-consumer/cell/read-only"
+
+activity ObserveSixthMappingRelease(SixthMappingRelease) -> SixthMappingObserved
+activity ObserveCoreMetaToolRelease(CoreMetaToolRelease) -> CoreMetaToolObserved
+activity ObserveLocalProjectPlanRelease(LocalProjectPlanRelease) -> LocalReleaseObserved
+activity BindEightLocalReleaseAssets(EightLocalReleaseAssets) -> LocalAssetsBound
+activity BindProductTwelveCells(ProductTwelveCells) -> ProductCellsBound
+activity BindProductSixActivities(ProductSixActivities) -> ProductActivitiesBound
+activity BindProductEightDependencies(ProductEightDependencies) -> ProductDependenciesBound
+activity RecordFirstIndependentConsumer(FirstIndependentConsumer) -> IndependentConsumerRecorded
+activity PreserveProductUtilityUnknown(ProductUtilityUnknown) -> UtilityUnknownPreserved
+activity PreserveProductResolutionBoundaries(ProductResolutionBoundaries) -> ResolutionBoundariesPreserved
+activity BindTwelveConsumerMetaActivities(ConsumerMetaActivitySet) -> ConsumerMetaActivitiesBound
+activity PreserveOptionalConsumerBoundary(OptionalConsumerBoundary) -> OptionalConsumerBoundaryPreserved
