@@ -105,8 +105,12 @@ jobs:
           jq -S -n --slurpfile receipts "$RUNNER_TEMP/role-receipts.json" '($receipts[0]) as $resolved | {schema:"gooo/link/implementation-role-queue-core-resolution/v2",summary:{expected:12,observed:($resolved|length),closed:([$resolved[]|select(.decision=="CLOSED")]|length)},receipts:$resolved}' > "$RUNNER_TEMP/role-core-observation.json"
 
           sed '/^activity ClassifyResearchPullRequests(/d' "$source" > "$RUNNER_TEMP/incomplete-role-source.gooo"
+          set +e
           "$gooo" graph resolve-activity "$RUNNER_TEMP/incomplete-role-source.gooo" --name ClassifyResearchPullRequests > "$RUNNER_TEMP/missing-role-activity.json"
-          jq -e '.decision=="UNKNOWN" and .occurrences==0 and .claim.state=="UNKNOWN" and .claim.unknown_class=="DIRECT_MISSING"' "$RUNNER_TEMP/missing-role-activity.json" >/dev/null
+          missing_activity_status=$?
+          set -e
+          test "$missing_activity_status" -ne 0
+          jq -e '.decision=="UNKNOWN" and .occurrences==0 and .claim.state=="UNKNOWN" and .claim.reason=="ACTIVITY_NOT_FOUND" and .claim.unknown_class=="DIRECT_MISSING"' "$RUNNER_TEMP/missing-role-activity.json" >/dev/null
 
       - name: Observe live and adverse role queues
         shell: bash
