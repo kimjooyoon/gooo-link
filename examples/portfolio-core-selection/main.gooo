@@ -1,0 +1,29 @@
+package portfolio_core_selection
+namespace gooolink
+
+entity GeneratorPromotionRelease id "gooo://link/release/v0.7.0-dev"
+entity ExternalConsumerEvidence id "gooo://portfolio/external-consumers/v1"
+entity IndependentConsumerRepetition id "gooo://portfolio/consumer-repetition/v1"
+entity PortfolioAuthorityBoundary id "gooo://portfolio/authority-boundary/v1"
+entity CompletedAdoptionOperation id "gooo://portfolio/completed-adoption-operation/v1"
+entity CorePrimitiveCandidate id "gooo://core/primitive-candidate/unknown"
+entity CrossConsumerPrimitiveNeed id "gooo://core/cross-consumer-need/unknown"
+entity PrimitiveSemanticInvariant id "gooo://core/primitive-invariant/unknown"
+entity PrimitiveVersionLock id "gooo://core/primitive-version-lock/unknown"
+entity ExperimentPullRequestMapping id "gooo://core/experiment-pr-mapping/unknown"
+entity SelectedImplementationPullRequest id "gooo://core/selected-implementation-pr/unknown"
+entity SelfImprovementOperation id "gooo://portfolio/next-self-improvement/v1"
+entity PortfolioCoreSelectionReport id "gooo://portfolio/core-selection-report/v1"
+
+activity ObserveGeneratorPromotionRelease(GeneratorPromotionRelease) -> PortfolioCoreSelectionReport
+activity BindExternalConsumerEvidence(ExternalConsumerEvidence) -> PortfolioCoreSelectionReport
+activity BindIndependentConsumerRepetition(IndependentConsumerRepetition) -> PortfolioCoreSelectionReport
+activity PreservePortfolioAuthorityBoundary(PortfolioAuthorityBoundary) -> PortfolioCoreSelectionReport
+activity RefuteCompletedAdoptionOperation(CompletedAdoptionOperation) -> PortfolioCoreSelectionReport
+activity ObserveCorePrimitiveCandidate(CorePrimitiveCandidate) -> PortfolioCoreSelectionReport
+activity BindCrossConsumerPrimitiveNeed(CrossConsumerPrimitiveNeed) -> PortfolioCoreSelectionReport
+activity BindPrimitiveSemanticInvariant(PrimitiveSemanticInvariant) -> PortfolioCoreSelectionReport
+activity BindPrimitiveVersionLock(PrimitiveVersionLock) -> PortfolioCoreSelectionReport
+activity BindExperimentPullRequestMapping(ExperimentPullRequestMapping) -> PortfolioCoreSelectionReport
+activity EnforceSelectedImplementationPullRequest(SelectedImplementationPullRequest) -> PortfolioCoreSelectionReport
+activity SelectNextSelfImprovementOperation(SelfImprovementOperation) -> PortfolioCoreSelectionReport
