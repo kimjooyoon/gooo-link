@@ -1,0 +1,45 @@
+{
+  "schema": "gooo/link/design-user-path-observation-release-lock/v1",
+  "core": {
+    "repository": "kimjooyoon/meta-ontology-go",
+    "tag": "v0.3.0-dev",
+    "ref_type": "commit",
+    "tag_object_sha": "5b7af77549d88ba345550c1428323797e6ce1fd8",
+    "target_commit_sha": "5b7af77549d88ba345550c1428323797e6ce1fd8",
+    "archive_type": "tar.gz",
+    "asset": {
+      "id": 533579198,
+      "name": "gooo-linux-amd64.tar.gz",
+      "size": 7036826,
+      "sha256": "505608f28ccc92ba191d590b3cac160be14955405c159f9dc7fb3c8826985a5e"
+    }
+  },
+  "link_baseline": {
+    "repository": "kimjooyoon/gooo-link",
+    "tag": "v0.18.0-dev",
+    "ref_type": "commit",
+    "tag_object_sha": "7a250b8a9dd8b3071c9d58356fe98b9e871f637e",
+    "target_commit_sha": "7a250b8a9dd8b3071c9d58356fe98b9e871f637e",
+    "archive_type": "zip",
+    "asset": {
+      "id": 533821310,
+      "name": "local-user-path-observation-7a250b8a9dd8b3071c9d58356fe98b9e871f637e.zip",
+      "size": 20272,
+      "sha256": "3a55abeec966107585c4c37c566aa080dac50be60c2766f97a066f8714c15456"
+    }
+  },
+  "design_review": {
+    "repository": "kimjooyoon/gooo-design-evidence",
+    "tag": "v0.7.0-dev",
+    "ref_type": "commit",
+    "tag_object_sha": "1a0ef8ebd79d0fb7b3185d5126ca1098b7e24d37",
+    "target_commit_sha": "1a0ef8ebd79d0fb7b3185d5126ca1098b7e24d37",
+    "archive_type": "zip",
+    "asset": {
+      "id": 533839879,
+      "name": "design-review-packet-1a0ef8ebd79d0fb7b3185d5126ca1098b7e24d37.zip",
+      "size": 37458,
+      "sha256": "dd79c754f7fc2a5326ddae0c1a141a8afc7deef8f6e7cf5d07aa9a5158054706"
+    }
+  }
+}
