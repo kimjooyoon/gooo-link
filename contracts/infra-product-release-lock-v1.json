@@ -1,0 +1,16 @@
+{
+  "schema": "gooo/link-infra-product-release-lock/v1",
+  "repository": "kimjooyoon/gooo-infra-evidence",
+  "tag": "v0.5.0-dev",
+  "ref_type": "commit",
+  "tag_object_sha": "bbe32a92bf40d1e4f290a911eb4756a6018c1a6d",
+  "target_commit_sha": "bbe32a92bf40d1e4f290a911eb4756a6018c1a6d",
+  "asset_total": 5,
+  "assets": [
+    {"id":533458255,"name":"gooo-infra-evidence-v0.5.0-dev-actions.zip","size":43448,"sha256":"1e82cb083654b93991172f513157bb97586acc99e5a75ca9c14d58fcfb63ca5b","role":"CI_EVIDENCE_ARCHIVE","consume":true},
+    {"id":533458256,"name":"gooo-infra-evidence-v0.5.0-dev-hcl-receipt.json","size":1441,"sha256":"6f165e84af77cefc86ed91d55b53b333f56b1e43237b96cba6879d61780d25a0","role":"HCL_DECLARATION_RECEIPT","consume":true},
+    {"id":533458257,"name":"gooo-infra-evidence-v0.5.0-dev-report.json","size":19058,"sha256":"2df0f4ea8cc0e7b356758fb5c9fa245cdc5cd9c43265dab0127dfb7ebf20156e","role":"PRODUCT_REPORT","consume":true},
+    {"id":533458258,"name":"gooo-infra-evidence-v0.5.0-dev-SHA256SUMS","size":444,"sha256":"ccb839aed411029c2c284a472db70f97272895990dc27506613a45f377825dd4","role":"CHECKSUM_INDEX","consume":true},
+    {"id":533458254,"name":"gooo-infra-evidence-v0.5.0-dev-toolchain.json","size":523,"sha256":"194f2566b8233ab0f27a743e2ce12a6086a5f4c3a476bbb097521f315d7db43f","role":"TOOLCHAIN_RECEIPT","consume":true}
+  ]
+}

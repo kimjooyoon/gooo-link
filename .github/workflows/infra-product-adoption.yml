@@ -1,0 +1,255 @@
+name: Infrastructure product adoption
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  observation:
+    runs-on: ubuntu-latest
+    env:
+      SUBJECT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SUBJECT_SHA }}
+
+      - name: Bind exact subject identity
+        run: test "$(git rev-parse HEAD)" = "$SUBJECT_SHA"
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.0'
+
+      - name: Observe Go 1.27 and fix surface
+        run: |
+          set -euo pipefail
+          test "$(go env GOVERSION)" = "go1.27.0"
+          go_files=$(find . -type f -name '*.go' | wc -l | tr -d ' ')
+          go_modules=$(find . -type f -name 'go.mod' | wc -l | tr -d ' ')
+          while IFS= read -r -d '' module; do
+            (cd "$(dirname "$module")" && go fix ./...)
+          done < <(find . -type f -name 'go.mod' -print0)
+          jq -n --arg go_version "$(go env GOVERSION)" --argjson go_files "$go_files" \
+            --argjson go_modules "$go_modules" \
+            '{schema:"gooo/link-go-fix-observation/v1",go_version:$go_version,go_files:$go_files,
+              go_modules:$go_modules,go_fix_targets:$go_modules}' > "$RUNNER_TEMP/go-fix-observation.json"
+
+      - name: Observe immutable public releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          infra_lock=contracts/infra-product-release-lock-v1.json
+          core_lock=contracts/core-release-lock-v3.json
+          infra_repository=$(jq -r .repository "$infra_lock")
+          infra_tag=$(jq -r .tag "$infra_lock")
+          gh api "repos/$infra_repository/releases/tags/$infra_tag" > "$RUNNER_TEMP/infra-release.json"
+          gh api "repos/$infra_repository/git/ref/tags/$infra_tag" > "$RUNNER_TEMP/infra-ref.json"
+          jq -e --slurpfile lock "$infra_lock" '
+            .tag_name==$lock[0].tag and .draft==false and
+            (.assets|length)==$lock[0].asset_total and
+            ([$lock[0].assets[] as $expected |
+              ([.assets[]|select(.id==$expected.id and .name==$expected.name and .size==$expected.size and
+                .digest==("sha256:"+$expected.sha256))]|length)==1] | all)
+          ' "$RUNNER_TEMP/infra-release.json" >/dev/null
+          jq -e --slurpfile lock "$infra_lock" '
+            .object.type==$lock[0].ref_type and .object.sha==$lock[0].tag_object_sha
+          ' "$RUNNER_TEMP/infra-ref.json" >/dev/null
+
+          core_repository=$(jq -r .repository "$core_lock")
+          core_tag=$(jq -r .tag "$core_lock")
+          gh api "repos/$core_repository/releases/tags/$core_tag" > "$RUNNER_TEMP/core-release.json"
+          gh api "repos/$core_repository/git/ref/tags/$core_tag" > "$RUNNER_TEMP/core-ref.json"
+          jq -e --slurpfile lock "$core_lock" '
+            .tag_name==$lock[0].tag and .draft==false and
+            ([.assets[]|select(.id==$lock[0].asset.id and .name==$lock[0].asset.name and
+              .size==$lock[0].asset.size and .digest==("sha256:"+$lock[0].asset.sha256))]|length)==1
+          ' "$RUNNER_TEMP/core-release.json" >/dev/null
+          jq -e --slurpfile lock "$core_lock" '
+            .object.type==$lock[0].ref_type and .object.sha==$lock[0].tag_object_sha
+          ' "$RUNNER_TEMP/core-ref.json" >/dev/null
+
+      - name: Download digest-locked release bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          infra_lock=contracts/infra-product-release-lock-v1.json
+          core_lock=contracts/core-release-lock-v3.json
+          assets="$RUNNER_TEMP/infra-assets"
+          mkdir -p "$assets" "$RUNNER_TEMP/infra-product" "$RUNNER_TEMP/gooo"
+          jq -r '.assets[]|[.id,.name]|@tsv' "$infra_lock" |
+            while IFS=$'\t' read -r id name; do
+              gh api -H 'Accept: application/octet-stream' "repos/kimjooyoon/gooo-infra-evidence/releases/assets/$id" > "$assets/$name"
+            done
+          jq -r '.assets[]|[.name,.sha256,.size]|@tsv' "$infra_lock" |
+            while IFS=$'\t' read -r name expected_sha expected_size; do
+              test "$(sha256sum "$assets/$name" | awk '{print $1}')" = "$expected_sha"
+              test "$(wc -c < "$assets/$name" | tr -d ' ')" = "$expected_size"
+            done
+          (cd "$assets" && sha256sum -c gooo-infra-evidence-v0.5.0-dev-SHA256SUMS)
+          unzip -q "$assets/gooo-infra-evidence-v0.5.0-dev-actions.zip" -d "$RUNNER_TEMP/infra-product"
+          cmp -s "$assets/gooo-infra-evidence-v0.5.0-dev-report.json" "$RUNNER_TEMP/infra-product/infra-service-claim.json"
+          cmp -s "$assets/gooo-infra-evidence-v0.5.0-dev-hcl-receipt.json" "$RUNNER_TEMP/infra-product/hcl-declaration.json"
+          cmp -s "$assets/gooo-infra-evidence-v0.5.0-dev-toolchain.json" "$RUNNER_TEMP/infra-product/go-toolchain.json"
+
+          core_asset_id=$(jq -r '.asset.id' "$core_lock")
+          gh api -H 'Accept: application/octet-stream' "repos/kimjooyoon/meta-ontology-go/releases/assets/$core_asset_id" > "$RUNNER_TEMP/gooo-linux-amd64.tar.gz"
+          test "$(sha256sum "$RUNNER_TEMP/gooo-linux-amd64.tar.gz" | awk '{print $1}')" = "$(jq -r '.asset.sha256' "$core_lock")"
+          tar -xzf "$RUNNER_TEMP/gooo-linux-amd64.tar.gz" -C "$RUNNER_TEMP/gooo"
+
+      - name: Compile Link meta-observer with released Gooo
+        run: |
+          set -euo pipefail
+          gooo="$RUNNER_TEMP/gooo/gooo"
+          "$gooo" version --json > "$RUNNER_TEMP/gooo-version.json"
+          jq -e '.schema_version=="gooo-version/v1" and .language=="gooo"' "$RUNNER_TEMP/gooo-version.json" >/dev/null
+          go version -m "$gooo" > "$RUNNER_TEMP/gooo-build-info.txt"
+          grep -Eq 'go1\.27\.0' "$RUNNER_TEMP/gooo-build-info.txt"
+          "$gooo" check --json examples/infra-product-adoption/main.gooo > "$RUNNER_TEMP/infra-adoption-syntax.json"
+          "$gooo" check --semantic --json examples/infra-product-adoption/main.gooo > "$RUNNER_TEMP/infra-adoption-semantic.json"
+          "$gooo" graph dump examples/infra-product-adoption/main.gooo > "$RUNNER_TEMP/infra-adoption-graph.json"
+
+      - name: Observe product and preserve adverse states
+        run: |
+          set -euo pipefail
+          evaluator=scripts/observe-infra-product-adoption.sh
+          product="$RUNNER_TEMP/infra-product"
+          assets="$RUNNER_TEMP/infra-assets"
+          graph="$RUNNER_TEMP/infra-adoption-graph.json"
+          denominator=contracts/infra-product-adoption-denominator-v1.json
+          before="$RUNNER_TEMP/repository-before.bin"
+          after="$RUNNER_TEMP/repository-after.bin"
+          git status --porcelain=v1 -z --untracked-files=all > "$before"
+          args=(
+            "$graph" "$denominator"
+            "$assets/gooo-infra-evidence-v0.5.0-dev-report.json" "$product/replay.json"
+            "$assets/gooo-infra-evidence-v0.5.0-dev-hcl-receipt.json"
+            "$assets/gooo-infra-evidence-v0.5.0-dev-toolchain.json"
+            "$product/enriched-graph.json" "$product/missing-hcl.json" "$product/context-hcl.json"
+            "$product/invalid-hcl.json" "$product/mismatched-hcl.json" "$product/deployment-drift.json"
+          )
+          start_ns=$(date +%s%N)
+          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/infra-adoption-rss" \
+            bash "$evaluator" "${args[@]}" "$RUNNER_TEMP/infra-adoption-report.json" "$SUBJECT_SHA" complete
+          end_ns=$(date +%s%N)
+          wall_ms=$(( (end_ns-start_ns)/1000000 ))
+          bash "$evaluator" "${args[@]}" "$RUNNER_TEMP/infra-adoption-replay.json" "$SUBJECT_SHA" complete
+          cmp -s "$RUNNER_TEMP/infra-adoption-report.json" "$RUNNER_TEMP/infra-adoption-replay.json"
+
+          printf 'null\n' > "$RUNNER_TEMP/missing-infra-report.json"
+          bash "$evaluator" "$graph" "$denominator" "$RUNNER_TEMP/missing-infra-report.json" "$RUNNER_TEMP/missing-infra-report.json" \
+            "${args[@]:4:8}" "$RUNNER_TEMP/infra-adoption-unknown.json" "$SUBJECT_SHA" missing-report
+
+          jq '(.indicators[]|select(.id=="gooo.metric.infra-evidence.semantic-edges.v2")|.value)=7' \
+            "$assets/gooo-infra-evidence-v0.5.0-dev-report.json" > "$RUNNER_TEMP/tampered-infra-report.json"
+          metric_args=("${args[@]}")
+          metric_args[2]="$RUNNER_TEMP/tampered-infra-report.json"
+          bash "$evaluator" "${metric_args[@]}" "$RUNNER_TEMP/infra-adoption-metric-refuted.json" "$SUBJECT_SHA" metric-tamper
+
+          jq '(.activity_resolution_observation.entries)|=map(select(.activity!="ObserveRuntimeDrift")) |
+            .activity_resolution_observation.summary.closed=11 |
+            .activity_resolution_observation.summary.observed=11 |
+            .activity_resolution_observation.summary.unique_selectors=11' \
+            "$product/enriched-graph.json" > "$RUNNER_TEMP/missing-infra-product-activity.json"
+          meta_args=("${args[@]}")
+          meta_args[6]="$RUNNER_TEMP/missing-infra-product-activity.json"
+          bash "$evaluator" "${meta_args[@]}" "$RUNNER_TEMP/infra-adoption-meta-refuted.json" "$SUBJECT_SHA" missing-product-meta
+
+          jq '.authority.terraform_execution="EXECUTED"' "$assets/gooo-infra-evidence-v0.5.0-dev-report.json" > "$RUNNER_TEMP/escalated-infra-report.json"
+          scope_args=("${args[@]}")
+          scope_args[2]="$RUNNER_TEMP/escalated-infra-report.json"
+          bash "$evaluator" "${scope_args[@]}" "$RUNNER_TEMP/infra-adoption-scope-refuted.json" "$SUBJECT_SHA" execution-escalation
+
+          jq '(.nodes)|=map(select(.name!="RecordInfraPortfolioProgress"))' "$graph" > "$RUNNER_TEMP/missing-link-activity.json"
+          missing_link_args=("${args[@]}")
+          missing_link_args[0]="$RUNNER_TEMP/missing-link-activity.json"
+          if bash "$evaluator" "${missing_link_args[@]}" "$RUNNER_TEMP/missing-link-meta.json" "$SUBJECT_SHA" complete; then
+            echo 'observer accepted a missing Link Gooo activity' >&2
+            exit 1
+          fi
+
+          jq -e '.decision=="INFRA_PRODUCT_ADOPTION_OBSERVED" and .summary.closed_cells==12 and
+            .summary.independent_products_observed==3 and .summary.independent_products_total==3 and
+            .summary.product_cells==12 and .summary.semantic_edges==6 and .summary.hcl_bindings==1 and
+            .summary.product_activity_receipts==12 and .summary.go_version=="go1.27.0" and
+            .portfolio.generator_authority_evaluation_required==true and
+            .portfolio.central_orchestrator_authorized==false and .portfolio.common_generator_authorized==false and
+            .summary.repository_writes==0 and .summary.local_tests_run==0 and
+            .summary.cross_project_required_gates==0' "$RUNNER_TEMP/infra-adoption-report.json" >/dev/null
+          jq -e '.decision=="INFRA_PRODUCT_ADOPTION_UNKNOWN" and .summary.closed_cells==9 and
+            .summary.unknown_cells==3 and .summary.independent_products_observed==2 and
+            .claim.reason=="INFRA_PRODUCT_REPORT_UNAVAILABLE" and .claim.unknown_class=="DIRECT_MISSING"' \
+            "$RUNNER_TEMP/infra-adoption-unknown.json" >/dev/null
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==11 and .summary.refuted_cells==1 and
+            .claim.reason=="INFRA_SEMANTIC_EDGE_METRIC_MISMATCH"' "$RUNNER_TEMP/infra-adoption-metric-refuted.json" >/dev/null
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==11 and .summary.refuted_cells==1 and
+            .claim.reason=="INFRA_META_BINDING_MISMATCH"' "$RUNNER_TEMP/infra-adoption-meta-refuted.json" >/dev/null
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==11 and .summary.refuted_cells==1 and
+            .claim.reason=="UNCLAIMED_EXECUTION_AUTHORITY_ESCALATION"' "$RUNNER_TEMP/infra-adoption-scope-refuted.json" >/dev/null
+
+          git status --porcelain=v1 -z --untracked-files=all > "$after"
+          if cmp -s "$before" "$after"; then writes=0; else writes=1; fi
+          jq -S -n --arg subject_sha "$SUBJECT_SHA" --arg go_version "$(go env GOVERSION)" \
+            --argjson peak_rss_kib "$(cat "$RUNNER_TEMP/infra-adoption-rss")" --argjson wall_ms "$wall_ms" \
+            --argjson writes "$writes" \
+            '{schema:"gooo/link-infra-product-adoption-runtime/v1",subject_sha:$subject_sha,
+              go_version:$go_version,peak_rss_kib:$peak_rss_kib,wall_ms:$wall_ms,
+              repository_writes:$writes,local_tests_run:0,cross_project_required_gates:0}' \
+            > "$RUNNER_TEMP/infra-adoption-runtime.json"
+
+      - name: Publish exact human-readable portfolio completion
+        run: |
+          {
+            echo '## Infrastructure independent product adoption'
+            echo
+            jq -r '
+              "- adoption cells: \(.summary.closed_cells)/\(.summary.total_cells) CLOSED",
+              "- independent product progress: \(.summary.independent_products_observed)/\(.summary.independent_products_total)",
+              "- product cells: \(.summary.product_cells)/12",
+              "- semantic edges: \(.summary.semantic_edges)/6",
+              "- structured HCL bindings: \(.summary.hcl_bindings)/1",
+              "- product Gooo activity receipts: \(.summary.product_activity_receipts)/12",
+              "- Go toolchain: \(.summary.go_version)",
+              "- repository writes: \(.summary.repository_writes)",
+              "- local tests: \(.summary.local_tests_run)",
+              "- cross-project required gates: \(.summary.cross_project_required_gates)",
+              "- generator authority evaluation required: \(.portfolio.generator_authority_evaluation_required)",
+              "- central orchestrator authorized: \(.portfolio.central_orchestrator_authorized)",
+              "- common generator authorized: \(.portfolio.common_generator_authorized)",
+              "- next operation: \(.claim.next_operation)"
+            ' "$RUNNER_TEMP/infra-adoption-report.json"
+            jq -r '"- observer peak RSS: \(.peak_rss_kib) KiB", "- observer wall time: \(.wall_ms) ms"' \
+              "$RUNNER_TEMP/infra-adoption-runtime.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce zero Link repository writes
+        run: test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: infra-product-adoption-${{ env.SUBJECT_SHA }}
+          path: |
+            ${{ runner.temp }}/infra-release.json
+            ${{ runner.temp }}/infra-assets/
+            ${{ runner.temp }}/go-fix-observation.json
+            ${{ runner.temp }}/gooo-version.json
+            ${{ runner.temp }}/gooo-build-info.txt
+            ${{ runner.temp }}/infra-adoption-syntax.json
+            ${{ runner.temp }}/infra-adoption-semantic.json
+            ${{ runner.temp }}/infra-adoption-graph.json
+            ${{ runner.temp }}/infra-adoption-report.json
+            ${{ runner.temp }}/infra-adoption-replay.json
+            ${{ runner.temp }}/infra-adoption-unknown.json
+            ${{ runner.temp }}/infra-adoption-metric-refuted.json
+            ${{ runner.temp }}/infra-adoption-meta-refuted.json
+            ${{ runner.temp }}/infra-adoption-scope-refuted.json
+            ${{ runner.temp }}/infra-adoption-runtime.json
+          if-no-files-found: warn

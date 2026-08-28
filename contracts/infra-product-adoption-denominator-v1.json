@@ -1,0 +1,32 @@
+{
+  "schema": "gooo/link-infra-product-adoption-denominator/v1",
+  "denominator_id": "gooo.denominator.link.infra-product-adoption.v1",
+  "candidate_id": "gooo.product.infra-service-evidence-linker.v1",
+  "total": 12,
+  "portfolio_previous": 2,
+  "portfolio_total": 3,
+  "proofs": [
+    {"choice":"FOUNDATION","total":4},
+    {"choice":"COHERENCE","total":4},
+    {"choice":"REGRESSION","total":4}
+  ],
+  "indicator_classes": [
+    {"class":"DRIVER","total":4},
+    {"class":"OUTCOME","total":4},
+    {"class":"GUARDRAIL","total":4}
+  ],
+  "cells": [
+    {"id":"INFRA_RELEASE_OBSERVED","activity":"ObserveInfraProductRelease","proof_choice":"FOUNDATION","indicator_class":"DRIVER","closed_reason":"IMMUTABLE_INFRA_PRODUCT_RELEASE_OBSERVED"},
+    {"id":"INFRA_ASSETS_LOCKED","activity":"LockInfraProductAssets","proof_choice":"FOUNDATION","indicator_class":"DRIVER","closed_reason":"INFRA_PRODUCT_ASSETS_5_OF_5_LOCKED"},
+    {"id":"INFRA_CHAIN_OBSERVED","activity":"ObserveInfraEvidenceChain","proof_choice":"FOUNDATION","indicator_class":"OUTCOME","closed_reason":"INFRA_EVIDENCE_CHAIN_12_OF_12_CLOSED"},
+    {"id":"STRUCTURED_HCL_OBSERVED","activity":"ObserveStructuredHCL","proof_choice":"FOUNDATION","indicator_class":"DRIVER","closed_reason":"HASHICORP_HCL_BINDING_1_OF_1_OBSERVED"},
+    {"id":"INFRA_META_BOUND","activity":"BindInfraProductActivities","proof_choice":"COHERENCE","indicator_class":"DRIVER","closed_reason":"INFRA_PRODUCT_ACTIVITIES_12_OF_12_BOUND"},
+    {"id":"SEMANTIC_EDGES_OBSERVED","activity":"ObserveInfraSemanticEdges","proof_choice":"COHERENCE","indicator_class":"OUTCOME","closed_reason":"INFRA_SEMANTIC_EDGES_6_OF_6_OBSERVED"},
+    {"id":"HCL_UNKNOWN_RESOLUTION_OBSERVED","activity":"ObserveHCLUnknownResolution","proof_choice":"COHERENCE","indicator_class":"GUARDRAIL","closed_reason":"HCL_DIRECT_AND_CONTEXT_UNKNOWN_OBSERVED"},
+    {"id":"HCL_REFUTATIONS_OBSERVED","activity":"ObserveHCLRefutations","proof_choice":"COHERENCE","indicator_class":"GUARDRAIL","closed_reason":"HCL_INVALID_AND_MISMATCH_REFUTED"},
+    {"id":"DEPLOYMENT_CONTRADICTION_OBSERVED","activity":"ObserveDeploymentContradiction","proof_choice":"REGRESSION","indicator_class":"GUARDRAIL","closed_reason":"DEPLOYMENT_IDENTITY_CONTRADICTION_REFUTED"},
+    {"id":"INFRA_REPLAY_OBSERVED","activity":"ObserveInfraReplay","proof_choice":"REGRESSION","indicator_class":"GUARDRAIL","closed_reason":"INFRA_PRODUCT_REPLAY_OBSERVED"},
+    {"id":"INFRA_RESOURCES_OBSERVED","activity":"ObserveInfraResources","proof_choice":"REGRESSION","indicator_class":"OUTCOME","closed_reason":"INFRA_PRODUCT_RESOURCES_AND_NON_CLAIMS_OBSERVED"},
+    {"id":"INFRA_PORTFOLIO_PROGRESS_RECORDED","activity":"RecordInfraPortfolioProgress","proof_choice":"REGRESSION","indicator_class":"OUTCOME","closed_reason":"INDEPENDENT_PRODUCT_PROGRESS_3_OF_3_RECORDED"}
+  ]
+}
