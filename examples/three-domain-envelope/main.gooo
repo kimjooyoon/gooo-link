@@ -1,0 +1,29 @@
+package threedomains
+namespace threedomains
+
+entity GoooRelease id "gooo://release/v0.2.0-dev"
+entity ConsumerReleaseSet id "gooo://link/entity/three-consumer-releases"
+entity SelectedAssetSet id "gooo://link/entity/nine-selected-assets"
+entity DomainSchemaSet id "gooo://link/entity/three-domain-schemas"
+entity CommonCoreRelease id "gooo://link/entity/common-core-release"
+entity IdentityAnchorCounts id "gooo://link/entity/identity-anchor-counts"
+entity CellDenominators id "gooo://link/entity/cell-denominators"
+entity IndicatorClassDenominators id "gooo://link/entity/indicator-class-denominators"
+entity RepositoryEffects id "gooo://link/entity/repository-effects"
+entity DegradedClaimSet id "gooo://link/entity/degraded-claims"
+entity DomainVariations id "gooo://link/entity/domain-variations"
+entity PromotionEvidence id "gooo://link/entity/connector-promotion-evidence"
+entity ObservationDecision id "gooo://link/entity/three-domain-observation-decision"
+
+activity ObserveReleasedGoooIdentity(GoooRelease) -> ObservationDecision
+activity ObserveConsumerReleaseIdentities(ConsumerReleaseSet) -> ObservationDecision
+activity VerifySelectedAssetDigests(SelectedAssetSet) -> ObservationDecision
+activity PreserveDistinctDomainSchemas(DomainSchemaSet) -> ObservationDecision
+activity CompareCommonCoreRelease(CommonCoreRelease) -> ObservationDecision
+activity CompareIdentityAnchorCardinality(IdentityAnchorCounts) -> ObservationDecision
+activity CompareFixedCellDenominators(CellDenominators) -> ObservationDecision
+activity CompareIndicatorClassDenominators(IndicatorClassDenominators) -> ObservationDecision
+activity CompareZeroRepositoryWrites(RepositoryEffects) -> ObservationDecision
+activity CompareDegradedClaimTuples(DegradedClaimSet) -> ObservationDecision
+activity PreserveDomainVariations(DomainVariations) -> ObservationDecision
+activity DecideConnectorPromotion(PromotionEvidence) -> ObservationDecision

@@ -1,0 +1,48 @@
+{
+  "schema": "gooo/link/three-domain-release-locks/v1",
+  "observed_domains": 3,
+  "selected_assets": 9,
+  "required_machine_replay_receipts": 3,
+  "required_canonical_envelope_adoptions": 3,
+  "consumers": [
+    {
+      "ordinal": 1,
+      "id": "local-ledger",
+      "repository": "kimjooyoon/gooo-local-ledger",
+      "tag": "v0.3.0-dev",
+      "tag_object_sha": "ed6ae0e64e622020cf515de330a9503b3d33ce66",
+      "target_commit_sha": "04118959144fbb5793367ab9ebb259d6990921cc",
+      "assets": [
+        {"role": "domain-report", "name": "core-receipt-adoption.json", "sha256": "18c7f0f0602984468a04458bc546f77406b3d7bfefcbd67b00997a6ef7a3cd65"}
+      ]
+    },
+    {
+      "ordinal": 2,
+      "id": "design-evidence",
+      "repository": "kimjooyoon/gooo-design-evidence",
+      "tag": "v0.3.0-dev",
+      "tag_object_sha": "989cda115830448d16f5a3c57cd6b4984856c3e0",
+      "target_commit_sha": "89d6adb3a3c64d118526342724cf3aa9243a6d17",
+      "assets": [
+        {"role": "domain-report", "name": "core-receipt-adoption.json", "sha256": "2e624c4361d248f7a012fc4e28c878430789349863b7405f4ed246cf99f85ed5"}
+      ]
+    },
+    {
+      "ordinal": 3,
+      "id": "infra-evidence",
+      "repository": "kimjooyoon/gooo-infra-evidence",
+      "tag": "v0.2.0-dev",
+      "tag_object_sha": "c37230cf493258e01685828e271f9b3137d5d9d7",
+      "target_commit_sha": "a458b996839b84492fde231c25969bf99fa9e1b7",
+      "assets": [
+        {"role": "domain-report", "name": "infra-service-claim.json", "sha256": "cd737d809d2d56de2ff51cd6d6d20e8c8e0f833a5f0ac5c9fb39f3c98ef64dc9"},
+        {"role": "core-resolution", "name": "enriched-graph.json", "sha256": "e98dc83bc2e919c5190509c8a86e0f4bf4bcdcfe846083bb4299414ef7336af0"},
+        {"role": "degraded-unknown", "name": "missing-build.json", "sha256": "b1a28ad999fc359decffabb376037129a3b43df9160342820ad266d01b2e9d1f"},
+        {"role": "degraded-unknown", "name": "missing-state-v2.json", "sha256": "c25b2ad6e6d507a57aac0636c1b7dcb0c8297e1ffe80afd06eeb7737c9df5a82"},
+        {"role": "degraded-refuted", "name": "ambiguous-handler.json", "sha256": "b1aac66aa3e01ee0f97ca10f6c21beef572a016a2cf73a0d897a00a5ce48c7af"},
+        {"role": "degraded-refuted", "name": "identity-mismatch.json", "sha256": "d425d83d1f768872a7872d9461c9791fb681e573b6565ab17d3452925ea376d5"},
+        {"role": "degraded-refuted", "name": "deployment-drift.json", "sha256": "ff8e8fab03337a90a2c21f00728b9f27db43995ae64ca0be50533adc9944df86"}
+      ]
+    }
+  ]
+}
