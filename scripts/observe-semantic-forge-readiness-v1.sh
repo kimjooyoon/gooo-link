@@ -175,11 +175,11 @@ jq -S -n \
     summary:{
       total_cells:12,closed_cells:$closed_count,unknown_cells:$unknown_count,refuted_cells:$refuted_count,
       independent_consumers_observed:(if $baseline_ok then 2 else 0 end),product_releases_observed:([$local_product_ok,$infra_product_ok]|map(select(.==true))|length),
-      selected_evidence_assets_observed:(if $local_assets_ok then 6 else 0 end)+(if $infra_assets_ok then 6 else 0 end),selected_evidence_assets_total:12,
+      selected_evidence_assets_observed:((if $local_assets_ok then 6 else 0 end)+(if $infra_assets_ok then 6 else 0 end)),selected_evidence_assets_total:12,
       shared_invariants_observed:$shared_invariants,shared_invariants_total:8,
-      product_conformance_cells_observed:(if $local_report_ok then 12 else 0 end)+(if $infra_report_ok then 12 else 0 end),product_conformance_cells_total:24,
-      product_activities_observed:(if $local_report_ok then 6 else 0 end)+(if $infra_report_ok then 6 else 0 end),product_activities_total:12,
-      product_dependencies_observed:(if $local_report_ok then 8 else 0 end)+(if $infra_report_ok then 8 else 0 end),product_dependencies_total:16,
+      product_conformance_cells_observed:((if $local_report_ok then 12 else 0 end)+(if $infra_report_ok then 12 else 0 end)),product_conformance_cells_total:24,
+      product_activities_observed:((if $local_report_ok then 6 else 0 end)+(if $infra_report_ok then 6 else 0 end)),product_activities_total:12,
+      product_dependencies_observed:((if $local_report_ok then 8 else 0 end)+(if $infra_report_ok then 8 else 0 end)),product_dependencies_total:16,
       generated_artifacts_observed:(if $artifact_ok then 4 else 0 end),generated_artifacts_total:4,
       unknown_coordinates_observed:(if $resolution_ok then 12 else 0 end),unknown_coordinates_total:12,
       refuted_boundaries_observed:(if $resolution_ok then 6 else 0 end),refuted_boundaries_total:6,
@@ -203,4 +203,3 @@ jq -S -n \
       local_tests_run:$runtime[0].local_tests_run,source_repository_writes:$runtime[0].repository_writes,root_readme_readiness:"EXCLUDED"}
   }
 ' > "$output"
-
