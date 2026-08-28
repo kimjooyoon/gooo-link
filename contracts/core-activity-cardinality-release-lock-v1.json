@@ -1,0 +1,23 @@
+{
+  "schema": "gooo/link/core-activity-cardinality-release-lock/v1",
+  "repository": "kimjooyoon/meta-ontology-go",
+  "tag": "v0.2.0-dev",
+  "version": "0.2.0-dev",
+  "status": "development",
+  "draft": false,
+  "prerelease": true,
+  "tag_object_sha": "733f7b22a365606d42bf238f5c535ff12e5abf8c",
+  "target_commit_sha": "050b11e56d9f972e0d507d406e5da8a60595052b",
+  "schemas": {"version":"gooo-version/v1","check":"gooo/diagnostics/v1","graph":"gooo-graph/v1","activity_cardinality_resolution":"gooo/activity-cardinality-resolution/v1"},
+  "consumer": {"binary_asset":"gooo-linux-amd64.tar.gz","checksum_asset":"SHA256SUMS"},
+  "assets": [
+    {"name":"SHA256SUMS","digest":"sha256:79825c777496b9831720e6fe011ba987ffa462dc627897d3ed303d85248cee10","size":614},
+    {"name":"gooo-darwin-amd64.tar.gz","digest":"sha256:507698647fd40778281997251135f95f5348904f890f38ab84ed8c61b955d4d9","size":7121446},
+    {"name":"gooo-linux-amd64.tar.gz","digest":"sha256:99599bdd3c2ae947718881dd78b899234452ab06bd8e60a550320054e1d81ddd","size":7021189},
+    {"name":"gooo-windows-amd64.zip","digest":"sha256:7ee2e0d7d161c2f64de73f66eb3b5324dc3e25800274b469020d8d28c99b9e9a","size":7123377},
+    {"name":"release-eligibility.json","digest":"sha256:9ea26353a1c423c4de417f720ac36eabd2060fa007d2525c16d9189d9b9ac163","size":3180},
+    {"name":"release-manifest.json","digest":"sha256:216e20a5c172700ca6067fed4042a9f615a7e9926d1cf155cb393141fd761ffb","size":1891},
+    {"name":"release-report.json","digest":"sha256:f0c0068347cfd92de297b279976003d5a9116e70116aa11cacbef8d4eff22636","size":26281},
+    {"name":"version.json","digest":"sha256:857ff734f6dd153aec721ce36257e6f9f0be399590e4d743dd3db7ec4772d3f9","size":227}
+  ]
+}

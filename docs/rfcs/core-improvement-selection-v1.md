@@ -16,6 +16,12 @@ The selected primitive is now also consumed only from the immutable Gooo
 `733f7b22a365606d42bf238f5c535ff12e5abf8c` and its target commit is
 `050b11e56d9f972e0d507d406e5da8a60595052b`.
 
+This cardinality lock is separate from the original link-v1 core lock. Link-v1
+continues to attest only the consumer compatibility already established against
+Gooo `v0.1.0-dev`; it must not claim `v0.2.0-dev` compatibility until those
+consumers publish new evidence. The two conformance paths can therefore advance
+without inventing compatibility or waiting on each other.
+
 ## Shared observations
 
 Both consumers establish exactly:

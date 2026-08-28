@@ -23,7 +23,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          lock=contracts/core-release-lock-v1.json
+          lock=contracts/core-activity-cardinality-release-lock-v1.json
           tag=$(jq -r '.tag' "$lock")
           tag_object=$(jq -r '.tag_object_sha' "$lock")
           target=$(jq -r '.target_commit_sha' "$lock")
