@@ -98,7 +98,7 @@ jobs:
       - name: Bind Gooo activities and observe primitive mapping
         shell: bash
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
           source=examples/cross-consumer-primitive-mapping/main.gooo
           denominator=contracts/cross-consumer-primitive-mapping-denominator-v2.json
           lock=contracts/cross-consumer-release-lock-v2.json
@@ -106,8 +106,39 @@ jobs:
           gooo="$RUNNER_TEMP/core/gooo"
           evaluator=scripts/observe-cross-consumer-primitive-mapping.sh
 
+          stage=INITIALIZE
+          on_error() {
+            local status=$?
+            trap - ERR
+            set +e
+            printf '::error title=Cross-consumer observation failed::stage=%s status=%s\n' "$stage" "$status"
+            for report in \
+              "$RUNNER_TEMP/cross-consumer-syntax.json" \
+              "$RUNNER_TEMP/cross-consumer-semantic.json" \
+              "$RUNNER_TEMP/cross-consumer-graph.json" \
+              "$RUNNER_TEMP/core-claim-syntax.json" \
+              "$RUNNER_TEMP/core-claim-graph.json" \
+              "$RUNNER_TEMP/core-claim.json" \
+              "$RUNNER_TEMP/cross-consumer-mapping.json" \
+              "$RUNNER_TEMP/missing-core-release.json" \
+              "$RUNNER_TEMP/missing-consumer-release.json" \
+              "$RUNNER_TEMP/scope-escalation.json" \
+              "$RUNNER_TEMP/title-only-mapping.json" \
+              "$RUNNER_TEMP/gap-laundering.json"; do
+              if test -s "$report"; then
+                printf '%s\n' "--- $(basename "$report")"
+                jq -c '{status,decision,summary,claim,candidate,diagnostics}' "$report" 2>/dev/null || cat "$report"
+              fi
+            done
+            exit "$status"
+          }
+          trap on_error ERR
+
+          stage=GOOO_MAPPING_SOURCE_SYNTAX
           "$gooo" check --json "$source" > "$RUNNER_TEMP/cross-consumer-syntax.json"
+          stage=GOOO_MAPPING_SOURCE_SEMANTICS
           "$gooo" check --semantic --json "$source" > "$RUNNER_TEMP/cross-consumer-semantic.json"
+          stage=GOOO_MAPPING_SOURCE_GRAPH
           "$gooo" graph dump "$source" > "$RUNNER_TEMP/cross-consumer-graph.json"
           jq -e '.status=="ok"' "$RUNNER_TEMP/cross-consumer-syntax.json" "$RUNNER_TEMP/cross-consumer-semantic.json" >/dev/null
           jq -e '([.nodes[]|select(.kind=="Activity")]|length)==13' "$RUNNER_TEMP/cross-consumer-graph.json" >/dev/null
@@ -117,10 +148,13 @@ jobs:
           done < <(jq -r '.cells[]|[.activity]|@tsv' "$denominator")
 
           core_source="$RUNNER_TEMP/core-claim-source.gooo"
+          stage=CORE_CLAIM_SOURCE_SYNTAX
           "$gooo" check --json "$core_source" > "$RUNNER_TEMP/core-claim-syntax.json"
+          stage=CORE_CLAIM_SOURCE_GRAPH
           "$gooo" graph dump "$core_source" > "$RUNNER_TEMP/core-claim-graph.json"
           core_activity=$(jq -r .core.source.activity "$lock")
           jq -e --arg activity "$core_activity" '([.nodes[]|select(.kind=="Activity")]|length)==6 and ([.nodes[]|select(.kind=="Activity" and .name==$activity)]|length)==1' "$RUNNER_TEMP/core-claim-graph.json" >/dev/null
+          stage=CORE_CLAIM_RESOLUTION
           "$gooo" claim resolve "$core_source" --activity "$core_activity" --json > "$RUNNER_TEMP/core-claim.json"
           core_source_digest=$(jq -r .core.source.sha256 "$lock")
           jq -e --arg digest "sha256:$core_source_digest" '
@@ -151,6 +185,7 @@ jobs:
           )
 
           start_ns=$(date +%s%N)
+          stage=COMPLETE_OBSERVATION
           /usr/bin/time -f '%M' -o "$RUNNER_TEMP/cross-consumer-rss" bash "$evaluator" "${args[@]}" "$RUNNER_TEMP/cross-consumer-mapping.json" "$SUBJECT_SHA" complete
           end_ns=$(date +%s%N)
           wall_ms=$(( (end_ns-start_ns)/1000000 ))
@@ -177,6 +212,7 @@ jobs:
 
           printf 'null\n' > "$RUNNER_TEMP/missing-core.json"
           missing_core_args=("${args[@]:0:10}" "$RUNNER_TEMP/missing-core.json" "${args[@]:11}")
+          stage=MISSING_CORE_RELEASE_OBSERVATION
           bash "$evaluator" "${missing_core_args[@]}" "$RUNNER_TEMP/missing-core-release.json" "$SUBJECT_SHA" missing-core-release
           jq -e '
             .decision=="CROSS_CONSUMER_PRIMITIVE_MAPPING_UNKNOWN" and
@@ -188,6 +224,7 @@ jobs:
 
           printf 'null\n' > "$RUNNER_TEMP/missing-local.json"
           missing_args=("$RUNNER_TEMP/cross-consumer-graph.json" "$denominator" "$RUNNER_TEMP/missing-local.json" "$RUNNER_TEMP/missing-local.json" "$RUNNER_TEMP/missing-local.json" "${args[@]:5}")
+          stage=MISSING_CONSUMER_RELEASE_OBSERVATION
           bash "$evaluator" "${missing_args[@]}" "$RUNNER_TEMP/missing-consumer-release.json" "$SUBJECT_SHA" missing-local-release
           jq -e '
             .decision=="CROSS_CONSUMER_PRIMITIVE_MAPPING_UNKNOWN" and
@@ -197,25 +234,32 @@ jobs:
             .claim.reason=="LOCAL_LEDGER_RELEASE_UNAVAILABLE"
           ' "$RUNNER_TEMP/missing-consumer-release.json" >/dev/null
 
+          stage=SCOPE_ESCALATION_OBSERVATION
           bash "$evaluator" "${args[@]}" "$RUNNER_TEMP/scope-escalation.json" "$SUBJECT_SHA" scope-escalation
           jq -e '.decision=="FAIL_CLOSED" and .summary.closed==11 and .summary.refuted==2 and .summary.direct_mappings==1 and .claim.reason=="OBSERVATION_EVIDENCE_SCOPE_ESCALATION"' "$RUNNER_TEMP/scope-escalation.json" >/dev/null
 
           jq '(.experiments[]|select(.number==548)) |= .+{candidate_id:"gooo.primitive.claim-resolution-tuple.v1",mapping_state:"MAPPED"}' "$inputs/core-experiment-backlog/backlog.json" > "$RUNNER_TEMP/title-only-backlog.json"
           title_args=("${args[@]:0:11}" "$RUNNER_TEMP/title-only-backlog.json")
+          stage=TITLE_ONLY_MAPPING_OBSERVATION
           bash "$evaluator" "${title_args[@]}" "$RUNNER_TEMP/title-only-mapping.json" "$SUBJECT_SHA" title-only-mapping
           jq -e '.decision=="FAIL_CLOSED" and .summary.closed==11 and .summary.refuted==2 and .claim.reason=="TITLE_ONLY_EXPERIMENT_MAPPING_FORBIDDEN" and .experiments.candidate_mentions==1 and .experiments.direct_mappings==1' "$RUNNER_TEMP/title-only-mapping.json" >/dev/null
 
           jq '.claim.unknown_class="DIRECT_MISSING"' "$inputs/local-ledger/actions/missing-runbook.json" > "$RUNNER_TEMP/laundered-local-unknown.json"
           gap_args=("${args[@]:0:3}" "$RUNNER_TEMP/laundered-local-unknown.json" "${args[@]:4}")
+          stage=GAP_LAUNDERING_OBSERVATION
           bash "$evaluator" "${gap_args[@]}" "$RUNNER_TEMP/gap-laundering.json" "$SUBJECT_SHA" gap-laundering
           jq -e '.decision=="FAIL_CLOSED" and .summary.closed==11 and .summary.refuted==2 and .summary.direct_mappings==1 and .claim.reason=="CLAIM_RESOLUTION_GAP_LAUNDERED"' "$RUNNER_TEMP/gap-laundering.json" >/dev/null
 
+          stage=WRITE_AND_RUNTIME_GUARD
           test -z "$(git status --porcelain=v1)"
           jq -S -n --arg subject_sha "$SUBJECT_SHA" --argjson peak_rss_kib "$(cat "$RUNNER_TEMP/cross-consumer-rss")" --argjson wall_ms "$wall_ms" '
             {schema:"gooo/link/cross-consumer-primitive-mapping-runtime/v2",subject_sha:$subject_sha,
              observer:{peak_rss_kib:$peak_rss_kib,wall_ms:$wall_ms},repository_writes:0,
              local_tests_run:0,cross_project_required_gates:0}
           ' > "$RUNNER_TEMP/cross-consumer-runtime.json"
+
+          stage=CLOSED
+          echo '::notice title=Cross-consumer stage::CLOSED'
 
           {
             echo '## Cross-consumer claim-resolution mapping'
