@@ -113,7 +113,7 @@ jobs:
           done
           jq '.summary.primitive_mappings=4' "$baseline" > "$RUNNER_TEMP/tampered-baseline.json"
           bash "$evaluator" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/graph.json" "$RUNNER_TEMP/tampered-baseline.json" "$RUNNER_TEMP/core/release-report.json" "$RUNNER_TEMP/core/release-eligibility.json" "$RUNNER_TEMP/dependency.json" "${adverse[@]}" "$RUNNER_TEMP/runtime.json" "$RUNNER_TEMP/baseline-refuted.json" "$SUBJECT_SHA" baseline-refuted
-          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==10 and .summary.refuted_cells==2 and .claim.reason=="BASELINE_MAPPING_COUNT_MISMATCH"' "$RUNNER_TEMP/baseline-refuted.json" >/dev/null
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==9 and .summary.refuted_cells==3 and .claim.reason=="CANDIDATE_SELECTION_RELEASE_MISMATCH"' "$RUNNER_TEMP/baseline-refuted.json" >/dev/null
           jq '.cross_project_required_gates=1' "$RUNNER_TEMP/runtime.json" > "$RUNNER_TEMP/escalated-runtime.json"
           bash "$evaluator" "${common[@]}" "$RUNNER_TEMP/dependency.json" "${adverse[@]}" "$RUNNER_TEMP/escalated-runtime.json" "$RUNNER_TEMP/authority-refuted.json" "$SUBJECT_SHA" authority-refuted
           jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==11 and .summary.refuted_cells==1 and .claim.reason=="OBSERVATION_AUTHORITY_ESCALATED"' "$RUNNER_TEMP/authority-refuted.json" >/dev/null
