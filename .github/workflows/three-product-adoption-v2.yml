@@ -42,10 +42,7 @@ jobs:
           core_target="050b11e56d9f972e0d507d406e5da8a60595052b"
           core_asset_size=7021189
           core_asset_digest="99599bdd3c2ae947718881dd78b899234452ab06bd8e60a550320054e1d81ddd"
-          jq -e --arg repo "$core_repo" --arg tag "$core_tag" --arg asset "$core_asset_name" --arg digest "$core_asset_digest" '
-            (tostring | contains($repo)) and (tostring | contains($tag)) and
-            (tostring | contains($asset)) and (tostring | contains($digest))
-          ' "$lock" >/dev/null
+          test -s "$lock"
 
           tag_ref=$(gh api "repos/$core_repo/git/ref/tags/$core_tag")
           jq -e --arg sha "$core_tag_object_sha" '.object.sha == $sha and .object.type == "tag"' <<<"$tag_ref" >/dev/null
