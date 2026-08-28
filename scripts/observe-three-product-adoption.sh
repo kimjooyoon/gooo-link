@@ -80,7 +80,7 @@ result=$(
     def product($id): [($k[0].products // [])[] | select(.id == $id)] | first;
     def release_product($id): [($r[0].products // [])[] | select(.id == $id)] | first;
     def activity_id($name):
-      "threeproductadoptionv2://activity/" + ($name | gsub("([a-z0-9])([A-Z])"; "\\1-\\2") | ascii_downcase);
+      "threeproductadoptionv2://activity/" + ($name | gsub("(?<lower>[a-z0-9])(?<upper>[A-Z])"; "\(.lower)-\(.upper)") | ascii_downcase);
     def activity_subject($name):
       [($g[0].nodes // [])[] |
         select(.kind == "Activity" and .namespace == "threeproductadoptionv2" and
