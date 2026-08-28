@@ -1,0 +1,35 @@
+{
+  "schema": "gooo.link.infra-user-path-observation.release-lock.v1",
+  "inputs": {
+    "core": {
+      "repository": "kimjooyoon/meta-ontology-go",
+      "tag": "v0.3.0-dev",
+      "target_sha": "5b7af263677e43354c5dc96fc2b2609b5f99b12e",
+      "asset_id": 533579198,
+      "asset_name": "gooo-linux-amd64.tar.gz",
+      "asset_size": 7036826,
+      "asset_sha256": "5056c82b1833463800123010cb6956367d9017112a37658fdc7c06de21a2ea40",
+      "archive": "tar.gz"
+    },
+    "link_baseline": {
+      "repository": "kimjooyoon/gooo-link",
+      "tag": "v0.19.0-dev",
+      "target_sha": "42f06656f0f16e4c7a60515ca449812af7fab1a6",
+      "asset_id": 533847753,
+      "asset_name": "design-user-path-observation-42f06656f0f16e4c7a60515ca449812af7fab1a6.zip",
+      "asset_size": 23517,
+      "asset_sha256": "b88810c539c635869cfbd4fc10ea12217700dcc06d1e1ef6c7b1134f39e92460",
+      "archive": "zip"
+    },
+    "infra_packet": {
+      "repository": "kimjooyoon/gooo-infra-evidence",
+      "tag": "v0.7.0-dev",
+      "target_sha": "7d44efcc7d239d2c30a55c43e426027c0cd72112",
+      "asset_id": 533859772,
+      "asset_name": "deployment-contract-packet-7d44efcc7d239d2c30a55c43e426027c0cd72112.zip",
+      "asset_size": 36071,
+      "asset_sha256": "4f91290d17e63a5c751f8a4dc12fc5b6658dad3c2d8420f3b988e4839e6ec860",
+      "archive": "zip"
+    }
+  }
+}

@@ -1,0 +1,287 @@
+name: infra-user-path-observation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.27.0
+
+      - name: Compile the Gooo observation graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/infra-observation"
+          source_file=examples/infra-user-path-observation/main.gooo
+          graph="$RUNNER_TEMP/infra-observation/link-graph.json"
+          awk '
+            $1 == "activity" {
+              if (NF != 5) exit 65
+              print ++ordinal "\t" $2 "\t" $3 "\t" $4 "\t" $5
+            }
+          ' "$source_file" > "$RUNNER_TEMP/infra-observation/activities.tsv"
+          test "$(wc -l < "$RUNNER_TEMP/infra-observation/activities.tsv")" -eq 15
+          jq -Rn '
+            [inputs | split("\t") | {
+              ordinal: .[0] | tonumber,
+              name: .[1],
+              proof_class: .[2],
+              indicator_class: .[3],
+              claim: .[4]
+            }]
+          ' < "$RUNNER_TEMP/infra-observation/activities.tsv" > "$RUNNER_TEMP/infra-observation/activities.json"
+          jq -n \
+            --slurpfile activities "$RUNNER_TEMP/infra-observation/activities.json" \
+            '{
+              schema: "gooo.meta.activity-graph.v1",
+              module: "Link.InfraUserPathObservation",
+              primitive_count: 5,
+              primitive_denominator: 30,
+              independent_consumers: 4,
+              user_verticals_before: 2,
+              activities: $activities[0]
+            }' > "$graph"
+
+      - name: Fetch and verify immutable release inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/infra-observation"
+          lock=contracts/infra-user-path-observation-release-lock-v1.json
+          download_asset() {
+            local key=$1
+            local output=$2
+            local repo asset_id expected_size expected_sha actual_size actual_sha
+            repo=$(jq -r ".inputs.$key.repository" "$lock")
+            asset_id=$(jq -r ".inputs.$key.asset_id" "$lock")
+            expected_size=$(jq -r ".inputs.$key.asset_size" "$lock")
+            expected_sha=$(jq -r ".inputs.$key.asset_sha256" "$lock")
+            curl --fail --silent --show-error --location \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/octet-stream" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/$repo/releases/assets/$asset_id" \
+              --output "$output"
+            actual_size=$(stat -c '%s' "$output")
+            actual_sha=$(sha256sum "$output" | awk '{print $1}')
+            test "$actual_size" = "$expected_size"
+            test "$actual_sha" = "$expected_sha"
+          }
+          verify_release() {
+            local key=$1
+            local repo tag target
+            repo=$(jq -r ".inputs.$key.repository" "$lock")
+            tag=$(jq -r ".inputs.$key.tag" "$lock")
+            target=$(jq -r ".inputs.$key.target_sha" "$lock")
+            test "$(curl --fail --silent --show-error \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/$repo/git/ref/tags/$tag" | jq -r '.object.sha')" = "$target"
+          }
+          verify_release core
+          verify_release link_baseline
+          verify_release infra_packet
+          download_asset core "$root/core.tar.gz"
+          download_asset link_baseline "$root/link-baseline.zip"
+          download_asset infra_packet "$root/infra-packet.zip"
+          mkdir -p "$root/core" "$root/link-raw" "$root/infra-raw" "$root/link" "$root/infra"
+          tar -xzf "$root/core.tar.gz" -C "$root/core"
+          test -n "$(find "$root/core" -type f -name gooo -print -quit)"
+          unzip -q "$root/link-baseline.zip" -d "$root/link-raw"
+          unzip -q "$root/infra-packet.zip" -d "$root/infra-raw"
+          copy_one() {
+            local source_root=$1
+            local name=$2
+            local destination=$3
+            mapfile -t matches < <(find "$source_root" -type f -name "$name" -print)
+            test "${#matches[@]}" -eq 1
+            cp "${matches[0]}" "$destination/$name"
+          }
+          copy_one "$root/link-raw" design-user-path-report.json "$root/link"
+          for name in deployment-conformance.json deployment-contract.json \
+            deployment-generation-manifest.json deployment-runbook.md deployment-missing.json \
+            deployment-drift.json deployment-handler.json deployment-authority.json \
+            deployment-runtime.json deployment-graph.json; do
+            copy_one "$root/infra-raw" "$name" "$root/infra"
+          done
+          jq -n \
+            --arg report "$(sha256sum "$root/link/design-user-path-report.json" | awk '{print $1}')" \
+            '{files: {"design-user-path-report.json": $report}}' > "$root/link/source-integrity.json"
+          jq -n \
+            --arg conformance "$(sha256sum "$root/infra/deployment-conformance.json" | awk '{print $1}')" \
+            --arg contract "$(sha256sum "$root/infra/deployment-contract.json" | awk '{print $1}')" \
+            --arg manifest "$(sha256sum "$root/infra/deployment-generation-manifest.json" | awk '{print $1}')" \
+            --arg missing "$(sha256sum "$root/infra/deployment-missing.json" | awk '{print $1}')" \
+            --arg drift "$(sha256sum "$root/infra/deployment-drift.json" | awk '{print $1}')" \
+            --arg handler "$(sha256sum "$root/infra/deployment-handler.json" | awk '{print $1}')" \
+            --arg authority "$(sha256sum "$root/infra/deployment-authority.json" | awk '{print $1}')" \
+            --arg runtime "$(sha256sum "$root/infra/deployment-runtime.json" | awk '{print $1}')" \
+            --arg graph "$(sha256sum "$root/infra/deployment-graph.json" | awk '{print $1}')" \
+            '{files: {
+              "deployment-conformance.json": $conformance,
+              "deployment-contract.json": $contract,
+              "deployment-generation-manifest.json": $manifest,
+              "deployment-missing.json": $missing,
+              "deployment-drift.json": $drift,
+              "deployment-handler.json": $handler,
+              "deployment-authority.json": $authority,
+              "deployment-runtime.json": $runtime,
+              "deployment-graph.json": $graph
+            }}' > "$root/infra/source-integrity.json"
+
+      - name: Observe normal, replay, and adverse paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/infra-observation"
+          chmod +x scripts/observe-infra-user-path.sh
+          start=$(date +%s%N)
+          /usr/bin/time -f '%M' -o "$root/peak-rss-kib.txt" \
+            scripts/observe-infra-user-path.sh \
+              "$root/link-graph.json" "$root/infra/deployment-graph.json" \
+              contracts/infra-user-path-observation-denominator-v1.json \
+              "$root/link" "$root/infra" "$root/infra-user-path-report.json" \
+              "$GITHUB_SHA" normal
+          end=$(date +%s%N)
+          printf '%s\n' "$(((end - start) / 1000000))" > "$root/wall-ms.txt"
+          scripts/observe-infra-user-path.sh \
+            "$root/link-graph.json" "$root/infra/deployment-graph.json" \
+            contracts/infra-user-path-observation-denominator-v1.json \
+            "$root/link" "$root/infra" "$root/replay-report.json" "$GITHUB_SHA" normal
+          diff -u "$root/infra-user-path-report.json" "$root/replay-report.json"
+
+          cp -a "$root/infra" "$root/infra-missing"
+          rm "$root/infra-missing/deployment-conformance.json"
+          scripts/observe-infra-user-path.sh \
+            "$root/link-graph.json" "$root/infra-missing/deployment-graph.json" \
+            contracts/infra-user-path-observation-denominator-v1.json \
+            "$root/link" "$root/infra-missing" "$root/missing-report.json" "$GITHUB_SHA" missing-conformance
+
+          jq '.primitive_count = 6' "$root/link-graph.json" > "$root/primitive-link-graph.json"
+          scripts/observe-infra-user-path.sh \
+            "$root/primitive-link-graph.json" "$root/infra/deployment-graph.json" \
+            contracts/infra-user-path-observation-denominator-v1.json \
+            "$root/link" "$root/infra" "$root/primitive-report.json" "$GITHUB_SHA" primitive-inflation
+
+          cp -a "$root/infra" "$root/infra-metric"
+          jq '.summary.generated_artifacts_observed = 2' \
+            "$root/infra-metric/deployment-conformance.json" > "$root/metric.tmp"
+          mv "$root/metric.tmp" "$root/infra-metric/deployment-conformance.json"
+          scripts/observe-infra-user-path.sh \
+            "$root/link-graph.json" "$root/infra-metric/deployment-graph.json" \
+            contracts/infra-user-path-observation-denominator-v1.json \
+            "$root/link" "$root/infra-metric" "$root/metric-report.json" "$GITHUB_SHA" metric-tamper
+
+          cp -a "$root/infra" "$root/infra-meta"
+          jq 'walk(if type == "object" and has("activities") then .activities |= map(select((.name // .activity // "") != "GenerateDeploymentPacketArtifacts")) else . end)' \
+            "$root/infra-meta/deployment-graph.json" > "$root/meta.tmp"
+          mv "$root/meta.tmp" "$root/infra-meta/deployment-graph.json"
+          scripts/observe-infra-user-path.sh \
+            "$root/link-graph.json" "$root/infra-meta/deployment-graph.json" \
+            contracts/infra-user-path-observation-denominator-v1.json \
+            "$root/link" "$root/infra-meta" "$root/meta-report.json" "$GITHUB_SHA" missing-meta-binding
+
+          cp -a "$root/infra" "$root/infra-authority"
+          jq '.execution_authority = {terraform_apply: true, deployment_execution: true}' \
+            "$root/infra-authority/deployment-contract.json" > "$root/authority.tmp"
+          mv "$root/authority.tmp" "$root/infra-authority/deployment-contract.json"
+          scripts/observe-infra-user-path.sh \
+            "$root/link-graph.json" "$root/infra-authority/deployment-graph.json" \
+            contracts/infra-user-path-observation-denominator-v1.json \
+            "$root/link" "$root/infra-authority" "$root/authority-report.json" "$GITHUB_SHA" execution-authority-escalation
+
+          jq 'del(.activities[0])' "$root/link-graph.json" > "$root/incomplete-link-graph.json"
+          if scripts/observe-infra-user-path.sh \
+            "$root/incomplete-link-graph.json" "$root/infra/deployment-graph.json" \
+            contracts/infra-user-path-observation-denominator-v1.json \
+            "$root/link" "$root/infra" "$root/invalid-report.json" "$GITHUB_SHA" normal; then
+            printf 'missing Gooo activity was accepted\n' >&2
+            exit 1
+          fi
+
+          jq -e '.resolution.state == "CLOSED" and .summary.cells_closed == 15 and .summary.user_verticals_observed == 3 and .summary.user_verticals_denominator == 3 and .summary.primitive_count == 5 and .summary.primitive_increment == 0 and .summary.cross_project_required_gates == 0' "$root/infra-user-path-report.json" >/dev/null
+          jq -e '.resolution.state == "UNKNOWN" and .summary.cells_closed == 10 and .summary.cells_unknown == 5 and .resolution.cause.stage == "PRODUCT_EVIDENCE" and .resolution.cause.step == "OBSERVE_INFRA_PACKET_CONFORMANCE" and .resolution.cause.reason == "INFRA_CONFORMANCE_REPORT_UNAVAILABLE" and .resolution.cause.unknown_class == "DIRECT_MISSING" and .resolution.cause.next_operation == "RESTORE_INFRA_CONFORMANCE_REPORT"' "$root/missing-report.json" >/dev/null
+          for report in primitive-report.json metric-report.json meta-report.json authority-report.json; do
+            jq -e '.resolution.state == "REFUTED" and .summary.cells_closed == 13 and .summary.cells_refuted == 2 and .resolution.cause.refutation_class == "DIRECT_CONTRADICTION"' "$root/$report" >/dev/null
+          done
+
+      - name: Record repository and runtime indicators
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/infra-observation"
+          mapfile -t module_roots < <(find . -type f -name go.mod -not -path './.git/*' -printf '%h\n' | sort -u)
+          for module_root in "${module_roots[@]}"; do
+            (cd "$module_root" && go fix ./...)
+          done
+          files=$(find . -type f -not -path './.git/*' -not -path './README.md' | wc -l)
+          directories=$(find . -mindepth 1 -type d -not -path './.git*' | wc -l)
+          go_files=$(find . -type f -name '*.go' -not -path './.git/*' | wc -l)
+          gooo_files=$(find . -type f -name '*.gooo' -not -path './.git/*' | wc -l)
+          go_lines=$(find . -type f -name '*.go' -not -path './.git/*' -print0 | xargs -0 -r cat | wc -l)
+          gooo_lines=$(find . -type f -name '*.gooo' -not -path './.git/*' -print0 | xargs -0 -r cat | wc -l)
+          go_version=$(go version | awk '{print $3}' | sed 's/^go//')
+          go_file_lines=$(find . -type f -name '*.go' -not -path './.git/*' -print0 | sort -z | xargs -0 -r wc -l | sed '$d' | jq -R -s 'split("\n") | map(select(length > 0) | capture("^\\s*(?<lines>[0-9]+)\\s+(?<file>.+)$") | {file: .file, lines: (.lines | tonumber)})')
+          gooo_file_lines=$(find . -type f -name '*.gooo' -not -path './.git/*' -print0 | sort -z | xargs -0 -r wc -l | sed '$d' | jq -R -s 'split("\n") | map(select(length > 0) | capture("^\\s*(?<lines>[0-9]+)\\s+(?<file>.+)$") | {file: .file, lines: (.lines | tonumber)})')
+          jq -n \
+            --arg go_version "$go_version" \
+            --argjson files "$files" --argjson directories "$directories" \
+            --argjson go_files "$go_files" --argjson gooo_files "$gooo_files" \
+            --argjson go_lines "$go_lines" --argjson gooo_lines "$gooo_lines" \
+            --argjson go_fix_roots "${#module_roots[@]}" \
+            --argjson go_file_lines "$go_file_lines" --argjson gooo_file_lines "$gooo_file_lines" \
+            '{
+              schema: "gooo.repository-inventory.v1",
+              root_readme_excluded: true,
+              files: $files,
+              directories: $directories,
+              go: {files: $go_files, physical_lines: $go_lines, per_file: $go_file_lines},
+              gooo: {files: $gooo_files, physical_lines: $gooo_lines, per_file: $gooo_file_lines},
+              toolchain: {go_version: $go_version, go_fix_module_roots: $go_fix_roots}
+            }' > "$root/repository-inventory.json"
+          jq -n \
+            --argjson peak_rss_kib "$(cat "$root/peak-rss-kib.txt")" \
+            --argjson wall_ms "$(cat "$root/wall-ms.txt")" \
+            '{schema: "gooo.link.infra-user-path-observation.runtime.v1", peak_rss_kib: $peak_rss_kib, wall_ms: $wall_ms}' \
+            > "$root/observation-runtime.json"
+
+      - name: Assemble evidence artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/infra-observation"
+          out="$root/artifact"
+          mkdir -p "$out"
+          cp "$root/infra-user-path-report.json" "$out/"
+          cp "$root/replay-report.json" "$out/"
+          cp "$root/missing-report.json" "$out/"
+          cp "$root/primitive-report.json" "$out/"
+          cp "$root/metric-report.json" "$out/"
+          cp "$root/meta-report.json" "$out/"
+          cp "$root/authority-report.json" "$out/"
+          cp "$root/link-graph.json" "$out/"
+          cp "$root/infra/deployment-graph.json" "$out/infra-deployment-graph.json"
+          cp "$root/repository-inventory.json" "$out/"
+          cp "$root/observation-runtime.json" "$out/"
+          cp contracts/infra-user-path-observation-denominator-v1.json "$out/"
+          cp contracts/infra-user-path-observation-release-lock-v1.json "$out/"
+          cp examples/infra-user-path-observation/main.gooo "$out/"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: infra-user-path-observation-${{ github.sha }}
+          path: ${{ runner.temp }}/infra-observation/artifact
+          if-no-files-found: error

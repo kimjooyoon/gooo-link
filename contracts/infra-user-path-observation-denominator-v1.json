@@ -1,0 +1,42 @@
+{
+  "schema": "gooo.link.infra-user-path-observation.denominator.v1",
+  "contract_id": "infra-user-path-observation-v1",
+  "denominator": 15,
+  "proof_classes": {
+    "FOUNDATION": 5,
+    "COHERENCE": 5,
+    "REGRESSION": 5
+  },
+  "indicator_classes": {
+    "DRIVER": 5,
+    "OUTCOME": 5,
+    "GUARDRAIL": 5
+  },
+  "activities": [
+    {"ordinal": 1, "name": "BindOptionalInfraObservation", "proof_class": "FOUNDATION", "indicator_class": "DRIVER", "claim": "OPTIONAL_AUTHORITY_BOUND"},
+    {"ordinal": 2, "name": "ObserveCoreRelease", "proof_class": "FOUNDATION", "indicator_class": "DRIVER", "claim": "CORE_RELEASE_OBSERVED"},
+    {"ordinal": 3, "name": "ObserveLinkBaselineRelease", "proof_class": "FOUNDATION", "indicator_class": "DRIVER", "claim": "LINK_BASELINE_OBSERVED"},
+    {"ordinal": 4, "name": "ObserveInfraPacketRelease", "proof_class": "FOUNDATION", "indicator_class": "DRIVER", "claim": "INFRA_PACKET_RELEASE_OBSERVED"},
+    {"ordinal": 5, "name": "ObserveInfraMetaBindings", "proof_class": "FOUNDATION", "indicator_class": "DRIVER", "claim": "INFRA_META_BINDINGS"},
+    {"ordinal": 6, "name": "ObserveInfraPacketConformance", "proof_class": "COHERENCE", "indicator_class": "OUTCOME", "claim": "INFRA_PACKET_CONFORMANCE"},
+    {"ordinal": 7, "name": "ObserveTerraformAndServiceBindings", "proof_class": "COHERENCE", "indicator_class": "OUTCOME", "claim": "TERRAFORM_SERVICE_BINDINGS"},
+    {"ordinal": 8, "name": "ObserveDeploymentGenerationManifest", "proof_class": "COHERENCE", "indicator_class": "OUTCOME", "claim": "DEPLOYMENT_GENERATION_MANIFEST"},
+    {"ordinal": 9, "name": "ObserveGeneratedDeploymentArtifacts", "proof_class": "COHERENCE", "indicator_class": "OUTCOME", "claim": "GENERATED_DEPLOYMENT_ARTIFACTS"},
+    {"ordinal": 10, "name": "RecordThirdUserVertical", "proof_class": "COHERENCE", "indicator_class": "OUTCOME", "claim": "THIRD_USER_VERTICAL"},
+    {"ordinal": 11, "name": "PreserveInfraUnknownResolution", "proof_class": "REGRESSION", "indicator_class": "GUARDRAIL", "claim": "INFRA_UNKNOWN_PRESERVED"},
+    {"ordinal": 12, "name": "PreserveInfraRefutations", "proof_class": "REGRESSION", "indicator_class": "GUARDRAIL", "claim": "INFRA_REFUTATIONS_PRESERVED"},
+    {"ordinal": 13, "name": "PreservePrimitiveBaseline", "proof_class": "REGRESSION", "indicator_class": "GUARDRAIL", "claim": "PRIMITIVE_BASELINE_PRESERVED"},
+    {"ordinal": 14, "name": "RefuseInfraExecutionAuthority", "proof_class": "REGRESSION", "indicator_class": "GUARDRAIL", "claim": "INFRA_EXECUTION_AUTHORITY_REFUSED"},
+    {"ordinal": 15, "name": "ObserveInfraObservationRuntime", "proof_class": "REGRESSION", "indicator_class": "GUARDRAIL", "claim": "OBSERVATION_RUNTIME"}
+  ],
+  "fixed_baselines": {
+    "user_verticals_before": 2,
+    "user_verticals_denominator": 3,
+    "primitive_count": 5,
+    "primitive_denominator": 30,
+    "independent_consumers": 4,
+    "cross_project_required_gates": 0,
+    "repository_writes": 0,
+    "local_tests": 0
+  }
+}
