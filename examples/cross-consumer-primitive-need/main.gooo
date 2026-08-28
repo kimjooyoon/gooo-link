@@ -1,0 +1,29 @@
+package cross_consumer_primitive_need
+namespace gooolink
+
+entity LocalLedgerRelease id "gooo://consumer/local-ledger/v0.5.0-dev"
+entity DesignEvidenceRelease id "gooo://consumer/design-evidence/v0.4.0-dev"
+entity InfraEvidenceRelease id "gooo://consumer/infra-evidence/v0.5.0-dev"
+entity CommonClaimEnvelope id "gooo://claim-resolution/common-envelope/v1"
+entity BaseClaimResolutionTuple id "gooo://claim-resolution/base-tuple/v1"
+entity ThreeStateClaimLifecycle id "gooo://claim-resolution/three-state-lifecycle/v1"
+entity UnknownProducingConsumers id "gooo://claim-resolution/unknown-producers/v1"
+entity TypedUnknownEvidenceRoles id "gooo://claim-resolution/typed-unknown-roles/v1"
+entity ClaimResolutionCompatibilityGap id "gooo://claim-resolution/compatibility-gap/v1"
+entity ObservationAuthorityBoundary id "gooo://claim-resolution/observation-authority/v1"
+entity DirectExperimentMapping id "gooo://claim-resolution/direct-experiment-mapping/v1"
+entity MinimalCoreContractOperation id "gooo://claim-resolution/minimal-core-contract-operation/v1"
+entity CrossConsumerPrimitiveNeedReport id "gooo://link/cross-consumer-primitive-need/v1"
+
+activity ObserveLocalLedgerRelease(LocalLedgerRelease) -> CrossConsumerPrimitiveNeedReport
+activity ObserveDesignEvidenceRelease(DesignEvidenceRelease) -> CrossConsumerPrimitiveNeedReport
+activity ObserveInfraEvidenceRelease(InfraEvidenceRelease) -> CrossConsumerPrimitiveNeedReport
+activity BindCommonClaimEnvelope(CommonClaimEnvelope) -> CrossConsumerPrimitiveNeedReport
+activity ObserveBaseClaimResolutionTuple(BaseClaimResolutionTuple) -> CrossConsumerPrimitiveNeedReport
+activity ObserveThreeStateClaimLifecycle(ThreeStateClaimLifecycle) -> CrossConsumerPrimitiveNeedReport
+activity CountUnknownProducingConsumers(UnknownProducingConsumers) -> CrossConsumerPrimitiveNeedReport
+activity BindTypedUnknownEvidenceRoles(TypedUnknownEvidenceRoles) -> CrossConsumerPrimitiveNeedReport
+activity ExposeClaimResolutionCompatibilityGap(ClaimResolutionCompatibilityGap) -> CrossConsumerPrimitiveNeedReport
+activity PreserveObservationAuthorityBoundary(ObservationAuthorityBoundary) -> CrossConsumerPrimitiveNeedReport
+activity RejectTitleOnlyExperimentMapping(DirectExperimentMapping) -> CrossConsumerPrimitiveNeedReport
+activity SelectMinimalCoreContractOperation(MinimalCoreContractOperation) -> CrossConsumerPrimitiveNeedReport
