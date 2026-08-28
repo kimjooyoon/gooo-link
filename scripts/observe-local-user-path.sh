@@ -53,7 +53,7 @@ validate_baseline() {
     .summary.direct_mappings==5 and .summary.mapping_denominator==30 and .summary.mapping_remaining==25 and
     .summary.independent_consumer_adoptions==4 and .summary.repository_writes==0 and
     .summary.local_tests_run==0 and .summary.cross_project_required_gates==0
-  ' "$1" >/dev/null
+  ' "$local_unknown" >/dev/null
 }
 
 validate_local_normal() {
@@ -68,7 +68,7 @@ validate_local_normal() {
     .summary.replay_comparisons_equal==9 and .summary.repository_writes==0 and
     .summary.local_tests_run==0 and .summary.cross_project_required_gates==0 and
     .authority.common_generator_authorized==false and .authority.central_orchestration_authorized==false
-  ' "$1" >/dev/null
+  ' "$local_refuted" >/dev/null
 }
 
 validate_local_unknown() {
@@ -80,7 +80,7 @@ validate_local_unknown() {
     .claim.step=="RESOLVE_UNKNOWN_READINESS_CLAIM" and
     .claim.reason=="PROJECTED_UNKNOWN_CLAIM_RECEIPT_UNAVAILABLE" and
     .claim.unknown_class=="DIRECT_MISSING" and .claim.next_operation=="RESOLVE_UNKNOWN_READINESS_CLAIM"
-  ' "$1" >/dev/null
+  ' "$local_runtime" >/dev/null
 }
 
 validate_local_refuted() {
