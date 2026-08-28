@@ -53,7 +53,7 @@ jq -S -n   --slurpfile base "$base"   --slurpfile denominator "$denominator"   -
      $x.subject.activity_occurrences==1 and
      ($x.subject.source_digest|startswith("sha256:")) and
      ($x.subject.value_program_digest|startswith("sha256:")) and
-     $x.contract.version=="claim.resolve/v1" and
+     $x.contract.version=="v1" and
      ($x.contract.base_fields|length)==6 and
      ($x.contract.states|length)==3 and
      $x.contract.unknown_class_required==true and
