@@ -99,7 +99,7 @@ jobs:
           test -n "$gooo"
           chmod +x "$gooo"
           "$gooo" check examples/generator-consumer-promotion/main.gooo > "$RUNNER_TEMP/gooo-check.json"
-          "$gooo" graph examples/generator-consumer-promotion/main.gooo > "$RUNNER_TEMP/gooo-graph.json"
+          "$gooo" graph dump examples/generator-consumer-promotion/main.gooo > "$RUNNER_TEMP/gooo-graph.json"
 
       - name: Evaluate complete and adversarial evidence
         run: |
