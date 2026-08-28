@@ -1,0 +1,29 @@
+package link
+namespace workgraphproductadoption
+
+entity WorkgraphRelease id "link://entity/workgraph-release"
+entity WorkgraphReport id "link://entity/workgraph-report"
+entity WorkgraphInventory id "link://entity/workgraph-inventory"
+entity WorkgraphRuntime id "link://entity/workgraph-runtime"
+entity WorkgraphSemanticGraph id "link://entity/workgraph-semantic-graph"
+entity WorkgraphCellSet id "link://entity/workgraph-cell-set"
+entity WorkgraphActivityBinding id "link://entity/workgraph-activity-binding"
+entity WorkspaceStructure id "link://entity/workspace-structure"
+entity WorkspaceLanguageMetrics id "link://entity/workspace-language-metrics"
+entity ClaimStateScenarios id "link://entity/claim-state-scenarios"
+entity ReadOnlyResourceEnvelope id "link://entity/read-only-resource-envelope"
+entity ProductPortfolioProgress id "link://entity/product-portfolio-progress"
+entity AdoptionDecision id "link://entity/workgraph-product-adoption-decision"
+
+activity ObserveWorkgraphRelease(WorkgraphRelease) -> AdoptionDecision
+activity LockWorkgraphReport(WorkgraphRelease) -> WorkgraphReport
+activity LockWorkgraphInventory(WorkgraphRelease) -> WorkgraphInventory
+activity LockWorkgraphRuntime(WorkgraphRelease) -> WorkgraphRuntime
+activity LockWorkgraphSemanticGraph(WorkgraphRelease) -> WorkgraphSemanticGraph
+activity ObserveWorkgraphCells(WorkgraphReport) -> WorkgraphCellSet
+activity BindWorkgraphActivities(WorkgraphSemanticGraph) -> WorkgraphActivityBinding
+activity ObserveWorkspaceStructure(WorkgraphInventory) -> WorkspaceStructure
+activity ObserveWorkspaceLanguages(WorkgraphInventory) -> WorkspaceLanguageMetrics
+activity ObserveClaimStateScenarios(WorkgraphReport) -> ClaimStateScenarios
+activity ObserveReadOnlyResources(WorkgraphRuntime) -> ReadOnlyResourceEnvelope
+activity RecordPortfolioProgress(WorkgraphCellSet) -> ProductPortfolioProgress

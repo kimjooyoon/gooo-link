@@ -1,0 +1,31 @@
+{
+  "schema": "gooo/link-workgraph-product-adoption-denominator/v1",
+  "denominator_id": "gooo.denominator.link.workgraph-product-adoption.v1",
+  "candidate_id": "gooo.product.workspace-inventory.v1",
+  "total": 12,
+  "portfolio_total": 3,
+  "proofs": [
+    {"choice":"FOUNDATION","total":4},
+    {"choice":"COHERENCE","total":4},
+    {"choice":"REGRESSION","total":4}
+  ],
+  "indicator_classes": [
+    {"class":"DRIVER","total":4},
+    {"class":"OUTCOME","total":4},
+    {"class":"GUARDRAIL","total":4}
+  ],
+  "cells": [
+    {"id":"WORKGRAPH_RELEASE_OBSERVED","activity":"ObserveWorkgraphRelease","proof_choice":"FOUNDATION","indicator_class":"DRIVER","closed_reason":"IMMUTABLE_WORKGRAPH_RELEASE_OBSERVED"},
+    {"id":"WORKGRAPH_REPORT_LOCKED","activity":"LockWorkgraphReport","proof_choice":"FOUNDATION","indicator_class":"DRIVER","closed_reason":"WORKGRAPH_PRODUCT_REPORT_LOCKED"},
+    {"id":"WORKGRAPH_INVENTORY_LOCKED","activity":"LockWorkgraphInventory","proof_choice":"FOUNDATION","indicator_class":"DRIVER","closed_reason":"WORKGRAPH_INVENTORY_LOCKED"},
+    {"id":"WORKGRAPH_RUNTIME_LOCKED","activity":"LockWorkgraphRuntime","proof_choice":"FOUNDATION","indicator_class":"GUARDRAIL","closed_reason":"WORKGRAPH_RUNTIME_LOCKED"},
+    {"id":"WORKGRAPH_SEMANTIC_GRAPH_LOCKED","activity":"LockWorkgraphSemanticGraph","proof_choice":"COHERENCE","indicator_class":"DRIVER","closed_reason":"WORKGRAPH_SEMANTIC_GRAPH_LOCKED"},
+    {"id":"WORKGRAPH_CELLS_OBSERVED","activity":"ObserveWorkgraphCells","proof_choice":"COHERENCE","indicator_class":"OUTCOME","closed_reason":"WORKGRAPH_CELLS_12_OF_12_OBSERVED"},
+    {"id":"WORKGRAPH_META_BOUND","activity":"BindWorkgraphActivities","proof_choice":"COHERENCE","indicator_class":"GUARDRAIL","closed_reason":"WORKGRAPH_ACTIVITIES_12_OF_12_BOUND"},
+    {"id":"WORKSPACE_STRUCTURE_OBSERVED","activity":"ObserveWorkspaceStructure","proof_choice":"COHERENCE","indicator_class":"OUTCOME","closed_reason":"WORKSPACE_STRUCTURE_METRICS_OBSERVED"},
+    {"id":"WORKSPACE_LANGUAGES_OBSERVED","activity":"ObserveWorkspaceLanguages","proof_choice":"REGRESSION","indicator_class":"OUTCOME","closed_reason":"WORKSPACE_LANGUAGE_METRICS_OBSERVED"},
+    {"id":"WORKGRAPH_STATES_OBSERVED","activity":"ObserveClaimStateScenarios","proof_choice":"REGRESSION","indicator_class":"GUARDRAIL","closed_reason":"WORKGRAPH_CLOSED_UNKNOWN_REFUTED_OBSERVED"},
+    {"id":"WORKGRAPH_RESOURCES_OBSERVED","activity":"ObserveReadOnlyResources","proof_choice":"REGRESSION","indicator_class":"GUARDRAIL","closed_reason":"WORKGRAPH_READ_ONLY_RESOURCES_OBSERVED"},
+    {"id":"PORTFOLIO_PROGRESS_RECORDED","activity":"RecordPortfolioProgress","proof_choice":"REGRESSION","indicator_class":"OUTCOME","closed_reason":"INDEPENDENT_PRODUCT_PROGRESS_1_OF_3_RECORDED"}
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "schema": "gooo/link-workgraph-product-release-lock/v1",
+  "repository": "kimjooyoon/gooo-workgraph",
+  "tag": "v0.2.0-dev",
+  "ref_type": "commit",
+  "tag_object_sha": "d5706ce70cf7e98b5f2fa576894284bb03dcfb15",
+  "target_commit_sha": "d5706ce70cf7e98b5f2fa576894284bb03dcfb15",
+  "asset_total": 6,
+  "assets": [
+    {"id":533615130,"name":"SHA256SUMS","size":563,"sha256":"3345fafb68345135d1c8057946ab9a7e8339996234595cc12b628552bc5d2906","role":"CHECKSUM_INDEX","consume":false},
+    {"id":533615122,"name":"workgraph-workspace-inventory-actions-evidence.tar.gz","size":7016,"sha256":"2d2da301d5debf43d3de01b26d944a83c24e5bf101825ead02a7398e22ba27d7","role":"CI_EVIDENCE_ARCHIVE","consume":false},
+    {"id":533615123,"name":"workgraph-workspace-inventory-complete.json","size":1454,"sha256":"f927a72f6494ae4036a7e4a3e12d42d37c66a8d2127a9eecf1ba4345050700ea","role":"PRODUCT_OBSERVATION","consume":true,"output":"inventory.json"},
+    {"id":533615119,"name":"workgraph-workspace-inventory-report.json","size":8829,"sha256":"a2b62a15a95da22d1a8dcc8cf145cf490793164861de220ec4fcf86d6499392a","role":"PRODUCT_REPORT","consume":true,"output":"report.json"},
+    {"id":533615120,"name":"workgraph-workspace-inventory-runtime.json","size":263,"sha256":"d536f361ea0414d99c2b5388b9b3bf3bfbdef8e8bf6d78cb098b2810608f99ae","role":"RUNTIME_OBSERVATION","consume":true,"output":"runtime.json"},
+    {"id":533615121,"name":"workgraph-workspace-inventory-semantic-graph.json","size":8197,"sha256":"bdc6eba9ad6b2cd3ef62294436268dd3df66f92fad9979421cd832af446ac338","role":"SEMANTIC_GRAPH","consume":true,"output":"semantic-graph.json"}
+  ]
+}

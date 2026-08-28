@@ -1,0 +1,204 @@
+name: Workgraph product adoption observation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workgraph-product-adoption-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  observation:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SUBJECT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SUBJECT_SHA }}
+
+      - name: Verify and download immutable Workgraph product evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          lock=contracts/workgraph-product-release-lock-v1.json
+          repository=$(jq -r .repository "$lock")
+          tag=$(jq -r .tag "$lock")
+          ref=$(gh api "repos/$repository/git/ref/tags/$tag")
+          test "$(jq -r .object.type <<<"$ref")" = "$(jq -r .ref_type "$lock")"
+          test "$(jq -r .object.sha <<<"$ref")" = "$(jq -r .tag_object_sha "$lock")"
+          test "$(jq -r .object.sha <<<"$ref")" = "$(jq -r .target_commit_sha "$lock")"
+
+          release="$RUNNER_TEMP/workgraph-release.json"
+          gh api "repos/$repository/releases/tags/$tag" > "$release"
+          test "$(jq '.assets|length' "$release")" = "$(jq -r .asset_total "$lock")"
+          while IFS=$'\t' read -r id name size digest; do
+            test "$(jq -r --arg name "$name" '.assets[]|select(.name==$name)|.id' "$release")" = "$id"
+            test "$(jq -r --arg name "$name" '.assets[]|select(.name==$name)|.size' "$release")" = "$size"
+            test "$(jq -r --arg name "$name" '.assets[]|select(.name==$name)|.digest' "$release")" = "sha256:$digest"
+          done < <(jq -r '.assets[]|[(.id|tostring),.name,(.size|tostring),.sha256]|@tsv' "$lock")
+
+          inputs="$RUNNER_TEMP/workgraph-product"
+          mkdir -p "$inputs"
+          while IFS=$'\t' read -r id output digest; do
+            gh api -H 'Accept: application/octet-stream' "repos/$repository/releases/assets/$id" > "$inputs/$output"
+            printf '%s  %s\n' "$digest" "$inputs/$output" | sha256sum -c -
+          done < <(jq -r '.assets[]|select(.consume)|[(.id|tostring),.output,.sha256]|@tsv' "$lock")
+          echo '::notice title=Workgraph product release::6/6 assets locked; 4/4 direct evidence assets downloaded'
+
+      - name: Download the released Gooo semantic compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          lock=contracts/cross-consumer-release-lock-v2.json
+          repository=$(jq -r .core.repository "$lock")
+          tag=$(jq -r .core.tag "$lock")
+          ref=$(gh api "repos/$repository/git/ref/tags/$tag")
+          test "$(jq -r .object.type <<<"$ref")" = "$(jq -r .core.ref_type "$lock")"
+          test "$(jq -r .object.sha <<<"$ref")" = "$(jq -r .core.tag_object_sha "$lock")"
+          test "$(jq -r .object.sha <<<"$ref")" = "$(jq -r .core.target_commit_sha "$lock")"
+          asset_id=$(jq -r .core.asset.id "$lock")
+          asset_name=$(jq -r .core.asset.name "$lock")
+          digest=$(jq -r .core.asset.sha256 "$lock")
+          release=$(gh api "repos/$repository/releases/tags/$tag")
+          test "$(jq -r --arg name "$asset_name" '.assets[]|select(.name==$name)|.id' <<<"$release")" = "$asset_id"
+          gh api -H 'Accept: application/octet-stream' "repos/$repository/releases/assets/$asset_id" > "$RUNNER_TEMP/gooo.tar.gz"
+          printf '%s  %s\n' "$digest" "$RUNNER_TEMP/gooo.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/core"
+          tar -xzf "$RUNNER_TEMP/gooo.tar.gz" -C "$RUNNER_TEMP/core"
+
+      - name: Bind adoption cells to released Gooo activities
+        shell: bash
+        run: |
+          set -euo pipefail
+          source=examples/workgraph-product-adoption/main.gooo
+          denominator=contracts/workgraph-product-adoption-denominator-v1.json
+          gooo="$RUNNER_TEMP/core/gooo"
+          "$gooo" check --json "$source" > "$RUNNER_TEMP/adoption-syntax.json"
+          "$gooo" check --semantic --json "$source" > "$RUNNER_TEMP/adoption-semantic.json"
+          "$gooo" graph dump "$source" > "$RUNNER_TEMP/adoption-graph.json"
+          jq -e '.status=="ok"' "$RUNNER_TEMP/adoption-syntax.json" "$RUNNER_TEMP/adoption-semantic.json" >/dev/null
+          jq -e --slurpfile denominator "$denominator" '
+            . as $graph |
+            .schema_version=="gooo-graph/v1" and
+            ([$graph.nodes[]|select(.kind=="Activity")]|length)==12 and
+            ([$denominator[0].cells[] as $cell |
+              select(([$graph.nodes[]|select(.kind=="Activity" and .name==$cell.activity)]|length)==1)
+            ]|length)==12
+          ' "$RUNNER_TEMP/adoption-graph.json" >/dev/null
+
+      - name: Observe adoption and adversarial resolution paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          inputs="$RUNNER_TEMP/workgraph-product"
+          evaluator=scripts/observe-workgraph-product-adoption.sh
+          args=(
+            "$RUNNER_TEMP/adoption-graph.json"
+            contracts/workgraph-product-adoption-denominator-v1.json
+            "$inputs/report.json"
+            "$inputs/inventory.json"
+            "$inputs/runtime.json"
+            "$inputs/semantic-graph.json"
+          )
+
+          start_ns=$(date +%s%N)
+          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/adoption-rss" \
+            bash "$evaluator" "${args[@]}" "$RUNNER_TEMP/adoption-report.json" "$SUBJECT_SHA" complete
+          end_ns=$(date +%s%N)
+          wall_ms=$(( (end_ns-start_ns)/1000000 ))
+          bash "$evaluator" "${args[@]}" "$RUNNER_TEMP/adoption-replay.json" "$SUBJECT_SHA" complete
+          cmp -s "$RUNNER_TEMP/adoption-report.json" "$RUNNER_TEMP/adoption-replay.json"
+          jq -e '
+            .decision=="WORKGRAPH_PRODUCT_ADOPTION_OBSERVED" and
+            .summary.total_cells==12 and .summary.closed_cells==12 and
+            .summary.unknown_cells==0 and .summary.refuted_cells==0 and
+            .summary.independent_products_observed==1 and .summary.independent_products_total==3 and
+            .summary.directories==7 and .summary.files==5 and
+            .summary.go_files==2 and .summary.go_lines==6 and
+            .summary.gooo_files==2 and .summary.gooo_lines==8 and
+            .summary.repository_writes==0 and .summary.local_tests_run==0 and
+            .summary.cross_project_required_gates==0 and
+            .portfolio=={central_orchestrator_authorized:false,common_generator_authorized:false,complete:false,observed:1,remaining:2,total:3} and
+            ([.proofs[]|select(.closed==4 and .total==4)]|length)==3 and
+            ([.indicator_classes[]|select(.closed==4 and .total==4)]|length)==3 and
+            .claim.next_operation=="OBSERVE_NEXT_INDEPENDENT_PRODUCT_RELEASE"
+          ' "$RUNNER_TEMP/adoption-report.json" >/dev/null
+
+          printf 'null\n' > "$RUNNER_TEMP/missing-report.json"
+          missing_args=("${args[@]:0:2}" "$RUNNER_TEMP/missing-report.json" "${args[@]:3}")
+          bash "$evaluator" "${missing_args[@]}" "$RUNNER_TEMP/adoption-unknown.json" "$SUBJECT_SHA" missing-report
+          jq -e '.decision=="WORKGRAPH_PRODUCT_ADOPTION_UNKNOWN" and .summary.closed_cells==9 and .summary.unknown_cells==3 and .claim.reason=="WORKGRAPH_PRODUCT_REPORT_UNAVAILABLE" and .claim.unknown_class=="DIRECT_MISSING"' "$RUNNER_TEMP/adoption-unknown.json" >/dev/null
+
+          jq '.summary.gooo_lines=9' "$inputs/inventory.json" > "$RUNNER_TEMP/tampered-inventory.json"
+          metric_args=("${args[@]:0:3}" "$RUNNER_TEMP/tampered-inventory.json" "${args[@]:4}")
+          bash "$evaluator" "${metric_args[@]}" "$RUNNER_TEMP/adoption-metric-refuted.json" "$SUBJECT_SHA" metric-tamper
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==11 and .summary.refuted_cells==1 and .claim.reason=="WORKGRAPH_PRODUCT_METRIC_MISMATCH"' "$RUNNER_TEMP/adoption-metric-refuted.json" >/dev/null
+
+          jq '(.nodes)|=map(select(.name!="CountGoooLines"))' "$inputs/semantic-graph.json" > "$RUNNER_TEMP/missing-product-activity.json"
+          meta_args=("${args[@]:0:5}" "$RUNNER_TEMP/missing-product-activity.json")
+          bash "$evaluator" "${meta_args[@]}" "$RUNNER_TEMP/adoption-meta-refuted.json" "$SUBJECT_SHA" missing-meta
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==11 and .summary.refuted_cells==1 and .claim.reason=="WORKGRAPH_META_BINDING_MISMATCH"' "$RUNNER_TEMP/adoption-meta-refuted.json" >/dev/null
+
+          jq '.cross_project_required_gates=1' "$inputs/runtime.json" > "$RUNNER_TEMP/escalated-runtime.json"
+          scope_args=("${args[@]:0:4}" "$RUNNER_TEMP/escalated-runtime.json" "${args[@]:5}")
+          bash "$evaluator" "${scope_args[@]}" "$RUNNER_TEMP/adoption-scope-refuted.json" "$SUBJECT_SHA" scope-escalation
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==11 and .summary.refuted_cells==1 and .claim.reason=="CROSS_PROJECT_REQUIRED_GATE_ESCALATION"' "$RUNNER_TEMP/adoption-scope-refuted.json" >/dev/null
+
+          jq -S -n \
+            --arg subject_sha "$SUBJECT_SHA" \
+            --argjson peak_rss_kib "$(cat "$RUNNER_TEMP/adoption-rss")" \
+            --argjson wall_ms "$wall_ms" '
+            {schema:"gooo/link-workgraph-product-adoption-runtime/v1",subject_sha:$subject_sha,
+              peak_rss_kib:$peak_rss_kib,wall_ms:$wall_ms,repository_writes:0,
+              local_tests_run:0,cross_project_required_gates:0}
+          ' > "$RUNNER_TEMP/adoption-runtime.json"
+
+      - name: Publish human-readable independent product progress
+        shell: bash
+        run: |
+          {
+            echo '## Workgraph independent product adoption'
+            echo
+            jq -r '
+              "- adoption cells: \(.summary.closed_cells)/\(.summary.total_cells) CLOSED",
+              "- independent product progress: \(.summary.independent_products_observed)/\(.summary.independent_products_total)",
+              "- workspace: \(.summary.directories) directories / \(.summary.files) files",
+              "- Go: \(.summary.go_files) files / \(.summary.go_lines) physical lines",
+              "- Gooo: \(.summary.gooo_files) files / \(.summary.gooo_lines) physical lines",
+              "- repository writes: \(.summary.repository_writes)",
+              "- local tests: \(.summary.local_tests_run)",
+              "- cross-project required gates: \(.summary.cross_project_required_gates)",
+              "- central orchestrator authorized: \(.portfolio.central_orchestrator_authorized)",
+              "- next operation: \(.claim.next_operation)"
+            ' "$RUNNER_TEMP/adoption-report.json"
+            jq -r '"- observer peak RSS: \(.peak_rss_kib) KiB", "- observer wall time: \(.wall_ms) ms"' "$RUNNER_TEMP/adoption-runtime.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce zero Link repository writes
+        run: test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: workgraph-product-adoption-${{ env.SUBJECT_SHA }}
+          path: |
+            ${{ runner.temp }}/workgraph-product/
+            ${{ runner.temp }}/adoption-syntax.json
+            ${{ runner.temp }}/adoption-semantic.json
+            ${{ runner.temp }}/adoption-graph.json
+            ${{ runner.temp }}/adoption-report.json
+            ${{ runner.temp }}/adoption-replay.json
+            ${{ runner.temp }}/adoption-unknown.json
+            ${{ runner.temp }}/adoption-metric-refuted.json
+            ${{ runner.temp }}/adoption-meta-refuted.json
+            ${{ runner.temp }}/adoption-scope-refuted.json
+            ${{ runner.temp }}/adoption-runtime.json
+          if-no-files-found: warn
