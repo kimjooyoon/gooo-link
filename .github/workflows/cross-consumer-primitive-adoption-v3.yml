@@ -153,8 +153,9 @@ jobs:
           bash "$evaluator" "${common[@]}" "$RUNNER_TEMP/candidate-tampered.json" "$infra_root/missing-receipt.json" \
             "$infra_root/tampered-unknown.json" "$infra_root/authority-escalation.json" "$RUNNER_TEMP/runtime.json" \
             "$RUNNER_TEMP/candidate-refuted.json" "$SUBJECT_SHA" candidate-refuted
-          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==9 and .summary.refuted_cells==3 and
-            .claim.stage=="ADOPTION" and .claim.reason=="INFRA_DIRECT_MAPPING_MISMATCH"' "$RUNNER_TEMP/candidate-refuted.json" >/dev/null
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==8 and .summary.refuted_cells==4 and
+            .claim.stage=="PRODUCT_EVIDENCE" and .claim.step=="VALIDATE_INFRA_ADOPTION_REPORT" and
+            .claim.reason=="INFRA_ADOPTION_REPORT_INVALID"' "$RUNNER_TEMP/candidate-refuted.json" >/dev/null
       - name: Publish exact human-readable indicators
         run: |
           {
