@@ -66,3 +66,19 @@ Evidence claim closed.
 - No generator is part of `gooo/link/v1`.
 
 See [the v1 RFC](docs/rfcs/link-v1.md).
+
+## Implementation queue observation
+
+The optional implementation queue observer binds the repository's open
+implementation PR count to 12 released Gooo activities. It emits an exact
+receipt for the target repository, candidate, observed cardinality, maximum,
+and next queue operation.
+
+- `0` open implementation PRs selects `SELECT_NEXT_CANDIDATE`.
+- `1` selects `MERGE_OR_CLOSE_CURRENT_IMPLEMENTATION_PR`.
+- More than `1` is REFUTED with `IMPLEMENTATION_PR_LIMIT_EXCEEDED`.
+- An unavailable GitHub snapshot remains typed UNKNOWN and lowers dependent
+  resolution instead of inventing a count.
+
+The observer is read-only, has zero cross-project required gates, and does not
+rank candidate value. See [the queue RFC](docs/rfcs/implementation-queue-v1.md).

@@ -1,0 +1,161 @@
+name: Implementation queue observation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  observation:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Bind exact subject and queue state
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "SUBJECT_SHA=${{ github.event.pull_request.head.sha || github.sha }}" >> "$GITHUB_ENV"
+          if test "${{ github.event_name }}" = "pull_request"; then
+            echo "PUBLIC_STATE=PR_CANDIDATE" >> "$GITHUB_ENV"
+            echo "EXPECTED_OPEN=1" >> "$GITHUB_ENV"
+            echo "EXPECTED_DECISION=QUEUE_CONFORMANT" >> "$GITHUB_ENV"
+            echo "EXPECTED_QUEUE_STATE=ACTIVE" >> "$GITHUB_ENV"
+            echo "EXPECTED_NEXT=MERGE_OR_CLOSE_CURRENT_IMPLEMENTATION_PR" >> "$GITHUB_ENV"
+          else
+            echo "PUBLIC_STATE=MAIN_MERGED" >> "$GITHUB_ENV"
+            echo "EXPECTED_OPEN=0" >> "$GITHUB_ENV"
+            echo "EXPECTED_DECISION=QUEUE_CLEAR" >> "$GITHUB_ENV"
+            echo "EXPECTED_QUEUE_STATE=CLEAR" >> "$GITHUB_ENV"
+            echo "EXPECTED_NEXT=SELECT_NEXT_CANDIDATE" >> "$GITHUB_ENV"
+          fi
+
+      - name: Acquire immutable released Gooo
+        shell: bash
+        run: |
+          set -euo pipefail
+          lock=contracts/core-activity-cardinality-release-lock-v1.json
+          repo=$(jq -r .repository "$lock"); tag=$(jq -r .tag "$lock"); tag_object=$(jq -r .tag_object_sha "$lock"); target=$(jq -r .target_commit_sha "$lock"); asset=$(jq -r .consumer.binary_asset "$lock"); digest=$(jq -r --arg name "$asset" '.assets[]|select(.name==$name)|.digest|sub("^sha256:";"")' "$lock")
+          gh api "repos/$repo/git/ref/tags/$tag" > "$RUNNER_TEMP/core-ref.json"
+          jq -e --arg sha "$tag_object" '.object.type=="tag" and .object.sha==$sha' "$RUNNER_TEMP/core-ref.json" >/dev/null
+          gh api "repos/$repo/git/tags/$tag_object" > "$RUNNER_TEMP/core-tag.json"
+          jq -e --arg sha "$target" '.object.type=="commit" and .object.sha==$sha' "$RUNNER_TEMP/core-tag.json" >/dev/null
+          gh api "repos/$repo/releases/tags/$tag" > "$RUNNER_TEMP/core-release.json"
+          asset_id=$(jq -r --arg name "$asset" '.assets[]|select(.name==$name)|.id' "$RUNNER_TEMP/core-release.json")
+          gh api -H 'Accept: application/octet-stream' "repos/$repo/releases/assets/$asset_id" > "$RUNNER_TEMP/$asset"
+          printf '%s  %s\n' "$digest" "$RUNNER_TEMP/$asset" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/core"
+          tar -xzf "$RUNNER_TEMP/$asset" -C "$RUNNER_TEMP/core"
+          chmod +x "$RUNNER_TEMP/core/gooo"
+
+      - name: Capture GitHub implementation PR snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          policy=contracts/implementation-queue-policy-v1.json
+          prefix=$(jq -r .classification.head_ref_prefix "$policy")
+          base=$(jq -r .classification.base_ref "$policy")
+          observed_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          set +e
+          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" > "$RUNNER_TEMP/pr-pages.jsonl"
+          api_status=$?
+          set -e
+          if test "$api_status" -eq 0; then
+            jq -s 'add//[]' "$RUNNER_TEMP/pr-pages.jsonl" > "$RUNNER_TEMP/all-open-prs.json"
+            jq -S --arg repo "$GITHUB_REPOSITORY" --arg prefix "$prefix" --arg base "$base" '
+              map({
+                number:.number,
+                target_repository:$repo,
+                candidate_id:(if (.head.ref|startswith($prefix)) then (.head.ref|ltrimstr($prefix)) else null end),
+                head_ref:.head.ref,
+                base_ref:.base.ref,
+                state:.state,
+                draft:.draft,
+                url:.html_url,
+                is_implementation:(.base.ref==$base and (.head.ref|startswith($prefix)))
+              })' "$RUNNER_TEMP/all-open-prs.json" > "$RUNNER_TEMP/normalized-prs.json"
+            digest=$(sha256sum "$RUNNER_TEMP/normalized-prs.json" | awk '{print $1}')
+            jq -S -n --arg observed_at "$observed_at" --arg repo "$GITHUB_REPOSITORY" --arg digest "$digest" --slurpfile prs "$RUNNER_TEMP/normalized-prs.json" '{schema:"gooo/link/github-pr-snapshot/v1",source:"GITHUB_PULL_REQUESTS_API",observed_at:$observed_at,target_repository:$repo,complete:true,all_open_pull_requests:($prs[0]|length),snapshot_sha256:$digest,pull_requests:$prs[0]}' > "$RUNNER_TEMP/pr-snapshot.json"
+          else
+            jq -S -n --arg observed_at "$observed_at" --arg repo "$GITHUB_REPOSITORY" --argjson status "$api_status" '{schema:"gooo/link/github-pr-snapshot/v1",source:"GITHUB_PULL_REQUESTS_API",observed_at:$observed_at,target_repository:$repo,complete:false,api_status:$status,all_open_pull_requests:0,snapshot_sha256:null,pull_requests:[],stage:"OBSERVATION",step:"OBSERVE_GITHUB_PULL_REQUEST_SNAPSHOT",reason:"GITHUB_PR_SNAPSHOT_UNAVAILABLE",unknown_class:"DIRECT_MISSING",next_operation:"REFRESH_GITHUB_PR_SNAPSHOT"}' > "$RUNNER_TEMP/pr-snapshot.json"
+          fi
+
+      - name: Resolve queue activities through released Gooo
+        shell: bash
+        run: |
+          set -euo pipefail
+          gooo="$RUNNER_TEMP/core/gooo"
+          source=examples/implementation-queue/main.gooo
+          denominator=contracts/implementation-queue-denominator-v1.json
+          "$gooo" check --json "$source" > "$RUNNER_TEMP/syntax.json"
+          "$gooo" check --semantic --json "$source" > "$RUNNER_TEMP/semantic.json"
+          "$gooo" graph dump "$source" > "$RUNNER_TEMP/graph.json"
+          jq -e '.status=="ok"' "$RUNNER_TEMP/syntax.json" "$RUNNER_TEMP/semantic.json" >/dev/null
+          jq -e '([.nodes[]|select(.kind=="Activity")]|length)==12' "$RUNNER_TEMP/graph.json" >/dev/null
+          mkdir -p "$RUNNER_TEMP/core-resolutions"
+          while IFS=$'\t' read -r ordinal activity; do
+            printf -v receipt '%s/core-resolutions/%02d-%s.json' "$RUNNER_TEMP" "$ordinal" "$activity"
+            "$gooo" graph resolve-activity "$source" --name "$activity" > "$receipt"
+            jq -e --arg activity "$activity" '.schema=="gooo/activity-cardinality-resolution/v1" and .selector.name==$activity and .decision=="CLOSED" and .occurrences==1 and .claim.state=="CLOSED"' "$receipt" >/dev/null
+          done < <(jq -r '.cells[]|[.ordinal,.activity]|@tsv' "$denominator")
+          jq -S -s '.' "$RUNNER_TEMP"/core-resolutions/*.json > "$RUNNER_TEMP/core-receipts.json"
+          jq -S -n --slurpfile lock contracts/core-activity-cardinality-release-lock-v1.json --slurpfile receipts "$RUNNER_TEMP/core-receipts.json" '($receipts[0]) as $resolved|{schema:"gooo/link/implementation-queue-core-resolution/v1",core_release:{repository:$lock[0].repository,tag:$lock[0].tag,tag_object_sha:$lock[0].tag_object_sha,target_commit_sha:$lock[0].target_commit_sha,binary_asset:$lock[0].consumer.binary_asset,binary_sha256:($lock[0].assets[]|select(.name==$lock[0].consumer.binary_asset)|.digest|sub("^sha256:";"")),resolution_schema:$lock[0].schemas.activity_cardinality_resolution},summary:{expected:12,observed:($resolved|length),closed:([$resolved[]|select(.decision=="CLOSED")]|length)},receipts:$resolved}' > "$RUNNER_TEMP/core-observation.json"
+
+      - name: Observe queue and adversarial semantics
+        shell: bash
+        run: |
+          set -euo pipefail
+          evaluator=scripts/evaluate-implementation-queue.sh
+          snapshot_repo() { find "$GITHUB_WORKSPACE" -path "$GITHUB_WORKSPACE/.git" -prune -o -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}'; }
+          before=$(snapshot_repo)
+          jq -S -n --arg subject_sha "$SUBJECT_SHA" --arg before "$before" '{schema:"gooo/link/implementation-queue-runtime/v1",subject_sha:$subject_sha,observer:{peak_rss_kib:0,wall_ms:0},repository:{before_digest:$before,after_digest:$before,writes:0},deterministic_replay:true,local_tests_run:0}' > "$RUNNER_TEMP/provisional-runtime.json"
+          start_ns=$(date +%s%N)
+          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/observer-rss" bash "$evaluator" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/core-observation.json" "$RUNNER_TEMP/pr-snapshot.json" "$RUNNER_TEMP/provisional-runtime.json" "$RUNNER_TEMP/bootstrap-report.json" "$SUBJECT_SHA" "$PUBLIC_STATE" live
+          end_ns=$(date +%s%N)
+          wall_ms=$(( (end_ns-start_ns)/1000000 ))
+          after=$(snapshot_repo)
+          if test "$before" = "$after"; then writes=0; else writes=1; fi
+          jq -S -n --arg subject_sha "$SUBJECT_SHA" --arg before "$before" --arg after "$after" --argjson writes "$writes" --argjson rss "$(cat "$RUNNER_TEMP/observer-rss")" --argjson wall "$wall_ms" '{schema:"gooo/link/implementation-queue-runtime/v1",subject_sha:$subject_sha,observer:{peak_rss_kib:$rss,wall_ms:$wall},repository:{before_digest:$before,after_digest:$after,writes:$writes},deterministic_replay:true,local_tests_run:0}' > "$RUNNER_TEMP/runtime.json"
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/core-observation.json" "$RUNNER_TEMP/pr-snapshot.json" "$RUNNER_TEMP/runtime.json" "$RUNNER_TEMP/queue-report.json" "$SUBJECT_SHA" "$PUBLIC_STATE" live
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/core-observation.json" "$RUNNER_TEMP/pr-snapshot.json" "$RUNNER_TEMP/runtime.json" "$RUNNER_TEMP/replay-report.json" "$SUBJECT_SHA" "$PUBLIC_STATE" live
+          cmp -s "$RUNNER_TEMP/queue-report.json" "$RUNNER_TEMP/replay-report.json"
+          jq -e --arg decision "$EXPECTED_DECISION" --arg state "$EXPECTED_QUEUE_STATE" --arg next "$EXPECTED_NEXT" --arg implementation "$PUBLIC_STATE" --argjson expected "$EXPECTED_OPEN" '.decision==$decision and .summary=={all_open_pull_requests:$expected,closed:12,dependency_blocked:0,direct_missing:0,maximum_open_implementation_prs:1,open_candidate_prs:$expected,open_implementation_prs:$expected,refuted:0,total:12,unknown:0} and .queue.state==$state and .queue.next_operation==$next and .receipt.open_implementation_prs==$expected and .receipt.open_candidate_prs==$expected and .implementation.state==$implementation and .implementation.effect=="READ_ONLY" and .implementation.cross_project_required_gates==0 and ([.proofs[]|select(.closed==4 and .total==4)]|length)==3 and .indicator_classes==[{class:"OUTCOME",closed:3,total:3},{class:"DRIVER",closed:5,total:5},{class:"GUARDRAIL",closed:4,total:4}] and .runtime.repository.writes==0 and .runtime.local_tests_run==0' "$RUNNER_TEMP/queue-report.json" >/dev/null
+
+          jq '.complete=false|.all_open_pull_requests=0|.snapshot_sha256=null|.pull_requests=[]|.stage="OBSERVATION"|.step="OBSERVE_GITHUB_PULL_REQUEST_SNAPSHOT"|.reason="GITHUB_PR_SNAPSHOT_UNAVAILABLE"|.unknown_class="DIRECT_MISSING"|.next_operation="REFRESH_GITHUB_PR_SNAPSHOT"' "$RUNNER_TEMP/pr-snapshot.json" > "$RUNNER_TEMP/missing-snapshot.json"
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/core-observation.json" "$RUNNER_TEMP/missing-snapshot.json" "$RUNNER_TEMP/runtime.json" "$RUNNER_TEMP/missing-report.json" "$SUBJECT_SHA" "$PUBLIC_STATE" missing-pr-snapshot
+          jq -e '.decision=="INCOMPLETE" and .summary.closed==2 and .summary.unknown==10 and .summary.direct_missing==1 and .summary.dependency_blocked==9 and .claim.stage=="OBSERVATION" and .claim.step=="OBSERVE_GITHUB_PULL_REQUEST_SNAPSHOT" and .claim.reason=="GITHUB_PR_SNAPSHOT_UNAVAILABLE" and .claim.unknown_class=="DIRECT_MISSING" and .claim.next_operation=="REFRESH_GITHUB_PR_SNAPSHOT"' "$RUNNER_TEMP/missing-report.json" >/dev/null
+
+          jq -S -n --arg repo "$GITHUB_REPOSITORY" --arg candidate "$(jq -r .candidate_id contracts/implementation-queue-policy-v1.json)" '[{number:900001,target_repository:$repo,candidate_id:$candidate,head_ref:("agent/"+$candidate),base_ref:"main",state:"open",draft:false,url:"https://example.invalid/pr/900001",is_implementation:true},{number:900002,target_repository:$repo,candidate_id:$candidate,head_ref:("agent/"+$candidate),base_ref:"main",state:"open",draft:false,url:"https://example.invalid/pr/900002",is_implementation:true}]' > "$RUNNER_TEMP/duplicate-prs.json"
+          duplicate_digest=$(sha256sum "$RUNNER_TEMP/duplicate-prs.json" | awk '{print $1}')
+          jq -S --arg digest "$duplicate_digest" --slurpfile prs "$RUNNER_TEMP/duplicate-prs.json" '.complete=true|.all_open_pull_requests=2|.snapshot_sha256=$digest|.pull_requests=$prs[0]|del(.stage,.step,.reason,.unknown_class,.next_operation)' "$RUNNER_TEMP/pr-snapshot.json" > "$RUNNER_TEMP/duplicate-snapshot.json"
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/core-observation.json" "$RUNNER_TEMP/duplicate-snapshot.json" "$RUNNER_TEMP/runtime.json" "$RUNNER_TEMP/duplicate-report.json" "$SUBJECT_SHA" "$PUBLIC_STATE" duplicate-implementation-prs
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed==6 and .summary.refuted==6 and .summary.open_implementation_prs==2 and .summary.open_candidate_prs==2 and .claim.stage=="CARDINALITY" and .claim.step=="ENFORCE_SINGLE_IMPLEMENTATION_PULL_REQUEST" and .claim.reason=="IMPLEMENTATION_PR_LIMIT_EXCEEDED" and .claim.next_operation=="REDUCE_OPEN_IMPLEMENTATION_PRS"' "$RUNNER_TEMP/duplicate-report.json" >/dev/null
+
+          jq '.receipts[0].decision="FIXED_POINT"' "$RUNNER_TEMP/core-observation.json" > "$RUNNER_TEMP/invalid-core.json"
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/invalid-core.json" "$RUNNER_TEMP/pr-snapshot.json" "$RUNNER_TEMP/runtime.json" "$RUNNER_TEMP/invalid-core-report.json" "$SUBJECT_SHA" "$PUBLIC_STATE" invalid-core-decision
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed==0 and .summary.refuted==12 and .claim.stage=="RESOLUTION" and .claim.step=="RESOLVE_ACTIVITY_CARDINALITY" and .claim.reason=="UNRECOGNIZED_CORE_ACTIVITY_RESOLUTION_DECISION"' "$RUNNER_TEMP/invalid-core-report.json" >/dev/null
+
+          { echo '## Implementation queue'; jq -r '"- decision: \(.decision)","- queue state: \(.queue.state)","- next operation: \(.queue.next_operation)","- meta cells: \(.summary.closed)/\(.summary.total)","- open implementation PRs: \(.summary.open_implementation_prs)/\(.summary.maximum_open_implementation_prs)","- open candidate PRs: \(.summary.open_candidate_prs)/1","- proofs: "+([.proofs[]|"\(.choice) \(.closed)/\(.total)"]|join(", ")),"- indicators: "+([.indicator_classes[]|"\(.class) \(.closed)/\(.total)"]|join(", ")),"- repository writes: \(.runtime.repository.writes)","- cross-project required gates: \(.implementation.cross_project_required_gates)","- local test executions: \(.runtime.local_tests_run)","- observer peak RSS: \(.runtime.observer.peak_rss_kib) KiB","- observer wall time: \(.runtime.observer.wall_ms) ms"' "$RUNNER_TEMP/queue-report.json"; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload implementation queue evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: implementation-queue-${{ github.event.pull_request.head.sha || github.sha }}
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/queue-report.json
+            ${{ runner.temp }}/replay-report.json
+            ${{ runner.temp }}/missing-report.json
+            ${{ runner.temp }}/duplicate-report.json
+            ${{ runner.temp }}/invalid-core-report.json
+            ${{ runner.temp }}/pr-snapshot.json
+            ${{ runner.temp }}/core-observation.json
+            ${{ runner.temp }}/runtime.json
+            ${{ runner.temp }}/graph.json

@@ -1,0 +1,29 @@
+package implementationqueue
+namespace implementationqueue
+
+entity ReleasedGoooIdentity id "gooo://link/queue/entity/released-gooo-identity"
+entity ImplementationQueuePolicy id "gooo://link/queue/entity/policy"
+entity GithubPullRequestSnapshot id "gooo://link/queue/entity/github-pr-snapshot"
+entity ImplementationPullRequestClassification id "gooo://link/queue/entity/pr-classification"
+entity TargetRepositoryCardinality id "gooo://link/queue/entity/target-repository-cardinality"
+entity CandidateCardinality id "gooo://link/queue/entity/candidate-cardinality"
+entity SingleImplementationPullRequestLimit id "gooo://link/queue/entity/single-pr-limit"
+entity UnknownQueueInput id "gooo://link/queue/entity/unknown-input"
+entity DuplicateImplementationPullRequests id "gooo://link/queue/entity/duplicate-prs"
+entity QueueObservationReplay id "gooo://link/queue/entity/replay"
+entity QueueReadOnlyEffect id "gooo://link/queue/entity/read-only-effect"
+entity NextImplementationQueueOperation id "gooo://link/queue/entity/next-operation"
+entity ImplementationQueueDecision id "gooo://link/queue/entity/decision"
+
+activity ObserveReleasedGoooIdentity(ReleasedGoooIdentity) -> ImplementationQueueDecision
+activity ObserveImplementationQueuePolicy(ImplementationQueuePolicy) -> ImplementationQueueDecision
+activity ObserveGithubPullRequestSnapshot(GithubPullRequestSnapshot) -> ImplementationQueueDecision
+activity ClassifyImplementationPullRequests(ImplementationPullRequestClassification) -> ImplementationQueueDecision
+activity CountTargetRepositoryImplementationPullRequests(TargetRepositoryCardinality) -> ImplementationQueueDecision
+activity CountCandidateImplementationPullRequests(CandidateCardinality) -> ImplementationQueueDecision
+activity EnforceSingleImplementationPullRequest(SingleImplementationPullRequestLimit) -> ImplementationQueueDecision
+activity PreserveUnknownQueueInput(UnknownQueueInput) -> ImplementationQueueDecision
+activity RefuteDuplicateImplementationPullRequests(DuplicateImplementationPullRequests) -> ImplementationQueueDecision
+activity VerifyQueueObservationReplay(QueueObservationReplay) -> ImplementationQueueDecision
+activity PreserveQueueReadOnlyEffect(QueueReadOnlyEffect) -> ImplementationQueueDecision
+activity SelectNextImplementationQueueOperation(NextImplementationQueueOperation) -> ImplementationQueueDecision
