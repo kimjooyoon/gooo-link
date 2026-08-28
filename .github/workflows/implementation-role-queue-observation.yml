@@ -1,0 +1,197 @@
+name: Implementation role queue observation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  observation:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.27.0
+
+      - name: Bind exact subject
+        shell: bash
+        run: echo "SUBJECT_SHA=${{ github.event.pull_request.head.sha || github.sha }}" >> "$GITHUB_ENV"
+
+      - name: Acquire immutable released Gooo
+        shell: bash
+        run: |
+          set -euo pipefail
+          lock=contracts/core-activity-cardinality-release-lock-v1.json
+          repo=$(jq -r .repository "$lock")
+          tag=$(jq -r .tag "$lock")
+          tag_object=$(jq -r .tag_object_sha "$lock")
+          target=$(jq -r .target_commit_sha "$lock")
+          asset=$(jq -r .consumer.binary_asset "$lock")
+          digest=$(jq -r --arg name "$asset" '.assets[]|select(.name==$name)|.digest|sub("^sha256:";"")' "$lock")
+          gh api "repos/$repo/git/ref/tags/$tag" > "$RUNNER_TEMP/core-ref.json"
+          jq -e --arg sha "$tag_object" '.object.type=="tag" and .object.sha==$sha' "$RUNNER_TEMP/core-ref.json" >/dev/null
+          gh api "repos/$repo/git/tags/$tag_object" > "$RUNNER_TEMP/core-tag.json"
+          jq -e --arg sha "$target" '.object.type=="commit" and .object.sha==$sha' "$RUNNER_TEMP/core-tag.json" >/dev/null
+          gh api "repos/$repo/releases/tags/$tag" > "$RUNNER_TEMP/core-release.json"
+          asset_id=$(jq -r --arg name "$asset" '.assets[]|select(.name==$name)|.id' "$RUNNER_TEMP/core-release.json")
+          gh api -H 'Accept: application/octet-stream' "repos/$repo/releases/assets/$asset_id" > "$RUNNER_TEMP/$asset"
+          printf '%s  %s\n' "$digest" "$RUNNER_TEMP/$asset" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/core"
+          tar -xzf "$RUNNER_TEMP/$asset" -C "$RUNNER_TEMP/core"
+          chmod +x "$RUNNER_TEMP/core/gooo"
+
+      - name: Capture Core pull request role snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          policy=contracts/implementation-role-queue-policy-v2.json
+          target_repo=$(jq -r .target_repository "$policy")
+          base=$(jq -r .classification.base_ref "$policy")
+          research_prefix=$(jq -r .classification.research_head_ref_prefix "$policy")
+          implementation_prefix=$(jq -r .classification.implementation_head_ref_prefix "$policy")
+          observed_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          set +e
+          gh api --paginate "repos/$target_repo/pulls?state=open&per_page=100" > "$RUNNER_TEMP/pr-pages.jsonl"
+          api_status=$?
+          set -e
+          if test "$api_status" -eq 0; then
+            jq -s 'add//[]' "$RUNNER_TEMP/pr-pages.jsonl" > "$RUNNER_TEMP/all-open-prs.json"
+            jq -S --arg base "$base" --arg research "$research_prefix" --arg implementation "$implementation_prefix" '
+              map({
+                number:.number,
+                title:.title,
+                head_ref:.head.ref,
+                base_ref:.base.ref,
+                draft:.draft,
+                url:.html_url,
+                role:(if .base.ref==$base and (.head.ref|startswith($implementation)) then "IMPLEMENTATION" elif .base.ref==$base and (.head.ref|startswith($research)) then "RESEARCH" else "OTHER" end),
+                candidate_id:(if .base.ref==$base and (.head.ref|startswith($implementation)) then (.head.ref|ltrimstr($implementation)) else null end),
+                title_only_implementation_authority:false
+              }) | sort_by(.number)
+            ' "$RUNNER_TEMP/all-open-prs.json" > "$RUNNER_TEMP/normalized-prs.json"
+            digest=$(sha256sum "$RUNNER_TEMP/normalized-prs.json" | awk '{print $1}')
+            jq -S -n --arg observed_at "$observed_at" --arg repo "$target_repo" --arg digest "$digest" --slurpfile prs "$RUNNER_TEMP/normalized-prs.json" '{schema:"gooo/link/core-pr-role-snapshot/v2",source:"GITHUB_PULL_REQUESTS_API",observed_at:$observed_at,target_repository:$repo,complete:true,all_open_pull_requests:($prs[0]|length),snapshot_sha256:$digest,pull_requests:$prs[0]}' > "$RUNNER_TEMP/core-pr-snapshot.json"
+          else
+            jq -S -n --arg observed_at "$observed_at" --arg repo "$target_repo" --argjson status "$api_status" '{schema:"gooo/link/core-pr-role-snapshot/v2",source:"GITHUB_PULL_REQUESTS_API",observed_at:$observed_at,target_repository:$repo,complete:false,api_status:$status,all_open_pull_requests:0,snapshot_sha256:null,pull_requests:[],stage:"OBSERVATION",step:"OBSERVE_CORE_PULL_REQUEST_SNAPSHOT",reason:"CORE_PR_SNAPSHOT_UNAVAILABLE",unknown_class:"DIRECT_MISSING",next_operation:"REFRESH_CORE_PR_SNAPSHOT"}' > "$RUNNER_TEMP/core-pr-snapshot.json"
+          fi
+
+      - name: Resolve role activities through released Gooo
+        shell: bash
+        run: |
+          set -euo pipefail
+          gooo="$RUNNER_TEMP/core/gooo"
+          source=examples/implementation-role-queue/main.gooo
+          denominator=contracts/implementation-role-queue-denominator-v2.json
+          "$gooo" check --json "$source" > "$RUNNER_TEMP/role-syntax.json"
+          "$gooo" check --semantic --json "$source" > "$RUNNER_TEMP/role-semantic.json"
+          "$gooo" graph dump "$source" > "$RUNNER_TEMP/role-graph.json"
+          jq -e '.status=="ok"' "$RUNNER_TEMP/role-syntax.json" "$RUNNER_TEMP/role-semantic.json" >/dev/null
+          jq -e '([.nodes[]|select(.kind=="Activity")]|length)==12' "$RUNNER_TEMP/role-graph.json" >/dev/null
+          mkdir -p "$RUNNER_TEMP/role-resolutions"
+          while IFS=$'\t' read -r ordinal activity; do
+            printf -v receipt '%s/role-resolutions/%02d-%s.json' "$RUNNER_TEMP" "$ordinal" "$activity"
+            "$gooo" graph resolve-activity "$source" --name "$activity" > "$receipt"
+            jq -e --arg activity "$activity" --arg source "$source" '.schema=="gooo/activity-cardinality-resolution/v1" and .selector.name==$activity and .subject.source_file==$source and .decision=="CLOSED" and .occurrences==1 and .claim.state=="CLOSED"' "$receipt" >/dev/null
+          done < <(jq -r '.cells[]|[.ordinal,.activity]|@tsv' "$denominator")
+          jq -S -s '.' "$RUNNER_TEMP"/role-resolutions/*.json > "$RUNNER_TEMP/role-receipts.json"
+          jq -S -n --slurpfile receipts "$RUNNER_TEMP/role-receipts.json" '($receipts[0]) as $resolved | {schema:"gooo/link/implementation-role-queue-core-resolution/v2",summary:{expected:12,observed:($resolved|length),closed:([$resolved[]|select(.decision=="CLOSED")]|length)},receipts:$resolved}' > "$RUNNER_TEMP/role-core-observation.json"
+
+          sed '/^activity ClassifyResearchPullRequests(/d' "$source" > "$RUNNER_TEMP/incomplete-role-source.gooo"
+          "$gooo" graph resolve-activity "$RUNNER_TEMP/incomplete-role-source.gooo" --name ClassifyResearchPullRequests > "$RUNNER_TEMP/missing-role-activity.json"
+          jq -e '.decision=="UNKNOWN" and .occurrences==0 and .claim.state=="UNKNOWN" and .claim.unknown_class=="DIRECT_MISSING"' "$RUNNER_TEMP/missing-role-activity.json" >/dev/null
+
+      - name: Observe live and adverse role queues
+        shell: bash
+        run: |
+          set -euo pipefail
+          evaluator=scripts/evaluate-implementation-role-queue.sh
+          snapshot_repo() { find "$GITHUB_WORKSPACE" -path "$GITHUB_WORKSPACE/.git" -prune -o -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}'; }
+          before=$(snapshot_repo)
+          jq -S -n --arg subject "$SUBJECT_SHA" --arg digest "$before" '{schema:"gooo/link/implementation-role-queue-runtime/v2",subject_sha:$subject,observer:{peak_rss_kib:0,wall_ms:0},repository:{before_digest:$digest,after_digest:$digest,writes:0},deterministic_replay:true,local_tests_run:0}' > "$RUNNER_TEMP/provisional-role-runtime.json"
+          start_ns=$(date +%s%N)
+          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/role-rss" bash "$evaluator" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/role-core-observation.json" "$RUNNER_TEMP/core-pr-snapshot.json" "$RUNNER_TEMP/provisional-role-runtime.json" "$RUNNER_TEMP/bootstrap-role-report.json" "$SUBJECT_SHA" live
+          end_ns=$(date +%s%N)
+          after=$(snapshot_repo)
+          if test "$before" = "$after"; then writes=0; else writes=1; fi
+          jq -S -n --arg subject "$SUBJECT_SHA" --arg before "$before" --arg after "$after" --argjson writes "$writes" --argjson rss "$(cat "$RUNNER_TEMP/role-rss")" --argjson wall "$(((end_ns-start_ns)/1000000))" '{schema:"gooo/link/implementation-role-queue-runtime/v2",subject_sha:$subject,observer:{peak_rss_kib:$rss,wall_ms:$wall},repository:{before_digest:$before,after_digest:$after,writes:$writes},deterministic_replay:true,local_tests_run:0}' > "$RUNNER_TEMP/role-runtime.json"
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/role-core-observation.json" "$RUNNER_TEMP/core-pr-snapshot.json" "$RUNNER_TEMP/role-runtime.json" "$RUNNER_TEMP/role-queue-report.json" "$SUBJECT_SHA" live
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/role-core-observation.json" "$RUNNER_TEMP/core-pr-snapshot.json" "$RUNNER_TEMP/role-runtime.json" "$RUNNER_TEMP/role-replay-report.json" "$SUBJECT_SHA" live
+          cmp -s "$RUNNER_TEMP/role-queue-report.json" "$RUNNER_TEMP/role-replay-report.json"
+          jq -e '.resolution.state=="CLOSED" and .summary.cells_closed==12 and .summary.cells_unknown==0 and .summary.cells_refuted==0 and .summary.partition_delta==0 and .summary.implementation_pull_requests<=1 and .summary.automatic_merge_allowed==false and .summary.repository_writes==0 and .summary.local_tests==0 and .summary.cross_project_required_gates==0 and (if .summary.implementation_pull_requests==0 then .decision=="QUEUE_CLEAR" and .queue.next_operation=="SELECT_MAPPED_RESEARCH_EXPERIMENT" else .decision=="QUEUE_ACTIVE" and .queue.next_operation=="MERGE_OR_CLOSE_SELECTED_IMPLEMENTATION_PR" end)' "$RUNNER_TEMP/role-queue-report.json" >/dev/null
+
+          jq '.complete=false | .all_open_pull_requests=0 | .snapshot_sha256=null | .pull_requests=[] | .stage="OBSERVATION" | .step="OBSERVE_CORE_PULL_REQUEST_SNAPSHOT" | .reason="CORE_PR_SNAPSHOT_UNAVAILABLE" | .unknown_class="DIRECT_MISSING" | .next_operation="REFRESH_CORE_PR_SNAPSHOT"' "$RUNNER_TEMP/core-pr-snapshot.json" > "$RUNNER_TEMP/missing-role-snapshot.json"
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/role-core-observation.json" "$RUNNER_TEMP/missing-role-snapshot.json" "$RUNNER_TEMP/role-runtime.json" "$RUNNER_TEMP/missing-role-report.json" "$SUBJECT_SHA" missing-pr-snapshot
+          jq -e '.decision=="INCOMPLETE" and .summary.cells_closed==3 and .summary.cells_unknown==9 and .summary.direct_missing==1 and .summary.dependency_blocked==8 and .resolution.cause.reason=="CORE_PR_SNAPSHOT_UNAVAILABLE" and .resolution.cause.unknown_class=="DIRECT_MISSING" and .resolution.cause.next_operation=="REFRESH_CORE_PR_SNAPSHOT"' "$RUNNER_TEMP/missing-role-report.json" >/dev/null
+
+          repo=$(jq -r .target_repository contracts/implementation-role-queue-policy-v2.json)
+          jq -S -n --arg repo "$repo" '[
+            {number:990001,title:"implementation a",head_ref:"agent/implementation-a",base_ref:"main",draft:false,url:"https://example.invalid/990001",role:"IMPLEMENTATION",candidate_id:"a",title_only_implementation_authority:false},
+            {number:990002,title:"implementation b",head_ref:"agent/implementation-b",base_ref:"main",draft:false,url:"https://example.invalid/990002",role:"IMPLEMENTATION",candidate_id:"b",title_only_implementation_authority:false}
+          ]' > "$RUNNER_TEMP/duplicate-role-prs.json"
+          duplicate_digest=$(sha256sum "$RUNNER_TEMP/duplicate-role-prs.json" | awk '{print $1}')
+          jq -S -n --arg repo "$repo" --arg digest "$duplicate_digest" --slurpfile prs "$RUNNER_TEMP/duplicate-role-prs.json" '{schema:"gooo/link/core-pr-role-snapshot/v2",source:"ADVERSE_FIXTURE",observed_at:"deterministic",target_repository:$repo,complete:true,all_open_pull_requests:2,snapshot_sha256:$digest,pull_requests:$prs[0]}' > "$RUNNER_TEMP/duplicate-role-snapshot.json"
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/role-core-observation.json" "$RUNNER_TEMP/duplicate-role-snapshot.json" "$RUNNER_TEMP/role-runtime.json" "$RUNNER_TEMP/duplicate-role-report.json" "$SUBJECT_SHA" duplicate-implementation-prs
+          jq -e '.decision=="FAIL_CLOSED" and .summary.cells_closed==10 and .summary.cells_refuted==2 and .resolution.cause.reason=="EXPLICIT_IMPLEMENTATION_PR_LIMIT_EXCEEDED" and .resolution.cause.refutation_class=="DIRECT_CONTRADICTION"' "$RUNNER_TEMP/duplicate-role-report.json" >/dev/null
+
+          jq -S -n --arg repo "$repo" '[{number:990003,title:"feat: title claims implementation",head_ref:"agent/luna-meta-title-only",base_ref:"main",draft:false,url:"https://example.invalid/990003",role:"RESEARCH",candidate_id:null,title_only_implementation_authority:true}]' > "$RUNNER_TEMP/title-role-prs.json"
+          title_digest=$(sha256sum "$RUNNER_TEMP/title-role-prs.json" | awk '{print $1}')
+          jq -S -n --arg repo "$repo" --arg digest "$title_digest" --slurpfile prs "$RUNNER_TEMP/title-role-prs.json" '{schema:"gooo/link/core-pr-role-snapshot/v2",source:"ADVERSE_FIXTURE",observed_at:"deterministic",target_repository:$repo,complete:true,all_open_pull_requests:1,snapshot_sha256:$digest,pull_requests:$prs[0]}' > "$RUNNER_TEMP/title-role-snapshot.json"
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/role-core-observation.json" "$RUNNER_TEMP/title-role-snapshot.json" "$RUNNER_TEMP/role-runtime.json" "$RUNNER_TEMP/title-role-report.json" "$SUBJECT_SHA" title-only-promotion
+          jq -e '.decision=="FAIL_CLOSED" and .summary.cells_closed==10 and .summary.cells_refuted==2 and .resolution.cause.reason=="TITLE_ONLY_IMPLEMENTATION_AUTHORITY_ESCALATED" and .resolution.cause.refutation_class=="DIRECT_CONTRADICTION"' "$RUNNER_TEMP/title-role-report.json" >/dev/null
+
+          jq '.receipts[0].decision="FIXED_POINT"' "$RUNNER_TEMP/role-core-observation.json" > "$RUNNER_TEMP/invalid-role-core.json"
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/invalid-role-core.json" "$RUNNER_TEMP/core-pr-snapshot.json" "$RUNNER_TEMP/role-runtime.json" "$RUNNER_TEMP/invalid-role-core-report.json" "$SUBJECT_SHA" invalid-core-decision
+          jq -e '.decision=="FAIL_CLOSED" and .summary.cells_closed==0 and .summary.cells_refuted==12 and .resolution.cause.reason=="UNRECOGNIZED_CORE_ACTIVITY_RESOLUTION_DECISION"' "$RUNNER_TEMP/invalid-role-core-report.json" >/dev/null
+
+          {
+            echo '## Implementation role queue'
+            jq -r '"- decision: \(.decision)","- next operation: \(.queue.next_operation)","- meta cells: \(.summary.cells_closed)/\(.summary.cells_total)","- all Core PRs: \(.summary.all_open_pull_requests)","- research PRs: \(.summary.research_pull_requests)","- explicit implementation PRs: \(.summary.implementation_pull_requests)/1","- other PRs: \(.summary.other_pull_requests)","- partition delta: \(.summary.partition_delta)","- automatic merge allowed: \(.summary.automatic_merge_allowed)","- repository writes: \(.summary.repository_writes)","- local tests: \(.summary.local_tests)","- cross-project required gates: \(.summary.cross_project_required_gates)","- peak RSS: \(.runtime.observer.peak_rss_kib) KiB","- wall time: \(.runtime.observer.wall_ms) ms"' "$RUNNER_TEMP/role-queue-report.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record repository inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t module_roots < <(find . -type f -name go.mod -not -path './.git/*' -printf '%h\n' | sort -u)
+          for module_root in "${module_roots[@]}"; do (cd "$module_root" && go fix ./...); done
+          files=$(find . -type f -not -path './.git/*' -not -path './README.md' | wc -l)
+          directories=$(find . -mindepth 1 -type d -not -path './.git*' | wc -l)
+          go_files=$(find . -type f -name '*.go' -not -path './.git/*' | wc -l)
+          gooo_files=$(find . -type f -name '*.gooo' -not -path './.git/*' | wc -l)
+          go_lines=$(find . -type f -name '*.go' -not -path './.git/*' -print0 | xargs -0 -r cat | wc -l)
+          gooo_lines=$(find . -type f -name '*.gooo' -not -path './.git/*' -print0 | xargs -0 -r cat | wc -l)
+          go_file_lines=$(find . -type f -name '*.go' -not -path './.git/*' -print0 | sort -z | xargs -0 -r -n1 wc -l | jq -R -s 'split("\n") | map(select(length>0) | capture("^\\s*(?<lines>[0-9]+)\\s+(?<file>.+)$") | {file:.file,lines:(.lines|tonumber)})')
+          gooo_file_lines=$(find . -type f -name '*.gooo' -not -path './.git/*' -print0 | sort -z | xargs -0 -r -n1 wc -l | jq -R -s 'split("\n") | map(select(length>0) | capture("^\\s*(?<lines>[0-9]+)\\s+(?<file>.+)$") | {file:.file,lines:(.lines|tonumber)})')
+          jq -n --arg go_version "$(go version | awk '{print $3}' | sed 's/^go//')" --argjson files "$files" --argjson directories "$directories" --argjson go_files "$go_files" --argjson gooo_files "$gooo_files" --argjson go_lines "$go_lines" --argjson gooo_lines "$gooo_lines" --argjson roots "${#module_roots[@]}" --argjson go_per_file "$go_file_lines" --argjson gooo_per_file "$gooo_file_lines" '{schema:"gooo.repository-inventory.v1",root_readme_excluded:true,files:$files,directories:$directories,go:{files:$go_files,physical_lines:$go_lines,per_file:$go_per_file},gooo:{files:$gooo_files,physical_lines:$gooo_lines,per_file:$gooo_per_file},toolchain:{go_version:$go_version,go_fix_module_roots:$roots}}' > "$RUNNER_TEMP/role-queue-inventory.json"
+          jq -e '(.go.per_file|length)==.go.files and ([.go.per_file[].lines]|add//0)==.go.physical_lines and (.gooo.per_file|length)==.gooo.files and ([.gooo.per_file[].lines]|add//0)==.gooo.physical_lines' "$RUNNER_TEMP/role-queue-inventory.json" >/dev/null
+
+      - name: Upload implementation role queue evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: implementation-role-queue-${{ github.event.pull_request.head.sha || github.sha }}
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/role-queue-report.json
+            ${{ runner.temp }}/role-replay-report.json
+            ${{ runner.temp }}/missing-role-report.json
+            ${{ runner.temp }}/duplicate-role-report.json
+            ${{ runner.temp }}/title-role-report.json
+            ${{ runner.temp }}/invalid-role-core-report.json
+            ${{ runner.temp }}/core-pr-snapshot.json
+            ${{ runner.temp }}/role-core-observation.json
+            ${{ runner.temp }}/role-runtime.json
+            ${{ runner.temp }}/role-queue-inventory.json
+            ${{ runner.temp }}/role-graph.json
+            ${{ runner.temp }}/missing-role-activity.json
+            contracts/implementation-role-queue-denominator-v2.json
+            contracts/implementation-role-queue-policy-v2.json
+            examples/implementation-role-queue/main.gooo

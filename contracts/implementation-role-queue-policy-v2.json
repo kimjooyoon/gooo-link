@@ -1,0 +1,34 @@
+{
+  "schema": "gooo/link/implementation-role-queue-policy/v2",
+  "target_repository": "kimjooyoon/meta-ontology-go",
+  "classification": {
+    "base_ref": "main",
+    "research_head_ref_prefix": "agent/luna-meta-",
+    "implementation_head_ref_prefix": "agent/implementation-",
+    "fallback_role": "OTHER"
+  },
+  "limits": {
+    "open_research_pull_requests": "UNBOUNDED_OBSERVATION_ONLY",
+    "open_implementation_pull_requests": 1
+  },
+  "transitions": [
+    {"ordinal": 1, "when": "IMPLEMENTATION_COUNT_GT_1", "state": "REFUTED", "operation": "REDUCE_EXPLICIT_IMPLEMENTATION_PRS"},
+    {"ordinal": 2, "when": "IMPLEMENTATION_COUNT_EQ_1", "state": "ACTIVE", "operation": "MERGE_OR_CLOSE_SELECTED_IMPLEMENTATION_PR"},
+    {"ordinal": 3, "when": "IMPLEMENTATION_COUNT_EQ_0", "state": "CLEAR", "operation": "SELECT_MAPPED_RESEARCH_EXPERIMENT"}
+  ],
+  "missing_snapshot": {
+    "stage": "OBSERVATION",
+    "step": "OBSERVE_CORE_PULL_REQUEST_SNAPSHOT",
+    "reason": "CORE_PR_SNAPSHOT_UNAVAILABLE",
+    "unknown_class": "DIRECT_MISSING",
+    "next_operation": "REFRESH_CORE_PR_SNAPSHOT"
+  },
+  "authority": {
+    "title_grants_implementation_authority": false,
+    "research_branch_grants_implementation_authority": false,
+    "automatic_merge_allowed": false,
+    "effect": "READ_ONLY",
+    "cross_project_required_gates": 0,
+    "local_tests_required": 0
+  }
+}
