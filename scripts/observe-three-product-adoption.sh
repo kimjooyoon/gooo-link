@@ -228,7 +228,7 @@ result=$(
     (graph_bindings) as $bindings |
     (causal_dependency_bindings) as $causal |
     (cells | map(direct_fact(.))) as $direct |
-    reduce cells[] as $c
+    (reduce cells[] as $c
       ([];
        . as $states |
        ($direct[] | select(.cell_id == $c.cell_id)) as $own |
@@ -243,7 +243,7 @@ result=$(
        else
          . + [$own]
        end
-      ) as $states |
+      )) as $states |
     {
       schema: "gooo/link/three-product-adoption-observation/v1",
       subject_sha: $subject_sha,
