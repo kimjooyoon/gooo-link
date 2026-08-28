@@ -19,7 +19,7 @@
   "products": [
     {
       "id": "local",
-      "repository": "kimjooyoon/gooo-local",
+      "repository": "kimjooyoon/gooo-local-ledger",
       "release_id": 378677462,
       "tag": "v0.9.0-dev",
       "tag_object_type": "commit",
