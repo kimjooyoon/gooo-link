@@ -1,0 +1,267 @@
+name: Cross-consumer primitive adoption
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cross-consumer-primitive-adoption-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SUBJECT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      SOURCE: examples/cross-consumer-primitive-adoption/main.gooo
+      DENOMINATOR: contracts/cross-consumer-primitive-adoption-denominator-v1.json
+      RELEASE_LOCK: contracts/cross-consumer-primitive-adoption-release-lock-v1.json
+      CORE_LOCK: contracts/core-release-lock-v3.json
+      EVALUATOR: scripts/observe-cross-consumer-primitive-adoption.sh
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.27.0
+          check-latest: true
+
+      - name: Observe Go 1.27 fix surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p _artifact
+          go_version=$(go env GOVERSION)
+          test "$go_version" = "go1.27.0"
+          mapfile -t modules < <(find . -name go.mod -not -path './.git/*' -printf '%h\n' | sort -u)
+          go_files=$(find . -type f -name '*.go' -not -path './.git/*' | wc -l | tr -d ' ')
+          for module in "${modules[@]}"; do
+            (cd "$module" && go fix ./...)
+          done
+          if ! git diff --quiet; then
+            echo "go fix changed tracked files" >&2
+            git diff --stat
+            exit 1
+          fi
+          jq -n \
+            --arg schema "gooo/link/go-fix-observation/v1" \
+            --arg go_version "$go_version" \
+            --argjson go_files "$go_files" \
+            --argjson go_modules "${#modules[@]}" \
+            '{schema:$schema,go_version:$go_version,go_files:$go_files,go_modules:$go_modules,go_fix_targets:$go_modules}' \
+            > _artifact/go-fix-observation.json
+
+      - name: Fetch immutable releases
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p _ci/design _ci/tool
+
+          verify_ref() {
+            local repository=$1
+            local tag=$2
+            local expected_type=$3
+            local expected_tag_sha=$4
+            local expected_target_sha=$5
+            local ref_json actual_type actual_sha actual_target
+            ref_json=$(gh api "repos/$repository/git/ref/tags/$tag")
+            actual_type=$(jq -r '.object.type' <<<"$ref_json")
+            actual_sha=$(jq -r '.object.sha' <<<"$ref_json")
+            test "$actual_type" = "$expected_type"
+            test "$actual_sha" = "$expected_tag_sha"
+            if [[ "$actual_type" == "tag" ]]; then
+              actual_target=$(gh api "repos/$repository/git/tags/$actual_sha" --jq '.object.sha')
+            else
+              actual_target=$actual_sha
+            fi
+            test "$actual_target" = "$expected_target_sha"
+          }
+
+          fetch_asset() {
+            local repository=$1
+            local asset_id=$2
+            local expected_name=$3
+            local expected_size=$4
+            local expected_sha=$5
+            local output=$6
+            local metadata actual_name actual_size actual_digest
+            metadata=$(gh api "repos/$repository/releases/assets/$asset_id")
+            actual_name=$(jq -r '.name' <<<"$metadata")
+            actual_size=$(jq -r '.size' <<<"$metadata")
+            actual_digest=$(jq -r '.digest // ""' <<<"$metadata")
+            test "$actual_name" = "$expected_name"
+            test "$actual_size" = "$expected_size"
+            test "$actual_digest" = "sha256:$expected_sha"
+            gh api -H 'Accept: application/octet-stream' "repos/$repository/releases/assets/$asset_id" > "$output"
+            test "$(sha256sum "$output" | awk '{print $1}')" = "$expected_sha"
+          }
+
+          for selector in baseline design_adoption; do
+            repository=$(jq -r ".$selector.repository" "$RELEASE_LOCK")
+            tag=$(jq -r ".$selector.tag" "$RELEASE_LOCK")
+            ref_type=$(jq -r ".$selector.ref_type" "$RELEASE_LOCK")
+            tag_sha=$(jq -r ".$selector.tag_object_sha" "$RELEASE_LOCK")
+            target_sha=$(jq -r ".$selector.target_commit_sha" "$RELEASE_LOCK")
+            verify_ref "$repository" "$tag" "$ref_type" "$tag_sha" "$target_sha"
+          done
+
+          baseline_repository=$(jq -r '.baseline.repository' "$RELEASE_LOCK")
+          fetch_asset \
+            "$baseline_repository" \
+            "$(jq -r '.baseline.asset.id' "$RELEASE_LOCK")" \
+            "$(jq -r '.baseline.asset.name' "$RELEASE_LOCK")" \
+            "$(jq -r '.baseline.asset.size' "$RELEASE_LOCK")" \
+            "$(jq -r '.baseline.asset.sha256' "$RELEASE_LOCK")" \
+            _ci/baseline.json
+
+          design_repository=$(jq -r '.design_adoption.repository' "$RELEASE_LOCK")
+          fetch_asset \
+            "$design_repository" \
+            "$(jq -r '.design_adoption.asset.id' "$RELEASE_LOCK")" \
+            "$(jq -r '.design_adoption.asset.name' "$RELEASE_LOCK")" \
+            "$(jq -r '.design_adoption.asset.size' "$RELEASE_LOCK")" \
+            "$(jq -r '.design_adoption.asset.sha256' "$RELEASE_LOCK")" \
+            _ci/design-adoption.zip
+          unzip -q _ci/design-adoption.zip -d _ci/design
+          while IFS= read -r report; do
+            test -s "_ci/design/$report"
+          done < <(jq -r '.design_adoption.required_reports[]' "$RELEASE_LOCK")
+
+          core_repository=$(jq -r '.repository' "$CORE_LOCK")
+          verify_ref \
+            "$core_repository" \
+            "$(jq -r '.tag' "$CORE_LOCK")" \
+            "$(jq -r '.ref_type' "$CORE_LOCK")" \
+            "$(jq -r '.tag_object_sha' "$CORE_LOCK")" \
+            "$(jq -r '.target_commit_sha' "$CORE_LOCK")"
+          fetch_asset \
+            "$core_repository" \
+            "$(jq -r '.asset.id' "$CORE_LOCK")" \
+            "$(jq -r '.asset.name' "$CORE_LOCK")" \
+            "$(jq -r '.asset.size' "$CORE_LOCK")" \
+            "$(jq -r '.asset.sha256' "$CORE_LOCK")" \
+            _ci/gooo.tar.gz
+          tar -xzf _ci/gooo.tar.gz -C _ci/tool
+          gooo_path=$(find _ci/tool -type f -name gooo -print -quit)
+          test -n "$gooo_path"
+          chmod +x "$gooo_path"
+          echo "GOOO=$PWD/$gooo_path" >> "$GITHUB_ENV"
+
+      - name: Compile Gooo metric graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$GOOO" check --syntax --json "$SOURCE" > _artifact/adoption-syntax.json
+          jq -e '.status == "ok"' _artifact/adoption-syntax.json >/dev/null
+          "$GOOO" check --semantic --json "$SOURCE" > _artifact/adoption-semantic.json
+          jq -e '.status == "ok"' _artifact/adoption-semantic.json >/dev/null
+          "$GOOO" graph --format json "$SOURCE" > _artifact/adoption-graph.json
+          jq -e '.schema_version == "gooo-graph/v1" or .schema == "gooo-graph/v1"' _artifact/adoption-graph.json >/dev/null
+
+      - name: Evaluate adoption and adverse paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          start_ns=$(date +%s%N)
+          /usr/bin/time -v bash "$EVALUATOR" \
+            _artifact/adoption-graph.json \
+            "$DENOMINATOR" \
+            _ci/baseline.json \
+            _ci/design/adoption-report.json \
+            _ci/design/adoption-unknown.json \
+            _ci/design/adoption-mismatch-refuted.json \
+            _ci/design/adoption-core-refuted.json \
+            _ci/design/adoption-scope-refuted.json \
+            _artifact/adoption-report.json \
+            "$SUBJECT_SHA" \
+            complete \
+            2> _artifact/adoption-time.txt
+          end_ns=$(date +%s%N)
+
+          bash "$EVALUATOR" _artifact/adoption-graph.json "$DENOMINATOR" _ci/baseline.json _ci/design/adoption-unknown.json _ci/design/adoption-unknown.json _ci/design/adoption-mismatch-refuted.json _ci/design/adoption-core-refuted.json _ci/design/adoption-scope-refuted.json _artifact/adoption-unknown.json "$SUBJECT_SHA" missing-core-receipt
+          bash "$EVALUATOR" _artifact/adoption-graph.json "$DENOMINATOR" _ci/baseline.json _ci/design/adoption-mismatch-refuted.json _ci/design/adoption-unknown.json _ci/design/adoption-mismatch-refuted.json _ci/design/adoption-core-refuted.json _ci/design/adoption-scope-refuted.json _artifact/adoption-mismatch-refuted.json "$SUBJECT_SHA" matcher-claim-tamper
+          bash "$EVALUATOR" _artifact/adoption-graph.json "$DENOMINATOR" _ci/baseline.json _ci/design/adoption-core-refuted.json _ci/design/adoption-unknown.json _ci/design/adoption-mismatch-refuted.json _ci/design/adoption-core-refuted.json _ci/design/adoption-scope-refuted.json _artifact/adoption-core-refuted.json "$SUBJECT_SHA" invalid-core-decision
+          bash "$EVALUATOR" _artifact/adoption-graph.json "$DENOMINATOR" _ci/baseline.json _ci/design/adoption-scope-refuted.json _ci/design/adoption-unknown.json _ci/design/adoption-mismatch-refuted.json _ci/design/adoption-core-refuted.json _ci/design/adoption-scope-refuted.json _artifact/adoption-scope-refuted.json "$SUBJECT_SHA" authority-escalation
+
+          jq '.candidate.direct_mappings.observed = 2 | .summary.direct_mappings = 2 | .summary.open_experiments = 28' _ci/baseline.json > _ci/baseline-tampered.json
+          bash "$EVALUATOR" _artifact/adoption-graph.json "$DENOMINATOR" _ci/baseline-tampered.json _ci/design/adoption-report.json _ci/design/adoption-unknown.json _ci/design/adoption-mismatch-refuted.json _ci/design/adoption-core-refuted.json _ci/design/adoption-scope-refuted.json _artifact/adoption-baseline-refuted.json "$SUBJECT_SHA" baseline-count-tamper
+
+          jq '.candidate.id = "gooo.primitive.unreleased.v1"' _ci/design/adoption-report.json > _ci/design-candidate-tampered.json
+          bash "$EVALUATOR" _artifact/adoption-graph.json "$DENOMINATOR" _ci/baseline.json _ci/design-candidate-tampered.json _ci/design/adoption-unknown.json _ci/design/adoption-mismatch-refuted.json _ci/design/adoption-core-refuted.json _ci/design/adoption-scope-refuted.json _artifact/adoption-candidate-refuted.json "$SUBJECT_SHA" candidate-identity-tamper
+
+          jq -e '
+            .decision == "SECOND_DIRECT_PRIMITIVE_MAPPING_OBSERVED" and
+            .claim.state == "CLOSED" and
+            .summary.closed_cells == 12 and
+            .summary.total_cells == 12 and
+            .summary.direct_mappings == 2 and
+            .summary.mapping_denominator == 30 and
+            .summary.mapping_remaining == 28 and
+            .summary.independent_consumer_adoptions == 1 and
+            .candidate.id == "gooo.primitive.claim-resolution-tuple.v1" and
+            .authority.central_orchestration_authorized == false and
+            .authority.common_generator_authorized == false
+          ' _artifact/adoption-report.json >/dev/null
+          jq -e '.claim.state == "UNKNOWN" and .claim.stage == "CORE_RECEIPT" and .claim.step == "RESOLVE_MISSING_EVIDENCE_UNKNOWN" and .claim.reason == "CORE_CLAIM_RESOLUTION_RECEIPT_UNAVAILABLE" and .claim.unknown_class == "DIRECT_MISSING"' _artifact/adoption-unknown.json >/dev/null
+          jq -e '.claim.state == "REFUTED" and .claim.reason == "MATCHER_CORE_CLAIM_MISMATCH"' _artifact/adoption-mismatch-refuted.json >/dev/null
+          jq -e '.claim.state == "REFUTED" and .claim.reason == "INVALID_CORE_CLAIM_DECISION"' _artifact/adoption-core-refuted.json >/dev/null
+          jq -e '.claim.state == "REFUTED" and .claim.reason == "CORE_REPOSITORY_WRITE_AUTHORITY_ESCALATION"' _artifact/adoption-scope-refuted.json >/dev/null
+          jq -e '.claim.state == "REFUTED" and .claim.reason == "BASELINE_DIRECT_MAPPING_COUNT_INVALID"' _artifact/adoption-baseline-refuted.json >/dev/null
+          jq -e '.claim.state == "REFUTED" and .claim.reason == "CLAIM_RESOLUTION_CANDIDATE_MISMATCH"' _artifact/adoption-candidate-refuted.json >/dev/null
+
+          peak_rss_kib=$(awk -F: '/Maximum resident set size/{gsub(/ /, "", $2); print $2}' _artifact/adoption-time.txt)
+          wall_ms=$(( (end_ns - start_ns) / 1000000 ))
+          jq -n \
+            --arg schema "gooo/link/cross-consumer-primitive-adoption-runtime/v1" \
+            --arg subject_sha "$SUBJECT_SHA" \
+            --arg go_version "$(go env GOVERSION)" \
+            --argjson peak_rss_kib "$peak_rss_kib" \
+            --argjson wall_ms "$wall_ms" \
+            '{schema:$schema,subject_sha:$subject_sha,go_version:$go_version,peak_rss_kib:$peak_rss_kib,wall_ms:$wall_ms,local_tests_run:0,repository_writes:0,cross_project_required_gates:0}' \
+            > _artifact/adoption-runtime.json
+
+      - name: Publish human-readable indicators
+        shell: bash
+        run: |
+          set -euo pipefail
+          report=_artifact/adoption-report.json
+          runtime=_artifact/adoption-runtime.json
+          {
+            echo "## Cross-consumer primitive adoption"
+            echo
+            echo "| Indicator | Exact observation |"
+            echo "| --- | ---: |"
+            echo "| Direct primitive mappings | $(jq -r '.summary.direct_mappings|tostring' "$report")/$(jq -r '.summary.mapping_denominator|tostring' "$report") |"
+            echo "| Remaining mappings | $(jq -r '.summary.mapping_remaining' "$report") |"
+            echo "| Independent consumer adoptions | $(jq -r '.summary.independent_consumer_adoptions' "$report") |"
+            echo "| Gooo metric cells | $(jq -r '.summary.closed_cells|tostring' "$report")/$(jq -r '.summary.total_cells|tostring' "$report") |"
+            echo "| Claim scenarios | $(jq -r '.summary.claim_scenarios_resolved|tostring' "$report")/$(jq -r '.summary.claim_scenarios_total|tostring' "$report") |"
+            echo "| Claim fields | $(jq -r '.summary.claim_fields_observed|tostring' "$report")/$(jq -r '.summary.claim_fields_total|tostring' "$report") |"
+            echo "| Peak RSS | $(jq -r '.peak_rss_kib' "$runtime") KiB |"
+            echo "| Wall time | $(jq -r '.wall_ms' "$runtime") ms |"
+            echo "| Local tests | 0 |"
+            echo "| Repository writes | 0 |"
+            echo "| Cross-project required gates | 0 |"
+            echo "| Common generator authorized | false |"
+            echo "| Central orchestration authorized | false |"
+            echo
+            echo "Next operation: \`$(jq -r '.claim.next_operation' "$report")\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cross-consumer-primitive-adoption-${{ env.SUBJECT_SHA }}
+          if-no-files-found: error
+          path: |
+            _artifact
+            contracts/cross-consumer-primitive-adoption-denominator-v1.json
+            contracts/cross-consumer-primitive-adoption-release-lock-v1.json
+            examples/cross-consumer-primitive-adoption/main.gooo
