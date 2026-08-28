@@ -27,12 +27,23 @@
       ]
     }
   ],
+  "core_release": {
+    "repository": "kimjooyoon/meta-ontology-go",
+    "tag": "v0.2.0-dev",
+    "tag_object_sha": "733f7b22a365606d42bf238f5c535ff12e5abf8c",
+    "target_commit_sha": "050b11e56d9f972e0d507d406e5da8a60595052b",
+    "binary_asset": "gooo-linux-amd64.tar.gz",
+    "binary_sha256": "99599bdd3c2ae947718881dd78b899234452ab06bd8e60a550320054e1d81ddd",
+    "resolution_schema": "gooo/activity-cardinality-resolution/v1"
+  },
   "selection_rule": {
     "required_consumers": 2,
     "required_complete_cells_per_consumer": 12,
     "required_promoted_patterns_per_consumer": 11,
     "required_generated_files_per_consumer": 7,
     "required_manifest_entries_per_consumer": 6,
+    "required_core_resolution_receipts": 12,
+    "required_core_resolution_state": "CLOSED",
     "candidate_id": "GOOO_CORE_ACTIVITY_CARDINALITY_RESOLUTION_V1"
   }
 }

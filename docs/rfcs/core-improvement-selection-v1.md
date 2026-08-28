@@ -11,6 +11,11 @@ have distinct domain graphs and core-lock structures:
 Only immutable `v0.2.0-dev` release assets are inputs. Current repository state
 cannot change the comparison.
 
+The selected primitive is now also consumed only from the immutable Gooo
+`v0.2.0-dev` release. Its annotated tag object is
+`733f7b22a365606d42bf238f5c535ff12e5abf8c` and its target commit is
+`050b11e56d9f972e0d507d406e5da8a60595052b`.
+
 ## Shared observations
 
 Both consumers establish exactly:
@@ -50,6 +55,25 @@ must report cardinality only; it must not infer domain dependencies.
 
 ## Completion boundary
 
-Selection status is `SELECTED_FOR_CORE_EVALUATION`, not improvement. The
-candidate remains `NOT_IMPLEMENTED` until a core PR, adversarial core CI, merge,
-release, and unchanged-denominator consumer reruns all succeed.
+The selection denominator remains exactly twelve cells. Each cell is connected
+to one compiler-produced `gooo/activity-cardinality-resolution/v1` receipt;
+the selector no longer counts Activity nodes itself. The adoption closes only
+when all of these exact quantities hold:
+
+- pinned core identities `1/1`;
+- core resolution receipts `12/12`;
+- unique Activity selectors `12/12`;
+- core decisions `12 CLOSED + 0 UNKNOWN + 0 REFUTED`;
+- selection cells `12/12 CLOSED`;
+- public consumers `2/2`.
+
+A missing core receipt lowers resolution at
+`RESOLUTION_OBSERVATION / BIND_CORE_ACTIVITY_RESOLUTION_RECEIPT` and exposes
+`DIRECT_MISSING` plus the next operation. An unrecognized decision such as
+`FIXED_POINT` is not accepted as closure; it produces `FAIL_CLOSED /
+UNRECOGNIZED_CORE_ACTIVITY_RESOLUTION_DECISION`.
+
+`ADOPTED_FROM_CORE_RELEASE / RELEASED_AND_CONSUMED` means only that the selected
+primitive completed the public cycle from consumer evidence to compiler release
+and back to this independent consumer. It does not claim language-wide
+improvement.
