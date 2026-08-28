@@ -1,0 +1,54 @@
+{
+  "schema": "gooo/link/infra-deployment-plan-consumer-release-lock/v7",
+  "link": {
+    "repository": "kimjooyoon/gooo-link",
+    "tag": "v0.24.0-dev",
+    "release_id": 378598217,
+    "target_commit_sha": "fcf5ab40a2bb8bb370ec7ba156ab2d93627b6200",
+    "prerelease": false,
+    "assets": {
+      "report": {"id":534017870,"name":"report.json","size":17015,"digest":"sha256:069a442f29a89bda33527c0647d61dc8b44b184717de6b3dacb926031438e625"}
+    }
+  },
+  "infra": {
+    "repository": "kimjooyoon/gooo-infra-evidence",
+    "tag": "v0.8.0-dev",
+    "release_id": 378605552,
+    "target_commit_sha": "29008f2cd45f5c2a2ccec8fce8f143b30c85bfa2",
+    "prerelease": true,
+    "assets": {
+      "archive": {"id":534034519,"name":"semantic-deployment-plan-29008f2cd45f5c2a2ccec8fce8f143b30c85bfa2.zip","size":39836,"digest":"sha256:6e8dba45ee1d9a8d9b55f1d923e83bbed7a92817e972046d68110675814ca71e"},
+      "packet": {"id":534034524,"name":"deployment-plan.json","size":7998,"digest":"sha256:ee4d57e826bcb4b146fea59450603cb4e5ee22878a06cef9d6e64b8a29f66458"},
+      "markdown": {"id":534034523,"name":"deployment-plan.md","size":3607,"digest":"sha256:cf181874d2e3b1a0bebd295d3723faa9bf09aa2106583174b7b22dd76079d9d0"},
+      "report": {"id":534034521,"name":"semantic-deployment-plan-evaluation.json","size":11034,"digest":"sha256:50b469b86dbd32ada1817d71da31fd68aecbf4b958131396eb3e4b0f0d64e177"},
+      "inventory": {"id":534034536,"name":"semantic-deployment-plan-inventory.json","size":1995,"digest":"sha256:1af2783af147d53184b610b109999989a6ef8333ddea49772846e6adcb0fde9f"},
+      "refuted": {"id":534034538,"name":"semantic-deployment-plan-refuted.json","size":11416,"digest":"sha256:6da667b0c06cb474fb03441efb59be9f35e3005a09147d96cfebd7364e76167b"},
+      "replay": {"id":534034540,"name":"semantic-deployment-plan-replay.json","size":148,"digest":"sha256:ed3c2f9700ec525ad4cf409017fde469ab17279c5e7f2fd5ecaa93a01ecdd72d"},
+      "runtime": {"id":534034539,"name":"semantic-deployment-plan-runtime.json","size":3088,"digest":"sha256:93a278116f2263d91344cd666f8b3b61aa7090287808d0508a8a440d318d6a69"},
+      "unknown": {"id":534034537,"name":"semantic-deployment-plan-unknown.json","size":11307,"digest":"sha256:3154c2c1e021e50e97bc3917314520557de4d16588ad726bdf8bc6ae3f3c8717"},
+      "checksums": {"id":534034526,"name":"SHA256SUMS","size":936,"digest":"sha256:1ec88344a97d87c8115a774dd34555f588ff397b78558b01d7991a9600a5c34d"}
+    }
+  },
+  "core": {
+    "repository": "kimjooyoon/meta-ontology-go",
+    "tag": "v0.4.0-dev",
+    "release_id": 378565653,
+    "target_commit_sha": "57ac9ec486bbca69e447a8eba94e0ce3cd03ced0",
+    "prerelease": true,
+    "assets": {
+      "binary": {"id":533959499,"name":"gooo-linux-amd64.tar.gz","size":7057764,"digest":"sha256:3f6f34156dc959c4ae80711ff55cfbd135023fd57df673d28247e1894bf42f48"},
+      "checksums": {"id":533959512,"name":"SHA256SUMS","size":270,"digest":"sha256:58f6882f9dc056af40e3892fbf8c4a702ff7123c2c7ff4fd4d1c26350297fe12"}
+    }
+  },
+  "authority": {
+    "primitive_mapping_increment": 0,
+    "independent_consumers_previous": 1,
+    "independent_consumer_increment": 1,
+    "independent_consumers_current": 2,
+    "cross_project_required_gates": 0,
+    "local_tests": 0,
+    "repository_writes": 0,
+    "external_utility_claimed": false
+  }
+}
+

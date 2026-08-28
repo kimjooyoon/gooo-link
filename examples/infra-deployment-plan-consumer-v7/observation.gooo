@@ -1,0 +1,41 @@
+package infradeploymentplanconsumer
+namespace infradeploymentplanconsumer
+
+entity FirstConsumerRelease id "gooo://link/release/v0.24.0-dev/first-consumer"
+entity CoreMetaToolRelease id "gooo://core/release/v0.4.0-dev/meta-tool"
+entity InfraDeploymentPlanRelease id "gooo://infra-evidence/release/v0.8.0-dev/deployment-plan"
+entity TenInfraReleaseAssets id "gooo://infra-evidence/release/v0.8.0-dev/assets/10-of-10"
+entity ProductTwelveCells id "gooo://infra-evidence/deployment-plan/cells/12-of-12"
+entity ProductSixDeploymentActivities id "gooo://infra-evidence/deployment-plan/activities/6-of-6"
+entity ProductEightDependencies id "gooo://infra-evidence/deployment-plan/dependencies/8-of-8"
+entity SecondIndependentConsumer id "gooo://claim-dependency/independent-consumers/2"
+entity ProductUtilityUnknown id "gooo://infra-evidence/deployment-plan/utility/unknown"
+entity ProductResolutionBoundaries id "gooo://infra-evidence/deployment-plan/resolution-boundaries"
+entity ConsumerMetaActivitySet id "gooo://link/infra-product-consumer/meta-activities/12"
+entity OptionalConsumerBoundary id "gooo://link/infra-product-consumer/optional-read-only"
+entity FirstConsumerObserved id "gooo://link/infra-product-consumer/cell/first-consumer"
+entity CoreMetaToolObserved id "gooo://link/infra-product-consumer/cell/core-tool"
+entity InfraReleaseObserved id "gooo://link/infra-product-consumer/cell/infra-release"
+entity InfraAssetsBound id "gooo://link/infra-product-consumer/cell/infra-assets"
+entity ProductCellsBound id "gooo://link/infra-product-consumer/cell/product-cells"
+entity ProductActivitiesBound id "gooo://link/infra-product-consumer/cell/product-activities"
+entity ProductDependenciesBound id "gooo://link/infra-product-consumer/cell/product-dependencies"
+entity IndependentConsumerRecorded id "gooo://link/infra-product-consumer/cell/independent-consumer"
+entity UtilityUnknownPreserved id "gooo://link/infra-product-consumer/cell/utility-unknown"
+entity ResolutionBoundariesPreserved id "gooo://link/infra-product-consumer/cell/resolution-boundaries"
+entity ConsumerMetaActivitiesBound id "gooo://link/infra-product-consumer/cell/meta-activities"
+entity OptionalConsumerBoundaryPreserved id "gooo://link/infra-product-consumer/cell/read-only"
+
+activity ObserveFirstConsumerRelease(FirstConsumerRelease) -> FirstConsumerObserved
+activity ObserveCoreMetaToolRelease(CoreMetaToolRelease) -> CoreMetaToolObserved
+activity ObserveInfraDeploymentPlanRelease(InfraDeploymentPlanRelease) -> InfraReleaseObserved
+activity BindTenInfraReleaseAssets(TenInfraReleaseAssets) -> InfraAssetsBound
+activity BindProductTwelveCells(ProductTwelveCells) -> ProductCellsBound
+activity BindProductSixDeploymentActivities(ProductSixDeploymentActivities) -> ProductActivitiesBound
+activity BindProductEightDependencies(ProductEightDependencies) -> ProductDependenciesBound
+activity RecordSecondIndependentConsumer(SecondIndependentConsumer) -> IndependentConsumerRecorded
+activity PreserveProductUtilityUnknown(ProductUtilityUnknown) -> UtilityUnknownPreserved
+activity PreserveProductResolutionBoundaries(ProductResolutionBoundaries) -> ResolutionBoundariesPreserved
+activity BindTwelveConsumerMetaActivities(ConsumerMetaActivitySet) -> ConsumerMetaActivitiesBound
+activity PreserveOptionalConsumerBoundary(OptionalConsumerBoundary) -> OptionalConsumerBoundaryPreserved
+
