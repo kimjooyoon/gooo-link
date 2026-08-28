@@ -1,0 +1,29 @@
+package generator_consumer_promotion
+namespace gooolink
+
+entity CoreRelease id "gooo://release/v0.2.0-dev"
+entity GeneratorRelease id "gooo://generator/release/v0.3.1-dev"
+entity LocalConsumerRelease id "gooo://consumer/local-ledger/v0.3.0-dev"
+entity DesignConsumerRelease id "gooo://consumer/design-evidence/v0.3.0-dev"
+entity ConsumerRepositorySet id "gooo://generator-consumers/repositories/v1"
+entity SharedGeneratorIdentity id "gooo://generator-consumers/shared-generator/v1"
+entity GeneratedReportContract id "gooo://generator-consumers/report-contract/v2"
+entity GeneratedProjectClosure id "gooo://generator-consumers/project-closure/v1"
+entity GeneratedFileVerification id "gooo://generator-consumers/file-verification/v1"
+entity ConsumerRuntimeSet id "gooo://generator-consumers/runtime/v1"
+entity PublicChecksumBundle id "gooo://generator-consumers/checksums/v1"
+entity GeneratorPromotionDecision id "gooo://generator-consumers/promotion-decision/v1"
+entity GeneratorPromotionReport id "gooo://generator-consumers/promotion-report/v1"
+
+activity ObserveReleasedGoooIdentity(CoreRelease) -> GeneratorPromotionReport
+activity ObserveGeneratorReleaseIdentity(GeneratorRelease) -> GeneratorPromotionReport
+activity ObserveLocalConsumerRelease(LocalConsumerRelease) -> GeneratorPromotionReport
+activity ObserveDesignConsumerRelease(DesignConsumerRelease) -> GeneratorPromotionReport
+activity BindDistinctConsumerRepositories(ConsumerRepositorySet) -> GeneratorPromotionReport
+activity BindSharedGeneratorIdentity(SharedGeneratorIdentity) -> GeneratorPromotionReport
+activity BindGeneratedReportContract(GeneratedReportContract) -> GeneratorPromotionReport
+activity ObserveGeneratedProjectClosure(GeneratedProjectClosure) -> GeneratorPromotionReport
+activity ObserveGeneratedFileVerification(GeneratedFileVerification) -> GeneratorPromotionReport
+activity ObserveDeterministicReadOnlyRuntime(ConsumerRuntimeSet) -> GeneratorPromotionReport
+activity BindPublicChecksumEvidence(PublicChecksumBundle) -> GeneratorPromotionReport
+activity SelectGeneratorPromotionOperation(GeneratorPromotionDecision) -> GeneratorPromotionReport

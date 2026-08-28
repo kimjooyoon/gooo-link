@@ -1,0 +1,193 @@
+name: Generator consumer promotion observation
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/generator-consumer-promotion.yml"
+      - "contracts/generator-consumer-promotion-denominator-v1.json"
+      - "contracts/generator-consumer-promotion-locks-v1.json"
+      - "docs/rfcs/generator-consumer-promotion-v1.md"
+      - "examples/generator-consumer-promotion/main.gooo"
+      - "scripts/evaluate-generator-consumer-promotion.go"
+      - "scripts/observe-generator-consumer-releases.sh"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/generator-consumer-promotion.yml"
+      - "contracts/generator-consumer-promotion-denominator-v1.json"
+      - "contracts/generator-consumer-promotion-locks-v1.json"
+      - "docs/rfcs/generator-consumer-promotion-v1.md"
+      - "examples/generator-consumer-promotion/main.gooo"
+      - "scripts/evaluate-generator-consumer-promotion.go"
+      - "scripts/observe-generator-consumer-releases.sh"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
+      SUBJECT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.27.0"
+          check-latest: false
+
+      - name: Require Go 1.27
+        run: test "$(go env GOVERSION)" = go1.27.0
+
+      - name: Require canonical Go formatting
+        run: |
+          gofmt -d scripts/evaluate-generator-consumer-promotion.go > "$RUNNER_TEMP/gofmt.diff"
+          if test -s "$RUNNER_TEMP/gofmt.diff"; then
+            cat "$RUNNER_TEMP/gofmt.diff"
+            exit 1
+          fi
+
+      - name: Require zero Go fix rewrites
+        run: |
+          tool_dir="$RUNNER_TEMP/generator-promotion-tool"
+          mkdir -p "$tool_dir"
+          cp scripts/evaluate-generator-consumer-promotion.go "$tool_dir/main.go"
+          cat > "$tool_dir/go.mod" <<'EOF'
+          module gooo.link/generator-promotion-observer
+
+          go 1.27
+          EOF
+          before=$(sha256sum "$tool_dir/main.go" | awk '{print $1}')
+          (cd "$tool_dir" && go fix ./...)
+          after=$(sha256sum "$tool_dir/main.go" | awk '{print $1}')
+          diff -u scripts/evaluate-generator-consumer-promotion.go "$tool_dir/main.go" > "$RUNNER_TEMP/go-fix.diff" || true
+          if test "$before" != "$after"; then
+            cat "$RUNNER_TEMP/go-fix.diff"
+            exit 1
+          fi
+          echo "TOOL_DIR=$tool_dir" >> "$GITHUB_ENV"
+
+      - name: Require zero Go vet findings and build observer
+        run: |
+          (cd "$TOOL_DIR" && go vet ./...)
+          (cd "$TOOL_DIR" && go build -trimpath -o "$RUNNER_TEMP/evaluate-generator-promotion" .)
+
+      - name: Observe immutable releases and assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_SHA: ${{ env.SUBJECT_SHA }}
+        run: |
+          before=$(git status --porcelain=v1)
+          start=$(date +%s%3N)
+          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/observer-rss.txt" \
+            bash scripts/observe-generator-consumer-releases.sh \
+              contracts/generator-consumer-promotion-locks-v1.json \
+              "$RUNNER_TEMP/release-observation.json" \
+              "$RUNNER_TEMP/releases"
+          echo $(( $(date +%s%3N) - start )) > "$RUNNER_TEMP/observer-wall.txt"
+          after=$(git status --porcelain=v1)
+          test "$before" = "$after"
+
+      - name: Bind exact Gooo meta activities
+        run: |
+          mkdir -p "$RUNNER_TEMP/gooo"
+          tar -xzf "$RUNNER_TEMP/releases/core/gooo-linux-amd64.tar.gz" -C "$RUNNER_TEMP/gooo"
+          gooo=$(find "$RUNNER_TEMP/gooo" -type f \( -name gooo -o -name gooo-linux-amd64 \) | head -n 1)
+          test -n "$gooo"
+          chmod +x "$gooo"
+          "$gooo" check examples/generator-consumer-promotion/main.gooo > "$RUNNER_TEMP/gooo-check.json"
+          "$gooo" graph dump examples/generator-consumer-promotion/main.gooo > "$RUNNER_TEMP/gooo-graph.json"
+
+      - name: Evaluate complete and adversarial evidence
+        run: |
+          evaluator="$RUNNER_TEMP/evaluate-generator-promotion"
+          denominator=contracts/generator-consumer-promotion-denominator-v1.json
+          locks=contracts/generator-consumer-promotion-locks-v1.json
+          graph="$RUNNER_TEMP/gooo-graph.json"
+          receipt="$RUNNER_TEMP/release-observation.json"
+          releases="$RUNNER_TEMP/releases"
+
+          start=$(date +%s%3N)
+          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/evaluator-rss.txt" \
+            "$evaluator" "$denominator" "$locks" "$graph" "$receipt" "$releases" "$RUNNER_TEMP/generator-promotion.json"
+          echo $(( $(date +%s%3N) - start )) > "$RUNNER_TEMP/evaluator-wall.txt"
+          "$evaluator" "$denominator" "$locks" "$graph" "$receipt" "$releases" "$RUNNER_TEMP/replay.json"
+          cmp "$RUNNER_TEMP/generator-promotion.json" "$RUNNER_TEMP/replay.json"
+          jq -e '.decision == "GENERATOR_PROMOTION_ELIGIBLE" and .summary.closed == 12 and .summary.total == 12 and .summary.unknown == 0 and .summary.refuted == 0 and .observations.independent_consumers.observed == 2 and .observations.independent_consumers.total == 2 and .observations.evidence_assets.observed == 10 and .observations.evidence_assets.total == 10 and .observations.generated_cells.observed == 24 and .observations.generated_cells.total == 24 and .observations.verification_cells.observed == 12 and .observations.verification_cells.total == 12 and .authority.cross_project_required_gates == 0' "$RUNNER_TEMP/generator-promotion.json"
+
+          cp -a "$releases" "$RUNNER_TEMP/missing-consumer-releases"
+          rm "$RUNNER_TEMP/missing-consumer-releases/design-evidence/complete-generation-report.json"
+          "$evaluator" "$denominator" "$locks" "$graph" "$receipt" "$RUNNER_TEMP/missing-consumer-releases" "$RUNNER_TEMP/missing-consumer.json"
+          jq -e '.decision == "INCOMPLETE" and .summary.closed == 3 and .summary.unknown == 9 and .summary.direct_missing == 1 and .summary.dependency_blocked == 8 and .claim.state == "UNKNOWN" and .claim.unknown_class == "DIRECT_MISSING" and .claim.reason == "GENERATOR_CONSUMER_ASSET_UNAVAILABLE"' "$RUNNER_TEMP/missing-consumer.json"
+
+          jq '(.releases[] | select(.id == "design-evidence").repository) = "kimjooyoon/gooo-local-ledger"' "$locks" > "$RUNNER_TEMP/duplicate-locks.json"
+          jq '(.releases[] | select(.id == "design-evidence").repository) = "kimjooyoon/gooo-local-ledger"' "$receipt" > "$RUNNER_TEMP/duplicate-receipt.json"
+          "$evaluator" "$denominator" "$RUNNER_TEMP/duplicate-locks.json" "$graph" "$RUNNER_TEMP/duplicate-receipt.json" "$releases" "$RUNNER_TEMP/duplicate-consumer.json"
+          jq -e '.decision == "FAIL_CLOSED" and .summary.closed == 10 and .summary.refuted == 2 and .claim.reason == "GENERATOR_CONSUMERS_NOT_INDEPENDENT"' "$RUNNER_TEMP/duplicate-consumer.json"
+
+          cp -a "$releases" "$RUNNER_TEMP/generator-mismatch-releases"
+          jq '.generator.target_commit_sha = "0000000000000000000000000000000000000000"' "$RUNNER_TEMP/generator-mismatch-releases/design-evidence/generator-core-receipt-pin-v1.json" > "$RUNNER_TEMP/mutated-pin.json"
+          mv "$RUNNER_TEMP/mutated-pin.json" "$RUNNER_TEMP/generator-mismatch-releases/design-evidence/generator-core-receipt-pin-v1.json"
+          pin_sha=$(sha256sum "$RUNNER_TEMP/generator-mismatch-releases/design-evidence/generator-core-receipt-pin-v1.json" | awk '{print $1}')
+          awk -v sha="$pin_sha" '$NF == "generator-core-receipt-pin-v1.json" {$1 = sha} {print}' "$RUNNER_TEMP/generator-mismatch-releases/design-evidence/SHA256SUMS" > "$RUNNER_TEMP/mutated-checksums"
+          mv "$RUNNER_TEMP/mutated-checksums" "$RUNNER_TEMP/generator-mismatch-releases/design-evidence/SHA256SUMS"
+          checksums_sha=$(sha256sum "$RUNNER_TEMP/generator-mismatch-releases/design-evidence/SHA256SUMS" | awk '{print $1}')
+          jq --arg pin_sha "$pin_sha" --arg checksums_sha "$checksums_sha" '(.releases[] | select(.id == "design-evidence").assets[] | select(.kind == "generator-pin").sha256) = $pin_sha | (.releases[] | select(.id == "design-evidence").assets[] | select(.kind == "checksums").sha256) = $checksums_sha' "$locks" > "$RUNNER_TEMP/generator-mismatch-locks.json"
+          jq --arg pin_sha "$pin_sha" --arg checksums_sha "$checksums_sha" '(.releases[] | select(.id == "design-evidence").assets[] | select(.kind == "generator-pin").sha256) = $pin_sha | (.releases[] | select(.id == "design-evidence").assets[] | select(.kind == "checksums").sha256) = $checksums_sha' "$receipt" > "$RUNNER_TEMP/generator-mismatch-receipt.json"
+          "$evaluator" "$denominator" "$RUNNER_TEMP/generator-mismatch-locks.json" "$graph" "$RUNNER_TEMP/generator-mismatch-receipt.json" "$RUNNER_TEMP/generator-mismatch-releases" "$RUNNER_TEMP/generator-mismatch.json"
+          jq -e '.decision == "FAIL_CLOSED" and .summary.closed == 7 and .summary.refuted == 5 and .claim.reason == "GENERATOR_RELEASE_IDENTITY_MISMATCH"' "$RUNNER_TEMP/generator-mismatch.json"
+
+          cp -a "$releases" "$RUNNER_TEMP/invalid-report-releases"
+          jq '.decision = "UNKNOWN"' "$RUNNER_TEMP/invalid-report-releases/design-evidence/complete-generation-report.json" > "$RUNNER_TEMP/mutated-report.json"
+          mv "$RUNNER_TEMP/mutated-report.json" "$RUNNER_TEMP/invalid-report-releases/design-evidence/complete-generation-report.json"
+          report_sha=$(sha256sum "$RUNNER_TEMP/invalid-report-releases/design-evidence/complete-generation-report.json" | awk '{print $1}')
+          awk -v sha="$report_sha" '$NF == "complete-generation-report.json" {$1 = sha} {print}' "$RUNNER_TEMP/invalid-report-releases/design-evidence/SHA256SUMS" > "$RUNNER_TEMP/mutated-checksums"
+          mv "$RUNNER_TEMP/mutated-checksums" "$RUNNER_TEMP/invalid-report-releases/design-evidence/SHA256SUMS"
+          checksums_sha=$(sha256sum "$RUNNER_TEMP/invalid-report-releases/design-evidence/SHA256SUMS" | awk '{print $1}')
+          jq --arg report_sha "$report_sha" --arg checksums_sha "$checksums_sha" '(.releases[] | select(.id == "design-evidence").assets[] | select(.kind == "report").sha256) = $report_sha | (.releases[] | select(.id == "design-evidence").assets[] | select(.kind == "checksums").sha256) = $checksums_sha' "$locks" > "$RUNNER_TEMP/invalid-report-locks.json"
+          jq --arg report_sha "$report_sha" --arg checksums_sha "$checksums_sha" '(.releases[] | select(.id == "design-evidence").assets[] | select(.kind == "report").sha256) = $report_sha | (.releases[] | select(.id == "design-evidence").assets[] | select(.kind == "checksums").sha256) = $checksums_sha' "$receipt" > "$RUNNER_TEMP/invalid-report-receipt.json"
+          "$evaluator" "$denominator" "$RUNNER_TEMP/invalid-report-locks.json" "$graph" "$RUNNER_TEMP/invalid-report-receipt.json" "$RUNNER_TEMP/invalid-report-releases" "$RUNNER_TEMP/invalid-report.json"
+          jq -e '.decision == "FAIL_CLOSED" and .summary.closed == 10 and .summary.refuted == 2 and .claim.reason == "GENERATOR_CONSUMER_REPORT_INVALID"' "$RUNNER_TEMP/invalid-report.json"
+
+      - name: Record exact runtime indicators
+        run: |
+          jq -n \
+            --arg subject_sha "$SUBJECT_SHA" \
+            --arg go_version "$(go env GOVERSION)" \
+            --argjson observer_peak_rss_kib "$(cat "$RUNNER_TEMP/observer-rss.txt")" \
+            --argjson observer_wall_ms "$(cat "$RUNNER_TEMP/observer-wall.txt")" \
+            --argjson evaluator_peak_rss_kib "$(cat "$RUNNER_TEMP/evaluator-rss.txt")" \
+            --argjson evaluator_wall_ms "$(cat "$RUNNER_TEMP/evaluator-wall.txt")" \
+            '{schema: "gooo/link/generator-consumer-promotion-runtime/v1", subject_sha: $subject_sha, go_version: $go_version, gofmt_changes: 0, go_fix_changes: 0, go_vet_findings: 0, local_tests_run: 0, repository_writes: 0, observer: {peak_rss_kib: $observer_peak_rss_kib, wall_ms: $observer_wall_ms}, evaluator: {peak_rss_kib: $evaluator_peak_rss_kib, wall_ms: $evaluator_wall_ms}}' > "$RUNNER_TEMP/runtime.json"
+
+      - name: Publish human-readable exact indicators
+        run: |
+          {
+            echo '## Generator external-consumer promotion'
+            echo
+            jq -r '"- decision: \(.decision)","- cells: \(.summary.closed)/\(.summary.total) CLOSED; UNKNOWN \(.summary.unknown); REFUTED \(.summary.refuted)","- proofs: " + ([.proofs[] | "\(.choice) \(.closed)/\(.total)"] | join(", ")),"- indicator classes: " + ([.indicator_classes[] | "\(.class) \(.closed)/\(.total)"] | join(", ")),"- independent consumers: \(.observations.independent_consumers.observed)/\(.observations.independent_consumers.total)","- public evidence assets: \(.observations.evidence_assets.observed)/\(.observations.evidence_assets.total)","- generated cells: \(.observations.generated_cells.observed)/\(.observations.generated_cells.total)","- verification cells: \(.observations.verification_cells.observed)/\(.observations.verification_cells.total)","- generator: \(.observations.generator_tag)","- cross-project required gates: \(.authority.cross_project_required_gates)","- current branch inputs: \(.authority.current_branch_inputs)"' "$RUNNER_TEMP/generator-promotion.json"
+            jq -sr '"- missing consumer: CLOSED \(.[0].summary.closed), UNKNOWN \(.[0].summary.unknown), direct \(.[0].summary.direct_missing), dependency \(.[0].summary.dependency_blocked), \(.[0].claim.reason)","- duplicate consumer: CLOSED \(.[1].summary.closed), REFUTED \(.[1].summary.refuted), \(.[1].claim.reason)","- generator mismatch: CLOSED \(.[2].summary.closed), REFUTED \(.[2].summary.refuted), \(.[2].claim.reason)","- invalid report: CLOSED \(.[3].summary.closed), REFUTED \(.[3].summary.refuted), \(.[3].claim.reason)"' "$RUNNER_TEMP/missing-consumer.json" "$RUNNER_TEMP/duplicate-consumer.json" "$RUNNER_TEMP/generator-mismatch.json" "$RUNNER_TEMP/invalid-report.json"
+            jq -r '"- Go toolchain: \(.go_version)","- gofmt/fix/vet findings: \(.gofmt_changes)/\(.go_fix_changes)/\(.go_vet_findings)","- observer: \(.observer.peak_rss_kib) KiB / \(.observer.wall_ms) ms","- evaluator: \(.evaluator.peak_rss_kib) KiB / \(.evaluator.wall_ms) ms","- repository writes: \(.repository_writes)","- local test executions: \(.local_tests_run)"' "$RUNNER_TEMP/runtime.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce zero repository writes
+        run: test -z "$(git status --porcelain=v1)"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: generator-consumer-promotion-${{ env.SUBJECT_SHA }}
+          path: |
+            ${{ runner.temp }}/generator-promotion.json
+            ${{ runner.temp }}/missing-consumer.json
+            ${{ runner.temp }}/duplicate-consumer.json
+            ${{ runner.temp }}/generator-mismatch.json
+            ${{ runner.temp }}/invalid-report.json
+            ${{ runner.temp }}/release-observation.json
+            ${{ runner.temp }}/gooo-check.json
+            ${{ runner.temp }}/gooo-graph.json
+            ${{ runner.temp }}/runtime.json
+            ${{ runner.temp }}/gofmt.diff
+            ${{ runner.temp }}/go-fix.diff

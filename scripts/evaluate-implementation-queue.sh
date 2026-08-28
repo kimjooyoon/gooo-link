@@ -26,6 +26,7 @@ jq -S -n \
   --slurpfile runtime "$runtime" \
   --arg subject_sha "$subject_sha" \
   --arg public_state "$public_state" \
+  --arg active_candidate_id "${ACTIVE_CANDIDATE_ID:-}" \
   --arg scenario "$scenario" '
   $denominator[0] as $d |
   $policy[0] as $p |
@@ -33,6 +34,7 @@ jq -S -n \
   $core[0] as $c |
   $snapshot[0] as $s |
   $runtime[0] as $r |
+  (if ($active_candidate_id|length)>0 then $active_candidate_id else $p.candidate_id end) as $candidate_id |
   def strip: del(.closed_reason,.unknown_reason,.refuted_reason,.restore_operation);
   def closed_fact: {state:"CLOSED",reason:"FACT_OBSERVED",next_operation:"NONE",unknown_class:null,resolution:"EXACT",blocked_by:[]};
   def unknown_fact($reason;$next;$class): {state:"UNKNOWN",reason:$reason,next_operation:$next,unknown_class:$class,resolution:"PREREQUISITE_CLASS",blocked_by:[]};
@@ -70,7 +72,7 @@ jq -S -n \
   ($s.pull_requests//[]) as $all_prs |
   [$all_prs[]|select(.is_implementation==true)] as $implementation_prs |
   [$implementation_prs[]|select(.target_repository==$p.target_repository)] as $target_prs |
-  [$target_prs[]|select(.candidate_id==$p.candidate_id)] as $candidate_prs |
+  [$target_prs[]|select(.candidate_id==$candidate_id)] as $candidate_prs |
   ($target_prs|length) as $target_count |
   ($candidate_prs|length) as $candidate_count |
   (all($all_prs[]; (.number|type)=="number" and (.target_repository|type)=="string" and (.head_ref|type)=="string" and (.base_ref|type)=="string" and (.is_implementation|type)=="boolean" and (if .is_implementation then (.candidate_id|type)=="string" and (.candidate_id|length)>0 else true end))) as $classification_valid |
@@ -136,8 +138,8 @@ jq -S -n \
     decision:$decision,
     claim:(if $first!=null then {state:$first.state,stage:$first.stage,step:$first.step,reason:$first.reason,next_operation:$first.next_operation,unknown_class:$first.unknown_class,blocked_by:$first.blocked_by} else {state:"CLOSED",stage:null,step:null,reason:(if $target_count==0 then "IMPLEMENTATION_QUEUE_CLEAR" else "IMPLEMENTATION_QUEUE_CONFORMANT" end),next_operation:$next_operation,unknown_class:null,blocked_by:[]} end),
     summary:{total:12,closed:$closed,unknown:$unknown,refuted:$refuted,direct_missing:$direct_missing,dependency_blocked:$dependency_blocked,all_open_pull_requests:($s.all_open_pull_requests//0),open_implementation_prs:$target_count,open_candidate_prs:$candidate_count,maximum_open_implementation_prs:$p.limits.open_implementation_prs_per_target_repository},
-    queue:{state:$queue_state,next_operation:$next_operation,target_repository:$p.target_repository,candidate_id:$p.candidate_id},
-    receipt:{observed_at:($s.observed_at//null),target_repository:$p.target_repository,candidate_id:$p.candidate_id,open_implementation_prs:$target_count,open_candidate_prs:$candidate_count,maximum_open_implementation_prs:$p.limits.open_implementation_prs_per_target_repository,next_operation:$next_operation,snapshot_sha256:($s.snapshot_sha256//null)},
+    queue:{state:$queue_state,next_operation:$next_operation,target_repository:$p.target_repository,candidate_id:$candidate_id},
+    receipt:{observed_at:($s.observed_at//null),target_repository:$p.target_repository,candidate_id:$candidate_id,open_implementation_prs:$target_count,open_candidate_prs:$candidate_count,maximum_open_implementation_prs:$p.limits.open_implementation_prs_per_target_repository,next_operation:$next_operation,snapshot_sha256:($s.snapshot_sha256//null)},
     implementation:{state:$public_state,effect:"READ_ONLY",cross_project_required_gates:$p.authority.cross_project_required_gates},
     proofs:[$d.proof_totals[] as $proof|{choice:$proof.proof_choice,closed:([$evaluation.cells[]|select(.proof_choice==$proof.proof_choice and .state=="CLOSED")]|length),total:$proof.total}],
     indicator_classes:[$d.indicator_totals[] as $indicator|{class:$indicator.indicator_class,closed:([$evaluation.cells[]|select(.indicator_class==$indicator.indicator_class and .state=="CLOSED")]|length),total:$indicator.total}],

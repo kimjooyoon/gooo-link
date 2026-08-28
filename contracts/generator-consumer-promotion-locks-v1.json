@@ -1,0 +1,65 @@
+{
+  "schema": "gooo/link/generator-consumer-promotion-locks/v1",
+  "releases": [
+    {
+      "id": "core",
+      "role": "authority",
+      "repository": "kimjooyoon/meta-ontology-go",
+      "tag": "v0.2.0-dev",
+      "tag_object_sha": "733f7b22a365606d42bf238f5c535ff12e5abf8c",
+      "target_commit_sha": "050b11e56d9f972e0d507d406e5da8a60595052b",
+      "draft": false,
+      "prerelease": true,
+      "assets": [
+        { "kind": "cli", "name": "gooo-linux-amd64.tar.gz", "sha256": "99599bdd3c2ae947718881dd78b899234452ab06bd8e60a550320054e1d81ddd" }
+      ]
+    },
+    {
+      "id": "generator",
+      "role": "generator",
+      "repository": "kimjooyoon/gooo-evidence-generator",
+      "tag": "v0.3.1-dev",
+      "tag_object_sha": "550e973e56f5c7921405fcc64893bf8637acfbcd",
+      "target_commit_sha": "c8bb802bea7dd2fd04fa1269b2ec435498edaa9c",
+      "draft": false,
+      "prerelease": true,
+      "assets": [
+        { "kind": "portable", "name": "gooo-evidence-generator-portable-v0.3.1-dev.tar.gz", "sha256": "4978c7719291317d4df74895b7b554f2b16698df9ff249d5f6300d37987e654e" }
+      ]
+    },
+    {
+      "id": "local-ledger",
+      "role": "consumer",
+      "repository": "kimjooyoon/gooo-local-ledger",
+      "tag": "v0.3.0-dev",
+      "tag_object_sha": "ed6ae0e64e622020cf515de330a9503b3d33ce66",
+      "target_commit_sha": "04118959144fbb5793367ab9ebb259d6990921cc",
+      "draft": false,
+      "prerelease": true,
+      "assets": [
+        { "kind": "report", "name": "complete-generation-report.json", "sha256": "3957f74b27fea2bd8673620f09e95b77c7e1083dd83be6c056d7e61c5037d082" },
+        { "kind": "verification", "name": "generated-evidence-verification.json", "sha256": "0c008fc76ce64cf47271d76ad081428b926c6a787693fb32aaadecc0e432e328" },
+        { "kind": "runtime", "name": "consumer-runtime.json", "sha256": "270dc89115883805aa42561dae0eb0decc307f1be2846435828ff263de351af1" },
+        { "kind": "generator-pin", "name": "generator-core-receipt-pin-v1.json", "sha256": "c19f0585eebb6dd34e8e85c87f13a1a43f3e23a0259b2673f2e4be2a4f30ecd2" },
+        { "kind": "checksums", "name": "SHA256SUMS", "sha256": "7313e570e29967a367f3a06393632a0b5660e581338654c5b9a1ee64e2bfe266" }
+      ]
+    },
+    {
+      "id": "design-evidence",
+      "role": "consumer",
+      "repository": "kimjooyoon/gooo-design-evidence",
+      "tag": "v0.3.0-dev",
+      "tag_object_sha": "989cda115830448d16f5a3c57cd6b4984856c3e0",
+      "target_commit_sha": "89d6adb3a3c64d118526342724cf3aa9243a6d17",
+      "draft": false,
+      "prerelease": true,
+      "assets": [
+        { "kind": "report", "name": "complete-generation-report.json", "sha256": "d4c9101be9fc456b15c993ee608460a019f14f4f0534146bf696cc024a582a00" },
+        { "kind": "verification", "name": "generated-evidence-verification.json", "sha256": "11405f959bc3f645845daf814a3eb53b63dbeb3a0333622cb2698c52207f23cc" },
+        { "kind": "runtime", "name": "consumer-runtime.json", "sha256": "d65abd344562ebfa8d35cdb04b7d9c9a683bf3750483d5f8ed9e55681f3a8e03" },
+        { "kind": "generator-pin", "name": "generator-core-receipt-pin-v1.json", "sha256": "6dd921196bd0e9225d99622c0b57a94df724c4065cd348ec91b40ca30a45e4cb" },
+        { "kind": "checksums", "name": "SHA256SUMS", "sha256": "11c7a4eaa62a8a5e99555617c71837a6228ba56815ad9fb8088134590d557227" }
+      ]
+    }
+  ]
+}

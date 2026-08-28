@@ -1,0 +1,32 @@
+{
+  "schema": "gooo/link/generator-consumer-promotion-denominator/v1",
+  "total": 12,
+  "minimum_independent_consumers": 2,
+  "required_evidence_per_consumer": 5,
+  "required_report_schema": "gooo/evidence-generator/report/v2",
+  "required_verification_schema": "gooo/evidence-generator/verification/v2",
+  "proofs": [
+    { "choice": "FOUNDATION", "total": 4 },
+    { "choice": "COHERENCE", "total": 5 },
+    { "choice": "REGRESSION", "total": 3 }
+  ],
+  "indicator_classes": [
+    { "class": "OUTCOME", "total": 3 },
+    { "class": "DRIVER", "total": 5 },
+    { "class": "GUARDRAIL", "total": 4 }
+  ],
+  "cells": [
+    { "id": "core-release-identity", "activity": "ObserveReleasedGoooIdentity", "proof": "FOUNDATION", "indicator_class": "DRIVER", "depends_on": [] },
+    { "id": "generator-release-identity", "activity": "ObserveGeneratorReleaseIdentity", "proof": "FOUNDATION", "indicator_class": "DRIVER", "depends_on": [] },
+    { "id": "local-consumer-release", "activity": "ObserveLocalConsumerRelease", "proof": "FOUNDATION", "indicator_class": "DRIVER", "depends_on": [] },
+    { "id": "design-consumer-release", "activity": "ObserveDesignConsumerRelease", "proof": "FOUNDATION", "indicator_class": "DRIVER", "depends_on": [] },
+    { "id": "independent-consumer-repositories", "activity": "BindDistinctConsumerRepositories", "proof": "COHERENCE", "indicator_class": "GUARDRAIL", "depends_on": ["local-consumer-release", "design-consumer-release"] },
+    { "id": "shared-generator-identity", "activity": "BindSharedGeneratorIdentity", "proof": "COHERENCE", "indicator_class": "DRIVER", "depends_on": ["generator-release-identity", "local-consumer-release", "design-consumer-release"] },
+    { "id": "v2-report-contract", "activity": "BindGeneratedReportContract", "proof": "COHERENCE", "indicator_class": "GUARDRAIL", "depends_on": ["local-consumer-release", "design-consumer-release", "shared-generator-identity"] },
+    { "id": "generation-closure", "activity": "ObserveGeneratedProjectClosure", "proof": "COHERENCE", "indicator_class": "OUTCOME", "depends_on": ["v2-report-contract"] },
+    { "id": "generated-file-verification", "activity": "ObserveGeneratedFileVerification", "proof": "COHERENCE", "indicator_class": "OUTCOME", "depends_on": ["v2-report-contract"] },
+    { "id": "deterministic-read-only-runtime", "activity": "ObserveDeterministicReadOnlyRuntime", "proof": "REGRESSION", "indicator_class": "GUARDRAIL", "depends_on": ["local-consumer-release", "design-consumer-release"] },
+    { "id": "public-checksum-bundle", "activity": "BindPublicChecksumEvidence", "proof": "REGRESSION", "indicator_class": "GUARDRAIL", "depends_on": ["local-consumer-release", "design-consumer-release"] },
+    { "id": "promotion-decision", "activity": "SelectGeneratorPromotionOperation", "proof": "REGRESSION", "indicator_class": "OUTCOME", "depends_on": ["independent-consumer-repositories", "shared-generator-identity", "v2-report-contract", "generation-closure", "generated-file-verification", "deterministic-read-only-runtime", "public-checksum-bundle"] }
+  ]
+}
