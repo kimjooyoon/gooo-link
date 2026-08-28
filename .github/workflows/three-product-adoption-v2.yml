@@ -77,6 +77,7 @@ jobs:
             timed_core "resolve-$safe_name" "$core_bin" graph resolve-activity "$example" --namespace threeproductadoptionv2 --name "$activity"
           done
           cp "$root/core-graph.json" "$root/three-product-graph.json"
+          jq -c '{node_keys: ((.nodes[0] // {}) | keys), relation_keys: ((.relations[0] // {}) | keys), nodes: (.nodes // []), relations: (.relations // [])}' "$root/three-product-graph.json" >&2
           core_wall_ms=$(
             awk '{total += $1 * 1000} END {printf "%d\n", total}' "$root"/core-*.time
           )
@@ -189,6 +190,14 @@ jobs:
             asset_name=$(jq -r '.asset_name' <<<"$product")
             expected_size=$(jq -r '.asset_size' <<<"$product")
             expected_digest=$(jq -r '.asset_digest' <<<"$product")
+            receipt_member=$(jq -r '.receipt.member' <<<"$product")
+            receipt_member_sha256_expected=$(jq -r '.receipt.member_sha256' <<<"$product")
+            receipt_schema=$(jq -r '.receipt.schema' <<<"$product")
+            receipt_subject_sha=$(jq -r '.receipt.subject_sha' <<<"$product")
+            runtime_receipt_member=$(jq -r '.runtime_receipt.member' <<<"$product")
+            runtime_receipt_member_sha256_expected=$(jq -r '.runtime_receipt.member_sha256' <<<"$product")
+            runtime_receipt_schema=$(jq -r '.runtime_receipt.schema' <<<"$product")
+            runtime_receipt_subject_sha=$(jq -r '.runtime_receipt.subject_sha' <<<"$product")
             product_ref=$(gh api "repos/$repo/git/ref/tags/$tag")
             jq -e --arg type "commit" --arg sha "$tag_object_sha" '.object.type == $type and .object.sha == $sha' <<<"$product_ref" >/dev/null
             product_release=$(gh api "repos/$repo/releases/$release_id")
@@ -212,6 +221,22 @@ jobs:
             bundle_b="$unzip_root/$root_b"
             test -s "$bundle_a/project.json"
             test -s "$bundle_b/project.json"
+            receipt_available=false
+            receipt_member_sha256=""
+            if test -f "$unzip_root/$receipt_member"; then
+              receipt_member_sha256=$(sha256sum "$unzip_root/$receipt_member" | awk '{print $1}')
+              if test "$receipt_member_sha256" = "$receipt_member_sha256_expected" && jq -e --arg schema "$receipt_schema" --arg subject "$receipt_subject_sha" '.schema == $schema and .subject_sha == $subject' "$unzip_root/$receipt_member" >/dev/null; then
+                receipt_available=true
+              fi
+            fi
+            runtime_receipt_available=false
+            runtime_receipt_member_sha256=""
+            if test -f "$unzip_root/$runtime_receipt_member"; then
+              runtime_receipt_member_sha256=$(sha256sum "$unzip_root/$runtime_receipt_member" | awk '{print $1}')
+              if test "$runtime_receipt_member_sha256" = "$runtime_receipt_member_sha256_expected" && jq -e --arg schema "$runtime_receipt_schema" --arg subject "$runtime_receipt_subject_sha" '.schema == $schema and .subject_sha == $subject' "$unzip_root/$runtime_receipt_member" >/dev/null; then
+                runtime_receipt_available=true
+              fi
+            fi
             report="$root/$id-kit-report.json"
             time_file="$root/kit-$id.time"
             /usr/bin/time -f '%e %M' -o "$time_file" bash "$kit_dir/scripts/conform-released-envelope-v2.sh" "$bundle_a" "$bundle_b" "$report"
@@ -292,14 +317,6 @@ jobs:
                 $(jq -r '.source.comparisons_satisfied' "$bundle_b/replay.json")
               ))
             fi
-            receipt_available=false
-            if test "$replay_receipt_verified" = true &&
-              test "$replay_member_sha256" = "$replay_member_sha256_b" &&
-              test "$actual_digest" = "$expected_digest" &&
-              { checksum_matches "$bundle_a" replay.json && checksum_matches "$bundle_b" replay.json; } ||
-              { test "$replay_receipt_verified" = true && test "$replay_checksum_present" = false && test "$replay_member_total" -gt 0 && test "$replay_member_sha256" = "$replay_member_sha256_b" && test "$actual_digest" = "$expected_digest"; }; then
-              receipt_available=true
-            fi
             replay_receipt_mismatches=$((replay_receipt_comparisons_total - replay_receipt_comparisons_satisfied))
             replay_mismatches=$replay_byte_mismatches
             if test "$receipt_available" = true; then replay_mismatches=$replay_receipt_mismatches; fi
@@ -329,6 +346,7 @@ jobs:
               --argjson refuted "$refuted" \
               --argjson receipt_available "$receipt_available" \
               --argjson provenance_available "$provenance_available" \
+              --argjson runtime_receipt_available "$runtime_receipt_available" \
               --argjson replay_verified "$replay_verified" \
               --argjson replay_receipt_verified "$replay_receipt_verified" \
               --argjson replay_member_total "$replay_member_total" \
@@ -341,6 +359,14 @@ jobs:
               --argjson replay_mismatches "$replay_mismatches" \
               --arg replay_member_sha256 "$replay_member_sha256" \
               --arg replay_member_sha256_b "$replay_member_sha256_b" \
+              --arg receipt_member "$receipt_member" \
+              --arg receipt_member_sha256 "$receipt_member_sha256" \
+              --arg receipt_schema "$receipt_schema" \
+              --arg receipt_subject_sha "$receipt_subject_sha" \
+              --arg runtime_receipt_member "$runtime_receipt_member" \
+              --arg runtime_receipt_member_sha256 "$runtime_receipt_member_sha256" \
+              --arg runtime_receipt_schema "$runtime_receipt_schema" \
+              --arg runtime_receipt_subject_sha "$runtime_receipt_subject_sha" \
               --arg input_manifest_sha256 "$input_manifest_sha256" \
               --arg output_manifest_sha256 "$output_manifest_sha256" \
               --argjson wall_ms "$product_wall_ms" \
@@ -354,6 +380,15 @@ jobs:
                 refuted: $refuted,
                 receipt_available: $receipt_available,
                 provenance_available: $provenance_available,
+                receipt_member: $receipt_member,
+                receipt_member_sha256: $receipt_member_sha256,
+                receipt_schema: $receipt_schema,
+                receipt_subject_sha: $receipt_subject_sha,
+                runtime_receipt_available: $runtime_receipt_available,
+                runtime_receipt_member: $runtime_receipt_member,
+                runtime_receipt_member_sha256: $runtime_receipt_member_sha256,
+                runtime_receipt_schema: $runtime_receipt_schema,
+                runtime_receipt_subject_sha: $runtime_receipt_subject_sha,
                 replay_verified: $replay_verified,
                 replay_receipt_verified: $replay_receipt_verified,
                 replay_member_total: $replay_member_total,

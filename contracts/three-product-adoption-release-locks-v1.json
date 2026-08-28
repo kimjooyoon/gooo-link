@@ -32,6 +32,18 @@
       "asset_size": 31920,
       "asset_digest": "05473fa82ec15b90d80f619e8708957b42f41a4d8055f3d314cd9c9968d37b9e",
       "asset_api_digest": "sha256:05473fa82ec15b90d80f619e8708957b42f41a4d8055f3d314cd9c9968d37b9e",
+      "receipt": {
+        "member": "adoption-report.json",
+        "member_sha256": "563e85cfea1d4bb02a68358ea832575a89aa71c32db6e60d1a18cd9835a4516b",
+        "schema": "gooo/local-ledger/released-domain-envelope-v2-adoption-evaluation/v1",
+        "subject_sha": "8b01cc4bf26e0c7877dd4df89c3beab190328a1c"
+      },
+      "runtime_receipt": {
+        "member": "runtime.json",
+        "member_sha256": "a80134d95088f1e557250f5f7d896574fc0a35018c9ae378b6a0ab6bd3f523f2",
+        "schema": "gooo/local-ledger/released-domain-envelope-v2-runtime/v1",
+        "subject_sha": "8b01cc4bf26e0c7877dd4df89c3beab190328a1c"
+      },
       "bundle_roots": [
         "bundle-a",
         "bundle-b"
@@ -52,6 +64,18 @@
       "asset_size": 31798,
       "asset_digest": "7fc242c806ed739e6dc19eb5968f4965397cd65397556532edee37695dc82871",
       "asset_api_digest": "sha256:7fc242c806ed739e6dc19eb5968f4965397cd65397556532edee37695dc82871",
+      "receipt": {
+        "member": "envelope-adoption-report.json",
+        "member_sha256": "50b490c2c70492bb2dd2ca56d0ca527b0430bcc95c2639fdc48911faa59098fd",
+        "schema": "gooo/design-evidence/released-domain-envelope-adoption-report/v2",
+        "subject_sha": "c5a6a21d1e54f4bce8d6f1bd2571f2186b9bd08b"
+      },
+      "runtime_receipt": {
+        "member": "envelope-runtime.json",
+        "member_sha256": "61f7a0c0b2cee73d987e3265eb5d7f7ac134c45af0fb0283d76fc0a8c05e8859",
+        "schema": "gooo/design-evidence/released-domain-envelope-runtime/v2",
+        "subject_sha": "c5a6a21d1e54f4bce8d6f1bd2571f2186b9bd08b"
+      },
       "bundle_roots": [
         "envelope-a",
         "envelope-b"
@@ -72,6 +96,18 @@
       "asset_size": 38202,
       "asset_digest": "56a727e866168d12b4f7874e42c5ee90d2cea250875590a44e40c151fb774b31",
       "asset_api_digest": "sha256:56a727e866168d12b4f7874e42c5ee90d2cea250875590a44e40c151fb774b31",
+      "receipt": {
+        "member": "normal.json",
+        "member_sha256": "e2acc7cfe41aebe0b49f22d0c258c97da79d9c460f15a2fe944e689a3e43af93",
+        "schema": "gooo/infra-evidence/released-domain-envelope-v2-adoption-report/v1",
+        "subject_sha": "b29771f812fe6eb659c9f2ae34eb0ed11c121c9b"
+      },
+      "runtime_receipt": {
+        "member": "runtime.json",
+        "member_sha256": "f18dad088baa15ae3d236df52d58dede0912ed9d6854c28547eb1a032c753870",
+        "schema": "gooo/infra-evidence/released-domain-envelope-v2-adoption-runtime/v1",
+        "subject_sha": "b29771f812fe6eb659c9f2ae34eb0ed11c121c9b"
+      },
       "bundle_roots": [
         "bundle-a",
         "bundle-b"
