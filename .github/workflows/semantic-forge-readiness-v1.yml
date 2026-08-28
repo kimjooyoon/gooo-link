@@ -1,0 +1,277 @@
+name: Semantic Forge readiness
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    env:
+      SUBJECT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.SUBJECT_SHA }}
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.27.x
+          check-latest: true
+
+      - name: Bind exact subject identity
+        run: test "$(git rev-parse HEAD)" = "$SUBJECT_SHA"
+
+      - name: Download four immutable releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          lock=contracts/semantic-forge-readiness-release-lock-v1.json
+          mkdir -p "$RUNNER_TEMP/link" "$RUNNER_TEMP/local" "$RUNNER_TEMP/infra" "$RUNNER_TEMP/core"
+
+          for scope in link local infra core; do
+            repository=$(jq -r --arg scope "$scope" '.[$scope].repository' "$lock")
+            tag=$(jq -r --arg scope "$scope" '.[$scope].tag' "$lock")
+            target=$(jq -r --arg scope "$scope" '.[$scope].target_commit_sha' "$lock")
+            release_id=$(jq -r --arg scope "$scope" '.[$scope].release_id' "$lock")
+            prerelease=$(jq -r --arg scope "$scope" '.[$scope].prerelease' "$lock")
+            gh api "repos/$repository/releases/tags/$tag" > "$RUNNER_TEMP/$scope-release.json"
+            gh api "repos/$repository/git/ref/tags/$tag" > "$RUNNER_TEMP/$scope-ref.json"
+            jq -e --arg tag "$tag" --arg target "$target" --argjson release_id "$release_id" --argjson prerelease "$prerelease" '
+              .id==$release_id and .tag_name==$tag and .target_commitish==$target and
+              .draft==false and .prerelease==$prerelease
+            ' "$RUNNER_TEMP/$scope-release.json" >/dev/null
+            jq -e --arg target "$target" '.object.type=="commit" and .object.sha==$target' "$RUNNER_TEMP/$scope-ref.json" >/dev/null
+          done
+
+          download_asset() {
+            scope=$1
+            selector=$2
+            destination=$3
+            release="$RUNNER_TEMP/$scope-release.json"
+            name=$(jq -r --arg scope "$scope" --arg selector "$selector" '.[$scope].assets[$selector].name' "$lock")
+            id=$(jq -r --arg scope "$scope" --arg selector "$selector" '.[$scope].assets[$selector].id' "$lock")
+            size=$(jq -r --arg scope "$scope" --arg selector "$selector" '.[$scope].assets[$selector].size' "$lock")
+            digest=$(jq -r --arg scope "$scope" --arg selector "$selector" '.[$scope].assets[$selector].digest' "$lock")
+            jq -e --arg name "$name" --arg digest "$digest" --argjson id "$id" --argjson size "$size" '
+              .assets[] | select(.name==$name and .id==$id and .size==$size and .digest==$digest)
+            ' "$release" >/dev/null
+            url=$(jq -r --arg name "$name" '.assets[]|select(.name==$name)|.browser_download_url' "$release")
+            curl --fail --location --retry 3 "$url" --output "$destination"
+            test "$(wc -c < "$destination" | tr -d ' ')" -eq "$size"
+            test "sha256:$(sha256sum "$destination" | awk '{print $1}')" = "$digest"
+          }
+
+          download_asset link report "$RUNNER_TEMP/link/report.json"
+          for scope in local infra; do
+            for selector in $(jq -r --arg scope "$scope" '.[$scope].assets | keys[]' "$lock"); do
+              name=$(jq -r --arg scope "$scope" --arg selector "$selector" '.[$scope].assets[$selector].name' "$lock")
+              download_asset "$scope" "$selector" "$RUNNER_TEMP/$scope/$name"
+            done
+            test "$(jq --arg scope "$scope" '.[$scope].assets|length' "$lock")" -eq 6
+          done
+          download_asset core binary "$RUNNER_TEMP/core/gooo.tar.gz"
+          download_asset core checksums "$RUNNER_TEMP/core/SHA256SUMS"
+          binary_name=$(jq -r '.core.assets.binary.name' "$lock")
+          test "$(sha256sum "$RUNNER_TEMP/core/gooo.tar.gz" | awk '{print $1}')" = "$(awk -v name="$binary_name" '$2==name {print $1}' "$RUNNER_TEMP/core/SHA256SUMS")"
+          tar -xzf "$RUNNER_TEMP/core/gooo.tar.gz" -C "$RUNNER_TEMP/core"
+          chmod +x "$RUNNER_TEMP/core/gooo"
+
+      - name: Observe readiness through Gooo meta code
+        shell: bash
+        run: |
+          set -euo pipefail
+          gooo="$RUNNER_TEMP/core/gooo"
+          observation=examples/semantic-forge-readiness-v1/observation.gooo
+          git status --porcelain=v1 -z --untracked-files=all > "$RUNNER_TEMP/before.bin"
+
+          module_roots=$(find . -name go.mod -not -path './.git/*' | wc -l | tr -d ' ')
+          find . -name go.mod -not -path './.git/*' -print0 |
+            while IFS= read -r -d '' module; do
+              (cd "$(dirname "$module")" && go fix ./...)
+            done
+
+          "$gooo" check --json "$observation" > "$RUNNER_TEMP/observation-syntax.json"
+          "$gooo" check --semantic --json "$observation" > "$RUNNER_TEMP/observation-semantic.json"
+          "$gooo" graph dump "$observation" > "$RUNNER_TEMP/graph.json"
+
+          start_ns=$(date +%s%N)
+          /usr/bin/time -v -o "$RUNNER_TEMP/time.txt" \
+            jq -e 'type=="object"' \
+              "$RUNNER_TEMP/local/normal.json" \
+              "$RUNNER_TEMP/local/project-plan.json" \
+              "$RUNNER_TEMP/local/runtime.json" \
+              "$RUNNER_TEMP/local/replay.json" \
+              "$RUNNER_TEMP/local/inventory.json" \
+              "$RUNNER_TEMP/infra/semantic-deployment-plan-evaluation.json" \
+              "$RUNNER_TEMP/infra/deployment-plan.json" \
+              "$RUNNER_TEMP/infra/semantic-deployment-plan-runtime.json" \
+              "$RUNNER_TEMP/infra/semantic-deployment-plan-replay.json" \
+              "$RUNNER_TEMP/infra/semantic-deployment-plan-inventory.json" >/dev/null
+          end_ns=$(date +%s%N)
+          wall_ms=$(( (end_ns-start_ns)/1000000 ))
+          peak_rss_kib=$(awk -F: '/Maximum resident set size/ {gsub(/ /,"",$2); print $2}' "$RUNNER_TEMP/time.txt")
+
+          git status --porcelain=v1 -z --untracked-files=all > "$RUNNER_TEMP/after.bin"
+          if cmp -s "$RUNNER_TEMP/before.bin" "$RUNNER_TEMP/after.bin"; then writes=0; else writes=1; fi
+          jq -S -n \
+            --arg subject_sha "$SUBJECT_SHA" \
+            --arg go_version "$(go env GOVERSION)" \
+            --argjson peak_rss_kib "$peak_rss_kib" \
+            --argjson wall_ms "$wall_ms" \
+            --argjson writes "$writes" \
+            --argjson module_roots "$module_roots" '
+            {
+              schema:"gooo/link/semantic-forge-readiness-runtime/v1",
+              subject_sha:$subject_sha,
+              go_version:$go_version,
+              releases:{link:true,local:true,infra:true,core:true},
+              selected_evidence_assets_observed:12,
+              independent_consumers_observed:2,
+              primitive_mappings_observed:6,
+              performance:{release_comparison_peak_rss_kib:$peak_rss_kib,release_comparison_wall_ms:$wall_ms},
+              repository_writes:$writes,
+              local_tests_run:0,
+              cross_project_required_gates:0,
+              common_generator_authorized:false,
+              product_generation_authorized:false,
+              central_orchestration_authorized:false,
+              go_fix_module_roots:$module_roots
+            }
+          ' > "$RUNNER_TEMP/readiness-runtime.json"
+
+      - name: Evaluate normal and counterexample paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          evaluator=scripts/observe-semantic-forge-readiness-v1.sh
+
+          evaluate() {
+            link_report=$1
+            local_dir=$2
+            infra_dir=$3
+            runtime=$4
+            output=$5
+            phase=$6
+            graph=$7
+            bash "$evaluator" \
+              "$GITHUB_WORKSPACE" "$graph" \
+              "$RUNNER_TEMP/link-release.json" "$link_report" \
+              "$RUNNER_TEMP/local-release.json" "$local_dir" \
+              "$RUNNER_TEMP/infra-release.json" "$infra_dir" \
+              "$runtime" "$output" "$SUBJECT_SHA" "$phase"
+          }
+
+          evaluate "$RUNNER_TEMP/link/report.json" "$RUNNER_TEMP/local" "$RUNNER_TEMP/infra" "$RUNNER_TEMP/readiness-runtime.json" "$RUNNER_TEMP/report.json" complete "$RUNNER_TEMP/graph.json"
+
+          jq '.releases.infra=false' "$RUNNER_TEMP/readiness-runtime.json" > "$RUNNER_TEMP/missing-infra-runtime.json"
+          evaluate "$RUNNER_TEMP/link/report.json" "$RUNNER_TEMP/local" "$RUNNER_TEMP/infra" "$RUNNER_TEMP/missing-infra-runtime.json" "$RUNNER_TEMP/unknown.json" missing-infra-release "$RUNNER_TEMP/graph.json"
+
+          cp -R "$RUNNER_TEMP/infra" "$RUNNER_TEMP/infra-primitive-mismatch"
+          jq '.primitive.release="v9.0.0"' "$RUNNER_TEMP/infra/deployment-plan.json" > "$RUNNER_TEMP/infra-primitive-mismatch/deployment-plan.json"
+          evaluate "$RUNNER_TEMP/link/report.json" "$RUNNER_TEMP/local" "$RUNNER_TEMP/infra-primitive-mismatch" "$RUNNER_TEMP/readiness-runtime.json" "$RUNNER_TEMP/primitive-refuted.json" primitive-mismatch "$RUNNER_TEMP/graph.json"
+
+          cp -R "$RUNNER_TEMP/local" "$RUNNER_TEMP/local-utility-laundering"
+          jq '.utility.state="CLOSED"' "$RUNNER_TEMP/local/normal.json" > "$RUNNER_TEMP/local-utility-laundering/normal.json"
+          evaluate "$RUNNER_TEMP/link/report.json" "$RUNNER_TEMP/local-utility-laundering" "$RUNNER_TEMP/infra" "$RUNNER_TEMP/readiness-runtime.json" "$RUNNER_TEMP/utility-refuted.json" utility-laundering "$RUNNER_TEMP/graph.json"
+
+          jq '.common_generator_authorized=true' "$RUNNER_TEMP/readiness-runtime.json" > "$RUNNER_TEMP/authority-runtime.json"
+          evaluate "$RUNNER_TEMP/link/report.json" "$RUNNER_TEMP/local" "$RUNNER_TEMP/infra" "$RUNNER_TEMP/authority-runtime.json" "$RUNNER_TEMP/authority-refuted.json" authority-escalation "$RUNNER_TEMP/graph.json"
+
+          jq 'del(.nodes[]|select(.kind=="Activity" and .name=="BindTwelveReadinessMetaActivities"))' "$RUNNER_TEMP/graph.json" > "$RUNNER_TEMP/missing-meta-graph.json"
+          evaluate "$RUNNER_TEMP/link/report.json" "$RUNNER_TEMP/local" "$RUNNER_TEMP/infra" "$RUNNER_TEMP/readiness-runtime.json" "$RUNNER_TEMP/meta-refuted.json" missing-meta-activity "$RUNNER_TEMP/missing-meta-graph.json"
+
+          jq '.summary.independent_consumers_current=1' "$RUNNER_TEMP/link/report.json" > "$RUNNER_TEMP/baseline-mismatch.json"
+          evaluate "$RUNNER_TEMP/baseline-mismatch.json" "$RUNNER_TEMP/local" "$RUNNER_TEMP/infra" "$RUNNER_TEMP/readiness-runtime.json" "$RUNNER_TEMP/baseline-refuted.json" baseline-mismatch "$RUNNER_TEMP/graph.json"
+
+          jq -e '
+            .decision=="SEMANTIC_FORGE_EXPERIMENT_READY" and .claim.state=="CLOSED" and
+            .summary.closed_cells==12 and .summary.total_cells==12 and .summary.unknown_cells==0 and .summary.refuted_cells==0 and
+            .summary.independent_consumers_observed==2 and .summary.product_releases_observed==2 and
+            .summary.selected_evidence_assets_observed==12 and .summary.shared_invariants_observed==8 and .summary.shared_invariants_total==8 and
+            .summary.product_conformance_cells_observed==24 and .summary.product_conformance_cells_total==24 and
+            .summary.product_activities_observed==12 and .summary.product_dependencies_observed==16 and
+            .summary.generated_artifacts_observed==4 and .summary.unknown_coordinates_observed==12 and
+            .summary.refuted_boundaries_observed==6 and .summary.replay_comparisons_observed==14 and
+            .summary.external_use_cases_evidenced==0 and .summary.external_use_cases_declared==2 and .summary.utility_state=="UNKNOWN" and
+            .summary.optional_forge_experiment_selected==1 and .summary.common_generator_authorized==0 and
+            .summary.repository_writes==0 and .summary.local_tests_run==0 and .summary.cross_project_required_gates==0 and
+            ([.proofs[]|select(.closed==4 and .total==4)]|length)==3 and
+            ([.indicator_classes[]|select(.closed==4 and .total==4)]|length)==3 and
+            .authority.common_generator_authorized==false and .authority.product_generation_authorized==false
+          ' "$RUNNER_TEMP/report.json" >/dev/null
+
+          jq -e '
+            .decision=="SEMANTIC_FORGE_READINESS_UNKNOWN" and .claim.state=="UNKNOWN" and
+            .claim.stage=="PRODUCT_RELEASE" and .claim.step=="OBSERVE_INFRA_PRODUCT_RELEASE" and
+            .claim.reason=="INFRA_PRODUCT_RELEASE_UNAVAILABLE" and .claim.unknown_class=="DIRECT_MISSING" and
+            .claim.next_operation=="FETCH_PINNED_INFRA_PRODUCT_RELEASE" and (.claim.blocked_by|length)==1 and
+            .summary.closed_cells==4 and .summary.unknown_cells==8 and .summary.refuted_cells==0
+          ' "$RUNNER_TEMP/unknown.json" >/dev/null
+          jq -e '.decision=="FAIL_CLOSED" and .claim.reason=="SHARED_PRIMITIVE_IDENTITY_MISMATCH" and .summary.closed_cells==10 and .summary.refuted_cells==2' "$RUNNER_TEMP/primitive-refuted.json" >/dev/null
+          jq -e '.decision=="FAIL_CLOSED" and .claim.reason=="PRODUCT_UTILITY_LAUNDERED" and .summary.closed_cells==10 and .summary.refuted_cells==2' "$RUNNER_TEMP/utility-refuted.json" >/dev/null
+          jq -e '.decision=="FAIL_CLOSED" and .claim.reason=="READ_ONLY_PRODUCT_AUTHORITY_ESCALATED" and .summary.closed_cells==10 and .summary.refuted_cells==2' "$RUNNER_TEMP/authority-refuted.json" >/dev/null
+          jq -e '.decision=="FAIL_CLOSED" and .claim.reason=="GOOO_META_ACTIVITY_MISSING" and .summary.closed_cells==11 and .summary.refuted_cells==1' "$RUNNER_TEMP/meta-refuted.json" >/dev/null
+          jq -e '.decision=="FAIL_CLOSED" and .claim.reason=="LINK_TWO_CONSUMER_BASELINE_MISMATCH" and .summary.closed_cells==10 and .summary.refuted_cells==2' "$RUNNER_TEMP/baseline-refuted.json" >/dev/null
+
+      - name: Publish exact human-readable indicators
+        shell: bash
+        run: |
+          {
+            echo "## Semantic Forge readiness"
+            echo
+            jq -r '
+              "- decision: \(.decision)",
+              "- readiness cells: \(.summary.closed_cells)/\(.summary.total_cells)",
+              "- independent consumers: \(.summary.independent_consumers_observed)/2",
+              "- product releases: \(.summary.product_releases_observed)/2",
+              "- selected evidence assets: \(.summary.selected_evidence_assets_observed)/12",
+              "- shared invariants: \(.summary.shared_invariants_observed)/\(.summary.shared_invariants_total)",
+              "- product cells/activities/dependencies: \(.summary.product_conformance_cells_observed)/24 / \(.summary.product_activities_observed)/12 / \(.summary.product_dependencies_observed)/16",
+              "- artifacts / UNKNOWN coordinates / REFUTED boundaries / replay: \(.summary.generated_artifacts_observed)/4 / \(.summary.unknown_coordinates_observed)/12 / \(.summary.refuted_boundaries_observed)/6 / \(.summary.replay_comparisons_observed)/14",
+              "- external utility evidence: \(.summary.external_use_cases_evidenced)/\(.summary.external_use_cases_declared) \(.summary.utility_state)",
+              "- optional Forge experiment selected: \(.summary.optional_forge_experiment_selected)/1",
+              "- common generator authorized: \(.summary.common_generator_authorized)/1",
+              "- memory/time: \(.performance.release_comparison_peak_rss_kib) KiB / \(.performance.release_comparison_wall_ms) ms",
+              "- Link repository files/directories: \(.inventory.repository_files)/\(.inventory.descendant_directories)",
+              "- Link Go files/lines: \(.inventory.go.files)/\(.inventory.go.lines)",
+              "- Link Gooo files/lines: \(.inventory.gooo.files)/\(.inventory.gooo.lines)",
+              "- writes/local tests/cross-project gates: \(.summary.repository_writes)/\(.summary.local_tests_run)/\(.summary.cross_project_required_gates)"
+            ' "$RUNNER_TEMP/report.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce read-only repository effect
+        run: test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: semantic-forge-readiness-${{ env.SUBJECT_SHA }}
+          path: |
+            ${{ runner.temp }}/report.json
+            ${{ runner.temp }}/unknown.json
+            ${{ runner.temp }}/primitive-refuted.json
+            ${{ runner.temp }}/utility-refuted.json
+            ${{ runner.temp }}/authority-refuted.json
+            ${{ runner.temp }}/meta-refuted.json
+            ${{ runner.temp }}/baseline-refuted.json
+            ${{ runner.temp }}/readiness-runtime.json
+            ${{ runner.temp }}/graph.json
+            ${{ runner.temp }}/observation-syntax.json
+            ${{ runner.temp }}/observation-semantic.json
+            ${{ runner.temp }}/link-release.json
+            ${{ runner.temp }}/local-release.json
+            ${{ runner.temp }}/infra-release.json
+            ${{ runner.temp }}/core-release.json
+            ${{ runner.temp }}/local/normal.json
+            ${{ runner.temp }}/local/project-plan.json
+            ${{ runner.temp }}/infra/semantic-deployment-plan-evaluation.json
+            ${{ runner.temp }}/infra/deployment-plan.json
+

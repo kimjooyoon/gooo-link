@@ -1,0 +1,41 @@
+package semanticforgereadiness
+namespace semanticforgereadiness
+
+entity TwoConsumerLinkRelease id "gooo://link/release/v0.25.0-dev/two-consumers"
+entity CoreMetaToolRelease id "gooo://core/release/v0.4.0-dev/meta-tool"
+entity LocalProductRelease id "gooo://local-ledger/release/v0.8.0-dev/project-plan"
+entity InfraProductRelease id "gooo://infra-evidence/release/v0.8.0-dev/deployment-plan"
+entity SharedPrimitiveIdentity id "gooo://forge-readiness/shared/primitive-identity"
+entity SharedGraphShape id "gooo://forge-readiness/shared/graph-shape"
+entity SharedResolutionModel id "gooo://forge-readiness/shared/resolution-model"
+entity SharedArtifactModel id "gooo://forge-readiness/shared/artifact-model"
+entity AggregateUtilityUnknown id "gooo://forge-readiness/utility/zero-of-two-unknown"
+entity ReadOnlyProductAuthority id "gooo://forge-readiness/authority/read-only-products"
+entity ReadinessMetaActivitySet id "gooo://forge-readiness/meta-activities/12"
+entity OptionalForgeExperiment id "gooo://forge-readiness/selection/optional-experiment"
+entity LinkBaselineCell id "gooo://forge-readiness/cell/link-baseline"
+entity CoreMetaToolCell id "gooo://forge-readiness/cell/core-tool"
+entity LocalProductCell id "gooo://forge-readiness/cell/local-product"
+entity InfraProductCell id "gooo://forge-readiness/cell/infra-product"
+entity SharedPrimitiveCell id "gooo://forge-readiness/cell/shared-primitive"
+entity SharedGraphCell id "gooo://forge-readiness/cell/shared-graph"
+entity SharedResolutionCell id "gooo://forge-readiness/cell/shared-resolution"
+entity SharedArtifactCell id "gooo://forge-readiness/cell/shared-artifact"
+entity AggregateUtilityCell id "gooo://forge-readiness/cell/aggregate-utility"
+entity ReadOnlyAuthorityCell id "gooo://forge-readiness/cell/read-only-authority"
+entity MetaActivitiesCell id "gooo://forge-readiness/cell/meta-activities"
+entity OptionalExperimentCell id "gooo://forge-readiness/cell/optional-experiment"
+
+activity ObserveTwoConsumerLinkRelease(TwoConsumerLinkRelease) -> LinkBaselineCell
+activity ObserveCoreMetaToolRelease(CoreMetaToolRelease) -> CoreMetaToolCell
+activity ObserveLocalProductRelease(LocalProductRelease) -> LocalProductCell
+activity ObserveInfraProductRelease(InfraProductRelease) -> InfraProductCell
+activity BindSharedPrimitiveIdentity(SharedPrimitiveIdentity) -> SharedPrimitiveCell
+activity BindSharedGraphShape(SharedGraphShape) -> SharedGraphCell
+activity BindSharedResolutionModel(SharedResolutionModel) -> SharedResolutionCell
+activity BindSharedArtifactModel(SharedArtifactModel) -> SharedArtifactCell
+activity PreserveAggregateUtilityUnknown(AggregateUtilityUnknown) -> AggregateUtilityCell
+activity PreserveReadOnlyProductAuthority(ReadOnlyProductAuthority) -> ReadOnlyAuthorityCell
+activity BindTwelveReadinessMetaActivities(ReadinessMetaActivitySet) -> MetaActivitiesCell
+activity SelectOptionalForgeExperiment(OptionalForgeExperiment) -> OptionalExperimentCell
+
