@@ -30,15 +30,15 @@ type cellSpec struct {
 }
 
 type denominator struct {
-	Schema                        string          `json:"schema"`
-	Total                         int             `json:"total"`
-	MinimumIndependentConsumers   int             `json:"minimum_independent_consumers"`
-	RequiredEvidencePerConsumer   int             `json:"required_evidence_per_consumer"`
-	RequiredReportSchema          string          `json:"required_report_schema"`
-	RequiredVerificationSchema    string          `json:"required_verification_schema"`
-	Proofs                        []namedCountSpec `json:"proofs"`
-	IndicatorClasses              []namedCountSpec `json:"indicator_classes"`
-	Cells                         []cellSpec       `json:"cells"`
+	Schema                      string           `json:"schema"`
+	Total                       int              `json:"total"`
+	MinimumIndependentConsumers int              `json:"minimum_independent_consumers"`
+	RequiredEvidencePerConsumer int              `json:"required_evidence_per_consumer"`
+	RequiredReportSchema        string           `json:"required_report_schema"`
+	RequiredVerificationSchema  string           `json:"required_verification_schema"`
+	Proofs                      []namedCountSpec `json:"proofs"`
+	IndicatorClasses            []namedCountSpec `json:"indicator_classes"`
+	Cells                       []cellSpec       `json:"cells"`
 }
 
 type namedCountSpec struct {

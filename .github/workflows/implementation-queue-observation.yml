@@ -23,12 +23,17 @@ jobs:
           set -euo pipefail
           echo "SUBJECT_SHA=${{ github.event.pull_request.head.sha || github.sha }}" >> "$GITHUB_ENV"
           if test "${{ github.event_name }}" = "pull_request"; then
+            prefix=$(jq -r .classification.head_ref_prefix contracts/implementation-queue-policy-v1.json)
+            head_ref="${{ github.head_ref }}"
+            test "${head_ref#"$prefix"}" != "$head_ref"
+            echo "ACTIVE_CANDIDATE_ID=${head_ref#"$prefix"}" >> "$GITHUB_ENV"
             echo "PUBLIC_STATE=PR_CANDIDATE" >> "$GITHUB_ENV"
             echo "EXPECTED_OPEN=1" >> "$GITHUB_ENV"
             echo "EXPECTED_DECISION=QUEUE_CONFORMANT" >> "$GITHUB_ENV"
             echo "EXPECTED_QUEUE_STATE=ACTIVE" >> "$GITHUB_ENV"
             echo "EXPECTED_NEXT=MERGE_OR_CLOSE_CURRENT_IMPLEMENTATION_PR" >> "$GITHUB_ENV"
           else
+            echo "ACTIVE_CANDIDATE_ID=$(jq -r .candidate_id contracts/implementation-queue-policy-v1.json)" >> "$GITHUB_ENV"
             echo "PUBLIC_STATE=MAIN_MERGED" >> "$GITHUB_ENV"
             echo "EXPECTED_OPEN=0" >> "$GITHUB_ENV"
             echo "EXPECTED_DECISION=QUEUE_CLEAR" >> "$GITHUB_ENV"
@@ -131,7 +136,7 @@ jobs:
           bash "$evaluator" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/core-observation.json" "$RUNNER_TEMP/missing-snapshot.json" "$RUNNER_TEMP/runtime.json" "$RUNNER_TEMP/missing-report.json" "$SUBJECT_SHA" "$PUBLIC_STATE" missing-pr-snapshot
           jq -e '.decision=="INCOMPLETE" and .summary.closed==2 and .summary.unknown==10 and .summary.direct_missing==1 and .summary.dependency_blocked==9 and .claim.stage=="OBSERVATION" and .claim.step=="OBSERVE_GITHUB_PULL_REQUEST_SNAPSHOT" and .claim.reason=="GITHUB_PR_SNAPSHOT_UNAVAILABLE" and .claim.unknown_class=="DIRECT_MISSING" and .claim.next_operation=="REFRESH_GITHUB_PR_SNAPSHOT"' "$RUNNER_TEMP/missing-report.json" >/dev/null
 
-          jq -S -n --arg repo "$GITHUB_REPOSITORY" --arg candidate "$(jq -r .candidate_id contracts/implementation-queue-policy-v1.json)" '[{number:900001,target_repository:$repo,candidate_id:$candidate,head_ref:("agent/"+$candidate),base_ref:"main",state:"open",draft:false,url:"https://example.invalid/pr/900001",is_implementation:true},{number:900002,target_repository:$repo,candidate_id:$candidate,head_ref:("agent/"+$candidate),base_ref:"main",state:"open",draft:false,url:"https://example.invalid/pr/900002",is_implementation:true}]' > "$RUNNER_TEMP/duplicate-prs.json"
+          jq -S -n --arg repo "$GITHUB_REPOSITORY" --arg candidate "$ACTIVE_CANDIDATE_ID" '[{number:900001,target_repository:$repo,candidate_id:$candidate,head_ref:("agent/"+$candidate),base_ref:"main",state:"open",draft:false,url:"https://example.invalid/pr/900001",is_implementation:true},{number:900002,target_repository:$repo,candidate_id:$candidate,head_ref:("agent/"+$candidate),base_ref:"main",state:"open",draft:false,url:"https://example.invalid/pr/900002",is_implementation:true}]' > "$RUNNER_TEMP/duplicate-prs.json"
           duplicate_digest=$(sha256sum "$RUNNER_TEMP/duplicate-prs.json" | awk '{print $1}')
           jq -S --arg digest "$duplicate_digest" --slurpfile prs "$RUNNER_TEMP/duplicate-prs.json" '.complete=true|.all_open_pull_requests=2|.snapshot_sha256=$digest|.pull_requests=$prs[0]|del(.stage,.step,.reason,.unknown_class,.next_operation)' "$RUNNER_TEMP/pr-snapshot.json" > "$RUNNER_TEMP/duplicate-snapshot.json"
           bash "$evaluator" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/core-observation.json" "$RUNNER_TEMP/duplicate-snapshot.json" "$RUNNER_TEMP/runtime.json" "$RUNNER_TEMP/duplicate-report.json" "$SUBJECT_SHA" "$PUBLIC_STATE" duplicate-implementation-prs

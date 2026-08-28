@@ -45,7 +45,10 @@ jobs:
       - name: Require canonical Go formatting
         run: |
           gofmt -d scripts/evaluate-generator-consumer-promotion.go > "$RUNNER_TEMP/gofmt.diff"
-          test ! -s "$RUNNER_TEMP/gofmt.diff"
+          if test -s "$RUNNER_TEMP/gofmt.diff"; then
+            cat "$RUNNER_TEMP/gofmt.diff"
+            exit 1
+          fi
 
       - name: Require zero Go fix rewrites
         run: |
