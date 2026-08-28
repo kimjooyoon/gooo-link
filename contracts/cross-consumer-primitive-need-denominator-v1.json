@@ -1,0 +1,29 @@
+{
+  "schema": "gooo/link/cross-consumer-primitive-need-denominator/v1",
+  "candidate_id": "gooo.primitive.claim-resolution-tuple.v1",
+  "total": 12,
+  "proofs": [
+    {"choice": "FOUNDATION", "total": 4},
+    {"choice": "COHERENCE", "total": 4},
+    {"choice": "REGRESSION", "total": 4}
+  ],
+  "indicator_classes": [
+    {"class": "DRIVER", "total": 6},
+    {"class": "OUTCOME", "total": 2},
+    {"class": "GUARDRAIL", "total": 4}
+  ],
+  "cells": [
+    {"id": "local-ledger-release", "activity": "ObserveLocalLedgerRelease", "proof": "FOUNDATION", "indicator_class": "DRIVER", "depends_on": []},
+    {"id": "design-evidence-release", "activity": "ObserveDesignEvidenceRelease", "proof": "FOUNDATION", "indicator_class": "DRIVER", "depends_on": []},
+    {"id": "infra-evidence-release", "activity": "ObserveInfraEvidenceRelease", "proof": "FOUNDATION", "indicator_class": "DRIVER", "depends_on": []},
+    {"id": "common-report-envelope", "activity": "BindCommonClaimEnvelope", "proof": "FOUNDATION", "indicator_class": "DRIVER", "depends_on": ["local-ledger-release", "design-evidence-release", "infra-evidence-release"]},
+    {"id": "base-claim-resolution-tuple", "activity": "ObserveBaseClaimResolutionTuple", "proof": "COHERENCE", "indicator_class": "DRIVER", "depends_on": ["common-report-envelope"]},
+    {"id": "three-state-claim-lifecycle", "activity": "ObserveThreeStateClaimLifecycle", "proof": "COHERENCE", "indicator_class": "OUTCOME", "depends_on": ["base-claim-resolution-tuple"]},
+    {"id": "unknown-producing-consumers", "activity": "CountUnknownProducingConsumers", "proof": "COHERENCE", "indicator_class": "DRIVER", "depends_on": ["three-state-claim-lifecycle"]},
+    {"id": "typed-unknown-evidence-roles", "activity": "BindTypedUnknownEvidenceRoles", "proof": "COHERENCE", "indicator_class": "GUARDRAIL", "depends_on": ["unknown-producing-consumers"]},
+    {"id": "claim-resolution-compatibility-gap", "activity": "ExposeClaimResolutionCompatibilityGap", "proof": "REGRESSION", "indicator_class": "GUARDRAIL", "depends_on": ["typed-unknown-evidence-roles"]},
+    {"id": "observation-authority-boundary", "activity": "PreserveObservationAuthorityBoundary", "proof": "REGRESSION", "indicator_class": "GUARDRAIL", "depends_on": ["local-ledger-release", "design-evidence-release", "infra-evidence-release"]},
+    {"id": "direct-experiment-mapping", "activity": "RejectTitleOnlyExperimentMapping", "proof": "REGRESSION", "indicator_class": "GUARDRAIL", "depends_on": ["base-claim-resolution-tuple"]},
+    {"id": "minimal-core-contract-operation", "activity": "SelectMinimalCoreContractOperation", "proof": "REGRESSION", "indicator_class": "OUTCOME", "depends_on": ["typed-unknown-evidence-roles", "claim-resolution-compatibility-gap", "observation-authority-boundary", "direct-experiment-mapping"]}
+  ]
+}

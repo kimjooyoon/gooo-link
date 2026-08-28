@@ -1,0 +1,178 @@
+name: Cross-consumer primitive need observation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cross-consumer-primitive-need-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  observation:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SUBJECT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SUBJECT_SHA }}
+
+      - name: Verify immutable releases and download evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          lock=contracts/cross-consumer-release-lock-v1.json
+          inputs="$RUNNER_TEMP/cross-consumer-inputs"
+          mkdir -p "$inputs"
+
+          verify_ref() {
+            local repository=$1 tag=$2 expected_type=$3 expected_object=$4 expected_target=$5
+            local ref actual_type actual_object actual_target
+            ref=$(gh api "repos/$repository/git/ref/tags/$tag")
+            actual_type=$(jq -r .object.type <<<"$ref")
+            actual_object=$(jq -r .object.sha <<<"$ref")
+            test "$actual_type" = "$expected_type"
+            test "$actual_object" = "$expected_object"
+            if test "$actual_type" = tag; then
+              actual_target=$(gh api "repos/$repository/git/tags/$actual_object" --jq .object.sha)
+            else
+              actual_target=$actual_object
+            fi
+            test "$actual_target" = "$expected_target"
+          }
+
+          while IFS=$'\t' read -r repository tag ref_type tag_object target; do
+            verify_ref "$repository" "$tag" "$ref_type" "$tag_object" "$target"
+          done < <(jq -r '.inputs[]|[.repository,.tag,.ref_type,.tag_object_sha,.target_commit_sha]|@tsv' "$lock")
+
+          while IFS=$'\t' read -r input_id repository tag asset_id name output digest; do
+            release="$RUNNER_TEMP/release-$input_id.json"
+            if ! test -f "$release"; then
+              gh api "repos/$repository/releases/tags/$tag" > "$release"
+            fi
+            observed_id=$(jq -r --arg name "$name" '.assets[]|select(.name==$name)|.id' "$release")
+            test "$observed_id" = "$asset_id"
+            mkdir -p "$inputs/$input_id"
+            destination="$inputs/$input_id/$output"
+            gh api -H 'Accept: application/octet-stream' "repos/$repository/releases/assets/$asset_id" > "$destination"
+            printf '%s  %s\n' "$digest" "$destination" | sha256sum -c -
+          done < <(jq -r '.inputs[] as $input|$input.assets[]|[$input.id,$input.repository,$input.tag,(.id|tostring),.name,.output,.sha256]|@tsv' "$lock")
+
+          core_repository=$(jq -r .core.repository "$lock")
+          core_tag=$(jq -r .core.tag "$lock")
+          core_type=$(jq -r .core.ref_type "$lock")
+          core_object=$(jq -r .core.tag_object_sha "$lock")
+          core_target=$(jq -r .core.target_commit_sha "$lock")
+          verify_ref "$core_repository" "$core_tag" "$core_type" "$core_object" "$core_target"
+          core_asset_id=$(jq -r .core.asset.id "$lock")
+          core_asset_name=$(jq -r .core.asset.name "$lock")
+          core_digest=$(jq -r .core.asset.sha256 "$lock")
+          core_release="$RUNNER_TEMP/core-release.json"
+          gh api "repos/$core_repository/releases/tags/$core_tag" > "$core_release"
+          test "$(jq -r --arg name "$core_asset_name" '.assets[]|select(.name==$name)|.id' "$core_release")" = "$core_asset_id"
+          gh api -H 'Accept: application/octet-stream' "repos/$core_repository/releases/assets/$core_asset_id" > "$RUNNER_TEMP/gooo.tar.gz"
+          printf '%s  %s\n' "$core_digest" "$RUNNER_TEMP/gooo.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/core"
+          tar -xzf "$RUNNER_TEMP/gooo.tar.gz" -C "$RUNNER_TEMP/core"
+
+          mkdir -p "$inputs/local-ledger/actions" "$inputs/infra-evidence/actions"
+          unzip -qq "$inputs/local-ledger/actions.zip" -d "$inputs/local-ledger/actions"
+          unzip -qq "$inputs/infra-evidence/actions.zip" -d "$inputs/infra-evidence/actions"
+          echo '::notice title=Cross-consumer stage::PINNED_RELEASE_INPUTS_CLOSED'
+
+      - name: Bind Gooo activities and observe primitive need
+        shell: bash
+        run: |
+          set -euo pipefail
+          source=examples/cross-consumer-primitive-need/main.gooo
+          denominator=contracts/cross-consumer-primitive-need-denominator-v1.json
+          inputs="$RUNNER_TEMP/cross-consumer-inputs"
+          gooo="$RUNNER_TEMP/core/gooo"
+          evaluator=scripts/observe-cross-consumer-primitive-need.sh
+
+          "$gooo" check --json "$source" > "$RUNNER_TEMP/cross-consumer-syntax.json"
+          "$gooo" check --semantic --json "$source" > "$RUNNER_TEMP/cross-consumer-semantic.json"
+          "$gooo" graph dump "$source" > "$RUNNER_TEMP/cross-consumer-graph.json"
+          jq -e '.status=="ok"' "$RUNNER_TEMP/cross-consumer-syntax.json" "$RUNNER_TEMP/cross-consumer-semantic.json" >/dev/null
+          jq -e '([.nodes[]|select(.kind=="Activity")]|length)==12' "$RUNNER_TEMP/cross-consumer-graph.json" >/dev/null
+          while IFS=$'\t' read -r activity; do
+            "$gooo" graph resolve-activity "$source" --name "$activity" > "$RUNNER_TEMP/cross-consumer-$activity.json"
+            jq -e --arg activity "$activity" '.decision=="CLOSED" and .selector.name==$activity and .occurrences==1 and .claim.state=="CLOSED"' "$RUNNER_TEMP/cross-consumer-$activity.json" >/dev/null
+          done < <(jq -r '.cells[]|[.activity]|@tsv' "$denominator")
+          echo '::notice title=Cross-consumer stage::GOOO_ACTIVITY_BINDING_CLOSED'
+
+          args=(
+            "$RUNNER_TEMP/cross-consumer-graph.json"
+            "$denominator"
+            "$inputs/local-ledger/complete.json"
+            "$inputs/local-ledger/actions/missing-runbook.json"
+            "$inputs/local-ledger/actions/source-refuted.json"
+            "$inputs/design-evidence/complete.json"
+            "$inputs/design-evidence/unknown-guard.json"
+            "$inputs/infra-evidence/complete.json"
+            "$inputs/infra-evidence/actions/missing-hcl.json"
+            "$inputs/infra-evidence/actions/invalid-hcl.json"
+            "$inputs/core-experiment-backlog/backlog.json"
+          )
+          start_ns=$(date +%s%N)
+          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/cross-consumer-rss" bash "$evaluator" "${args[@]}" "$RUNNER_TEMP/cross-consumer-need.json" "$SUBJECT_SHA" complete
+          end_ns=$(date +%s%N)
+          wall_ms=$(( (end_ns-start_ns)/1000000 ))
+          bash "$evaluator" "${args[@]}" "$RUNNER_TEMP/cross-consumer-replay.json" "$SUBJECT_SHA" complete
+          cmp -s "$RUNNER_TEMP/cross-consumer-need.json" "$RUNNER_TEMP/cross-consumer-replay.json"
+          jq -e '.decision=="CROSS_CONSUMER_PRIMITIVE_NEED_OBSERVED" and .summary=={base_claim_consumers:3,claim_states:3,closed:12,common_envelopes:3,compatibility_gaps:1,consumer_releases:3,dependency_blocked:0,direct_mappings:0,direct_missing:0,open_experiments:29,refuted:0,total:12,typed_unknown_roles:2,unknown:0,unknown_producers:2} and .claim.state=="CLOSED" and .claim.next_operation=="DEFINE_MINIMAL_CLAIM_RESOLUTION_CORE_CONTRACT" and .candidate.id=="gooo.primitive.claim-resolution-tuple.v1" and .candidate.state=="OBSERVED" and .candidate.implementation_status=="NOT_SELECTED" and .experiments.direct_mappings==0 and .experiments.automatic_merge_allowed==false' "$RUNNER_TEMP/cross-consumer-need.json" >/dev/null
+          echo '::notice title=Cross-consumer stage::NORMAL_NEED_OBSERVATION_CLOSED'
+
+          printf 'null\n' > "$RUNNER_TEMP/missing-local.json"
+          missing_args=("$RUNNER_TEMP/cross-consumer-graph.json" "$denominator" "$RUNNER_TEMP/missing-local.json" "$RUNNER_TEMP/missing-local.json" "$RUNNER_TEMP/missing-local.json" "${args[@]:5}")
+          bash "$evaluator" "${missing_args[@]}" "$RUNNER_TEMP/missing-consumer-release.json" "$SUBJECT_SHA" missing-local-release
+          jq -e '.decision=="CROSS_CONSUMER_PRIMITIVE_NEED_UNKNOWN" and .summary.closed==2 and .summary.unknown==10 and .summary.direct_missing==1 and .summary.dependency_blocked==9 and .claim.reason=="LOCAL_LEDGER_RELEASE_UNAVAILABLE"' "$RUNNER_TEMP/missing-consumer-release.json" >/dev/null
+          echo '::notice title=Cross-consumer stage::MISSING_RELEASE_CASE_CLOSED'
+
+          bash "$evaluator" "${args[@]}" "$RUNNER_TEMP/scope-escalation.json" "$SUBJECT_SHA" scope-escalation
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed==10 and .summary.refuted==2 and .claim.reason=="OBSERVATION_EVIDENCE_SCOPE_ESCALATION"' "$RUNNER_TEMP/scope-escalation.json" >/dev/null
+          echo '::notice title=Cross-consumer stage::SCOPE_ESCALATION_CASE_CLOSED'
+
+          jq '(.experiments[]|select(.number==548)) |= .+{candidate_id:"gooo.primitive.claim-resolution-tuple.v1",mapping_state:"MAPPED"}' "$inputs/core-experiment-backlog/backlog.json" > "$RUNNER_TEMP/title-only-backlog.json"
+          title_args=("${args[@]:0:10}" "$RUNNER_TEMP/title-only-backlog.json")
+          bash "$evaluator" "${title_args[@]}" "$RUNNER_TEMP/title-only-mapping.json" "$SUBJECT_SHA" title-only-mapping
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed==10 and .summary.refuted==2 and .claim.reason=="TITLE_ONLY_EXPERIMENT_MAPPING_FORBIDDEN" and .experiments.candidate_mentions==1 and .experiments.direct_mappings==0' "$RUNNER_TEMP/title-only-mapping.json" >/dev/null
+          echo '::notice title=Cross-consumer stage::TITLE_ONLY_MAPPING_CASE_CLOSED'
+
+          jq '.claim.unknown_class="DIRECT_MISSING"' "$inputs/local-ledger/actions/missing-runbook.json" > "$RUNNER_TEMP/laundered-local-unknown.json"
+          gap_args=("${args[@]:0:3}" "$RUNNER_TEMP/laundered-local-unknown.json" "${args[@]:4}")
+          bash "$evaluator" "${gap_args[@]}" "$RUNNER_TEMP/gap-laundering.json" "$SUBJECT_SHA" gap-laundering
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed==10 and .summary.refuted==2 and .claim.reason=="CLAIM_RESOLUTION_GAP_LAUNDERED"' "$RUNNER_TEMP/gap-laundering.json" >/dev/null
+          echo '::notice title=Cross-consumer stage::GAP_LAUNDERING_CASE_CLOSED'
+
+          test -z "$(git status --porcelain=v1)"
+          jq -S -n --arg subject_sha "$SUBJECT_SHA" --argjson peak_rss_kib "$(cat "$RUNNER_TEMP/cross-consumer-rss")" --argjson wall_ms "$wall_ms" '{schema:"gooo/link/cross-consumer-primitive-need-runtime/v1",subject_sha:$subject_sha,observer:{peak_rss_kib:$peak_rss_kib,wall_ms:$wall_ms},repository_writes:0,local_tests_run:0,cross_project_required_gates:0}' > "$RUNNER_TEMP/cross-consumer-runtime.json"
+
+          {
+            echo '## Cross-consumer claim-resolution need'
+            jq -r '"- decision: \(.decision)","- meta cells: \(.summary.closed)/\(.summary.total) CLOSED; UNKNOWN \(.summary.unknown); REFUTED \(.summary.refuted)","- common envelopes: \(.summary.common_envelopes)/3","- claim states: \(.summary.claim_states)/3","- UNKNOWN producers: \(.summary.unknown_producers)/2","- typed UNKNOWN roles: \(.summary.typed_unknown_roles)/2","- compatibility gaps preserved: \(.summary.compatibility_gaps)/1","- direct experiment mappings: \(.summary.direct_mappings)/\(.summary.open_experiments)","- next operation: \(.claim.next_operation)"' "$RUNNER_TEMP/cross-consumer-need.json"
+            jq -sr '"- missing release: CLOSED \(.[0].summary.closed), UNKNOWN \(.[0].summary.unknown)","- scope escalation: CLOSED \(.[1].summary.closed), REFUTED \(.[1].summary.refuted)","- title-only mapping: CLOSED \(.[2].summary.closed), REFUTED \(.[2].summary.refuted)","- gap laundering: CLOSED \(.[3].summary.closed), REFUTED \(.[3].summary.refuted)"' "$RUNNER_TEMP/missing-consumer-release.json" "$RUNNER_TEMP/scope-escalation.json" "$RUNNER_TEMP/title-only-mapping.json" "$RUNNER_TEMP/gap-laundering.json"
+            jq -r '"- observer: \(.observer.peak_rss_kib) KiB / \(.observer.wall_ms) ms","- repository writes: \(.repository_writes)","- local test executions: \(.local_tests_run)","- cross-project required gates: \(.cross_project_required_gates)"' "$RUNNER_TEMP/cross-consumer-runtime.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload cross-consumer evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: cross-consumer-primitive-need-${{ env.SUBJECT_SHA }}
+          path: |
+            ${{ runner.temp }}/cross-consumer-need.json
+            ${{ runner.temp }}/cross-consumer-replay.json
+            ${{ runner.temp }}/cross-consumer-runtime.json
+            ${{ runner.temp }}/cross-consumer-graph.json
+            ${{ runner.temp }}/missing-consumer-release.json
+            ${{ runner.temp }}/scope-escalation.json
+            ${{ runner.temp }}/title-only-mapping.json
+            ${{ runner.temp }}/gap-laundering.json
+          if-no-files-found: error
