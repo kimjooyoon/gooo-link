@@ -74,7 +74,7 @@ jobs:
           mapfile -t activities < <(jq -r '.cells[].activity' "$GITHUB_WORKSPACE/contracts/three-product-adoption-denominator-v1.json")
           for activity in "${activities[@]}"; do
             safe_name=$(printf '%s' "$activity" | tr '[:upper:]' '[:lower:]')
-            timed_core "resolve-$safe_name" "$core_bin" graph resolve-activity --json "$example" "$activity"
+            timed_core "resolve-$safe_name" "$core_bin" graph resolve-activity "$example" --namespace threeproductadoptionv2 --name "$activity"
           done
           cp "$root/core-graph.json" "$root/three-product-graph.json"
           core_wall_ms=$(
