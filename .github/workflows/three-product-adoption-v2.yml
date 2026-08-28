@@ -164,6 +164,15 @@ jobs:
           : > "$root/release-records.ndjson"
           kit_wall_ms=0
           kit_peak_rss_kib=0
+          checksum_matches() {
+            local bundle=$1
+            local member=$2
+            local expected actual
+            expected=$(awk -v member="$member" '$2 == member {print $1; exit}' "$bundle/checksums.txt")
+            test -n "$expected"
+            actual=$(sha256sum "$bundle/$member" | awk '{print $1}')
+            test "$actual" = "$expected"
+          }
           while IFS= read -r product; do
             id=$(jq -r '.id' <<<"$product")
             repo=$(jq -r '.repository' <<<"$product")
@@ -206,13 +215,116 @@ jobs:
             product_rss_kib=$(awk '{print $2}' "$time_file")
             kit_wall_ms=$((kit_wall_ms + product_wall_ms))
             if test "$product_rss_kib" -gt "$kit_peak_rss_kib"; then kit_peak_rss_kib=$product_rss_kib; fi
+            member_list="$root/$id-replay-members.txt"
+            member_list_b="$root/$id-replay-members-b.txt"
+            member_union="$root/$id-replay-members-union.txt"
+            find "$bundle_a" -type f -printf '%P\n' | sort > "$member_list"
+            find "$bundle_b" -type f -printf '%P\n' | sort > "$member_list_b"
+            cat "$member_list" "$member_list_b" | sort -u > "$member_union"
+            input_manifest="$root/$id-replay-input-manifest.txt"
+            output_manifest="$root/$id-replay-output-manifest.txt"
+            : > "$input_manifest"
+            : > "$output_manifest"
+            replay_member_total=0
+            replay_verified_members=0
+            replay_mismatches=0
+            while IFS= read -r member; do
+              test -n "$member"
+              replay_member_total=$((replay_member_total + 1))
+              input_path="$bundle_a/$member"
+              output_path="$bundle_b/$member"
+              if test -f "$input_path"; then
+                input_sha=$(sha256sum "$input_path" | awk '{print $1}')
+                printf '%s  %s\n' "$input_sha" "$member" >> "$input_manifest"
+              else
+                input_sha="MISSING"
+                printf '%s  %s\n' "$input_sha" "$member" >> "$input_manifest"
+              fi
+              if test -f "$output_path"; then
+                output_sha=$(sha256sum "$output_path" | awk '{print $1}')
+                printf '%s  %s\n' "$output_sha" "$member" >> "$output_manifest"
+              else
+                output_sha="MISSING"
+                printf '%s  %s\n' "$output_sha" "$member" >> "$output_manifest"
+              fi
+              if test -f "$input_path" && test -f "$output_path" && cmp -s "$input_path" "$output_path" && test "$input_sha" = "$output_sha"; then
+                replay_verified_members=$((replay_verified_members + 1))
+              else
+                replay_mismatches=$((replay_mismatches + 1))
+              fi
+            done < "$member_union"
+            input_manifest_sha256=$(sha256sum "$input_manifest" | awk '{print $1}')
+            output_manifest_sha256=$(sha256sum "$output_manifest" | awk '{print $1}')
+            replay_byte_mismatches=$replay_mismatches
+            replay_receipt_verified=false
+            replay_receipt_comparisons_total=0
+            replay_receipt_comparisons_satisfied=0
+            if jq -e '
+              .schema == "gooo/interchange/replay/v2" and
+              .source.receipt_verified == true and
+              (.source.comparisons_total | numbers) > 0 and
+              .source.comparisons_satisfied == .source.comparisons_total
+            ' "$bundle_a/replay.json" >/dev/null &&
+              jq -e '
+                .schema == "gooo/interchange/replay/v2" and
+                .source.receipt_verified == true and
+                (.source.comparisons_total | numbers) > 0 and
+                .source.comparisons_satisfied == .source.comparisons_total
+              ' "$bundle_b/replay.json" >/dev/null; then
+              replay_receipt_verified=true
+              replay_receipt_comparisons_total=$((
+                $(jq -r '.source.comparisons_total' "$bundle_a/replay.json") +
+                $(jq -r '.source.comparisons_total' "$bundle_b/replay.json")
+              ))
+              replay_receipt_comparisons_satisfied=$((
+                $(jq -r '.source.comparisons_satisfied' "$bundle_a/replay.json") +
+                $(jq -r '.source.comparisons_satisfied' "$bundle_b/replay.json")
+              ))
+            fi
+            receipt_available=false
+            if test "$replay_receipt_verified" = true && checksum_matches "$bundle_a" replay.json && checksum_matches "$bundle_b" replay.json; then
+              receipt_available=true
+            fi
+            replay_receipt_mismatches=$((replay_receipt_comparisons_total - replay_receipt_comparisons_satisfied))
+            replay_mismatches=$replay_byte_mismatches
+            if test "$receipt_available" = true; then replay_mismatches=$replay_receipt_mismatches; fi
+            replay_verified=false
+            if test "$receipt_available" = true || { test "$replay_member_total" -gt 0 && test "$replay_byte_mismatches" -eq 0; }; then replay_verified=true; fi
+            provenance_available=false
+            if checksum_matches "$bundle_a" evidence.ndjson &&
+              checksum_matches "$bundle_a" relations.ndjson &&
+              checksum_matches "$bundle_b" evidence.ndjson &&
+              checksum_matches "$bundle_b" relations.ndjson &&
+              jq -e -s 'length > 0 and all(.[]; .schema == "gooo/interchange/evidence/v2" and (.source.member | type) == "string")' "$bundle_a/evidence.ndjson" >/dev/null &&
+              jq -e -s 'length > 0 and all(.[]; .schema == "gooo/interchange/evidence/v2" and (.source.member | type) == "string")' "$bundle_b/evidence.ndjson" >/dev/null &&
+              jq -e -s 'length > 0 and all(.[]; .schema == "gooo/interchange/relation/v2" and ((.evidence_ids // []) | length) > 0)' "$bundle_a/relations.ndjson" >/dev/null &&
+              jq -e -s 'length > 0 and all(.[]; .schema == "gooo/interchange/relation/v2" and ((.evidence_ids // []) | length) > 0)' "$bundle_b/relations.ndjson" >/dev/null; then
+              provenance_available=true
+            fi
+            checks=$(jq -r '.summary.total' "$report")
+            closed=$(jq -r '.summary.closed' "$report")
+            unknown=$(jq -r '.summary.unknown' "$report")
+            refuted=$(jq -r '.summary.refuted' "$report")
             jq -cn \
               --arg id "$id" \
               --arg decision "$(jq -r '.decision' "$report")" \
-              --argjson checks 10 \
-              --argjson closed 10 \
-              --argjson unknown 0 \
-              --argjson refuted 0 \
+              --argjson checks "$checks" \
+              --argjson closed "$closed" \
+              --argjson unknown "$unknown" \
+              --argjson refuted "$refuted" \
+              --argjson receipt_available "$receipt_available" \
+              --argjson provenance_available "$provenance_available" \
+              --argjson replay_verified "$replay_verified" \
+              --argjson replay_receipt_verified "$replay_receipt_verified" \
+              --argjson replay_member_total "$replay_member_total" \
+              --argjson replay_verified_members "$replay_verified_members" \
+              --argjson replay_byte_mismatches "$replay_byte_mismatches" \
+              --argjson replay_receipt_comparisons_total "$replay_receipt_comparisons_total" \
+              --argjson replay_receipt_comparisons_satisfied "$replay_receipt_comparisons_satisfied" \
+              --argjson replay_receipt_mismatches "$replay_receipt_mismatches" \
+              --argjson replay_mismatches "$replay_mismatches" \
+              --arg input_manifest_sha256 "$input_manifest_sha256" \
+              --arg output_manifest_sha256 "$output_manifest_sha256" \
               --argjson wall_ms "$product_wall_ms" \
               --argjson peak_rss_kib "$product_rss_kib" \
               '{
@@ -222,8 +334,19 @@ jobs:
                 closed: $closed,
                 unknown: $unknown,
                 refuted: $refuted,
-                receipt_available: true,
-                provenance_available: true,
+                receipt_available: $receipt_available,
+                provenance_available: $provenance_available,
+                replay_verified: $replay_verified,
+                replay_receipt_verified: $replay_receipt_verified,
+                replay_member_total: $replay_member_total,
+                replay_verified_members: $replay_verified_members,
+                replay_byte_mismatches: $replay_byte_mismatches,
+                replay_receipt_comparisons_total: $replay_receipt_comparisons_total,
+                replay_receipt_comparisons_satisfied: $replay_receipt_comparisons_satisfied,
+                replay_receipt_mismatches: $replay_receipt_mismatches,
+                replay_mismatches: $replay_mismatches,
+                input_manifest_sha256: $input_manifest_sha256,
+                output_manifest_sha256: $output_manifest_sha256,
                 conformer_executions: 1,
                 wall_ms: $wall_ms,
                 peak_rss_kib: $peak_rss_kib
@@ -274,8 +397,8 @@ jobs:
               expected_checks: 30,
               actual_checks: (map(.checks) | add),
               expected_replay: 3,
-              actual_replay: (length),
-              replay_mismatches: 0,
+              actual_replay: (map(select(.replay_verified == true)) | length),
+              replay_mismatches: (map(.replay_mismatches) | add),
               wall_ms: $wall_ms,
               peak_rss_kib: $peak_rss_kib,
               products: .
@@ -339,11 +462,8 @@ jobs:
               .products |= map(if .id == $id then
                 .receipt_available = false |
                 .provenance_available = false |
-                .decision = "UNKNOWN" |
-                .checks = 0 |
-                .closed = 0 |
-                .unknown = 1 |
-                .refuted = 0
+                .replay_verified = false |
+                .replay_receipt_verified = false
               else . end)
             ' "$kit" > "$root/kit-missing-$id.json"
             timed_observer "missing-$id" "$root/kit-missing-$id.json" "$releases" "missing-$id" "$root/missing-$id.json"
@@ -397,19 +517,17 @@ jobs:
             }
           ' "$root/normal-observation.json" "$root"/missing-*.json "$root"/refuted-*.json > "$root/three-product-adoption-scenarios.json"
           jq -e '.total_evaluations == 7 and .normal == 1 and .unknown == 3 and .refuted == 3' "$root/three-product-adoption-scenarios.json" >/dev/null
-          jq -n \
+          jq -n --slurpfile kit "$kit" \
             --arg schema "gooo/link/three-product-adoption-replay/v1" \
             --arg subject "$SUBJECT_SHA" \
-            --argjson executions 3 \
-            --argjson mismatches 0 \
             '{
               schema: $schema,
               subject_sha: $subject,
               expected_executions: 3,
-              actual_executions: $executions,
+              actual_executions: $kit[0].actual_replay,
               expected_mismatches: 0,
-              actual_mismatches: $mismatches,
-              products: ["local", "design", "infra"],
+              actual_mismatches: $kit[0].replay_mismatches,
+              products: ($kit[0].products | map({id, replay_verified, replay_receipt_verified, replay_member_total, replay_verified_members, replay_mismatches, input_manifest_sha256, output_manifest_sha256})),
               separately_observed_from_scenario_evaluations: true
             }' > "$root/three-product-adoption-replay.json"
           printf '%s\n' "$scenario_wall_ms" > "$root/scenario-wall-ms"
@@ -436,6 +554,14 @@ jobs:
           core_peak_rss_kib=$(cat "$root/core-peak-rss-kib" 2>/dev/null || awk 'BEGIN {max=0} {if ($2 > max) max=$2} END {printf "%d\n", max}' "$root"/core-*.time)
           kit_peak_rss_kib=$(cat "$root/kit-peak-rss-kib")
           scenario_peak_rss_kib=$(cat "$root/scenario-peak-rss-kib")
+          kit_executions=$(jq -r '.actual_executions' "$root/three-product-kit-observation.json")
+          kit_checks=$(jq -r '.actual_checks' "$root/three-product-kit-observation.json")
+          scenario_executions=$(jq -r '.total_evaluations' "$root/three-product-adoption-scenarios.json")
+          scenario_normal=$(jq -r '.normal' "$root/three-product-adoption-scenarios.json")
+          scenario_unknown=$(jq -r '.unknown' "$root/three-product-adoption-scenarios.json")
+          scenario_refuted=$(jq -r '.refuted' "$root/three-product-adoption-scenarios.json")
+          replay_executions=$(jq -r '.actual_executions' "$root/three-product-adoption-replay.json")
+          replay_mismatches=$(jq -r '.actual_mismatches' "$root/three-product-adoption-replay.json")
           peak_rss_kib=$core_peak_rss_kib
           if test "$kit_peak_rss_kib" -gt "$peak_rss_kib"; then peak_rss_kib=$kit_peak_rss_kib; fi
           if test "$scenario_peak_rss_kib" -gt "$peak_rss_kib"; then peak_rss_kib=$scenario_peak_rss_kib; fi
@@ -449,6 +575,14 @@ jobs:
             --argjson scenario_wall_ms "$scenario_wall_ms" \
             --argjson total_wall_ms "$total_wall_ms" \
             --argjson peak_rss_kib "$peak_rss_kib" \
+            --argjson kit_executions "$kit_executions" \
+            --argjson kit_checks "$kit_checks" \
+            --argjson scenario_executions "$scenario_executions" \
+            --argjson scenario_normal "$scenario_normal" \
+            --argjson scenario_unknown "$scenario_unknown" \
+            --argjson scenario_refuted "$scenario_refuted" \
+            --argjson replay_executions "$replay_executions" \
+            --argjson replay_mismatches "$replay_mismatches" \
             --argjson files "$regular_files" \
             --argjson dirs "$descendant_dirs" \
             --argjson lines "$physical_lines" \
@@ -461,9 +595,9 @@ jobs:
               subject_sha: $subject,
               go_policy_version: $policy,
               current_link_checks: {executions: 16, wall_ms: $core_wall_ms},
-              kit_conformers: {executions: 3, checks: 30, wall_ms: $kit_wall_ms},
-              scenario_evaluations: {executions: 7, normal: 1, unknown: 3, refuted: 3, wall_ms: $scenario_wall_ms},
-              replay: {executions: 3, mismatches: 0, wall_ms: $kit_wall_ms},
+              kit_conformers: {executions: $kit_executions, checks: $kit_checks, wall_ms: $kit_wall_ms},
+              scenario_evaluations: {executions: $scenario_executions, normal: $scenario_normal, unknown: $scenario_unknown, refuted: $scenario_refuted, wall_ms: $scenario_wall_ms},
+              replay: {executions: $replay_executions, mismatches: $replay_mismatches, wall_ms: $kit_wall_ms},
               product_builds: {executions: 0, wall_ms: 0},
               product_tests: {executions: 0, wall_ms: 0},
               total_wall_ms: $total_wall_ms,
@@ -575,6 +709,7 @@ jobs:
               echo "## Three-product adoption v2"
               jq -r '"decision=\(.decision) cells=\(.summary.closed)/\(.summary.total) unknown=\(.summary.unknown) refuted=\(.summary.refuted)"' "$report"
               jq -r '"normal=\(.normal) unknown_scenarios=\(.unknown) refuted_scenarios=\(.refuted) evaluations=\(.total_evaluations)"' "$scenarios"
+              jq -r '.evaluations[] | "\(.scenario): decision=\(.decision) closed=\(.summary.closed) unknown=\(.summary.unknown) refuted=\(.summary.refuted)"' "$scenarios"
               jq -r '"link_checks=\(.runtime.current_link_checks.executions) kit_conformers=\(.runtime.kit_conformers.executions) kit_checks=\(.runtime.kit_conformers.checks) replay=\(.runtime.replay.executions)/\(.runtime.replay.mismatches) total_wall_ms=\(.runtime.total_wall_ms) peak_rss_kib=\(.runtime.peak_rss_kib)"' "$report"
               jq -r '"regular_files=\(.runtime.inventory.regular_files) descendant_dirs=\(.runtime.inventory.descendant_dirs) physical_lines=\(.runtime.inventory.physical_lines) go_files=\(.runtime.inventory.go_files) go_lines=\(.runtime.inventory.go_lines) gooo_files=\(.runtime.inventory.gooo_files) gooo_lines=\(.runtime.inventory.gooo_lines)"' "$report"
               jq -r '"repository_writes=\(.runtime.repository_writes) local_tests=\(.runtime.local_test_executions) product_source_reads=\(.runtime.product_source_reads) cross_project_gates=\(.runtime.cross_project_required_gates) generator_authority=\(.runtime.generator_authority)"' "$report"

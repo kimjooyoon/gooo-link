@@ -1,9 +1,9 @@
 {
   "schema": "gooo/link/semantic-forge-readiness-release-lock/v1",
   "link": {
-    "repository": "kimjooyoon/gooo-link","tag":"v0.25.0-dev","release_id":378609811,
-    "target_commit_sha":"216b19a49ffbd5dbca672d13e79137ca5fed2b42","prerelease":false,
-    "assets":{"report":{"id":534043797,"name":"report.json","size":17466,"digest":"sha256:9d3a146b7099ae3cbc72ea471d080fcec9f4c7ea3078d8df83690746b461f561"}}
+    "repository": "kimjooyoon/gooo-link","tag":"v0.26.0-dev","release_id":378615207,
+    "target_commit_sha":"c10e11863ecb1c35c83030dd5469f6ee37c29872","prerelease":true,
+    "assets":{"report":{"id":534054292,"name":"semantic-forge-readiness-report.json","size":17206,"digest":"sha256:3d3ef6a4467267b01c6795e7628b4af1b04a61cd9d71f3f5740c261f45220c08"}}
   },
   "local": {
     "repository":"kimjooyoon/gooo-local-ledger","tag":"v0.8.0-dev","release_id":378593792,
@@ -44,4 +44,3 @@
     "local_tests":0,"repository_writes":0
   }
 }
-

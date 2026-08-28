@@ -45,15 +45,15 @@ jq -e '
   .summary.unique_selectors == 12
 ' "$core_observation" >/dev/null
 
-jq -e '
+jq -e --arg scenario "$scenario" '
   .expected_executions == 3 and
   .actual_executions == 3 and
   .expected_checks == 30 and
-  .actual_checks == 30 and
+  .actual_checks == (if ($scenario | startswith("missing-")) then 30 else 30 end) and
   .expected_replay == 3 and
-  .actual_replay == 3 and
+  .actual_replay == (if ($scenario | startswith("missing-")) then 2 else 3 end) and
   .replay_mismatches == 0 and
-  ([.products[] | select(.checks == 10 and .closed == 10 and .unknown == 0 and .refuted == 0 and .receipt_available == true and .provenance_available == true)] | length) == 3
+  ([.products[] | select(.checks == 10 and .closed == 10 and .unknown == 0 and .refuted == 0 and .receipt_available == true and .provenance_available == true)] | length) == (if ($scenario | startswith("missing-")) then 2 else 3 end)
 ' "$kit_observation" >/dev/null
 
 jq -e '
@@ -76,10 +76,13 @@ result=$(
     def product($id): [($k[0].products // [])[] | select(.id == $id)] | first;
     def release_product($id): [($r[0].products // [])[] | select(.id == $id)] | first;
     def activity_subject($name):
-      [($g[0].relations // [])[] |
+      ([($g[0].nodes // [])[] |
+        select(.kind == "Activity" and .name == $name) |
+        (.id // .node_id // .subject)] +
+       [($g[0].relations // [])[] |
         select(.predicate == "prov:used" and
           ((.subject | endswith("/" + $name)) or .subject == $name)) |
-        .subject] | unique;
+        .subject]) | map(select(. != null)) | unique;
     def relation($subject; $predicate; $object):
       any(($g[0].relations // [])[];
         .subject == $subject and .predicate == $predicate and .object == $object);
@@ -371,7 +374,7 @@ printf '%s\n' "$result" > "$output"
 
 case "$scenario" in
   normal)
-    if ! jq -e '.decision == "CLOSED" and .summary.total == 12 and .summary.closed == 12 and .summary.unknown == 0 and .summary.refuted == 0 and .graph.activity_binding_count == 12 and .graph.causal_dependency_pair_count == 16 and .graph.causal_edge_checks == 32 and .graph.isolated_self_loop_count == 0' <<<"$result" >/dev/null; then
+    if ! jq -e '.decision == "CLOSED" and .summary.total == 12 and .summary.closed == 12 and .summary.unknown == 0 and .summary.refuted == 0 and .graph.activity_binding_count == 12 and .graph.causal_dependency_pair_count == 19 and .graph.causal_edge_checks == 38 and .graph.isolated_self_loop_count == 0' <<<"$result" >/dev/null; then
       printf '%s\n' "$result" >&2
       exit 1
     fi
