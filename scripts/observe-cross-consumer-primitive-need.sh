@@ -59,7 +59,7 @@ jq -S -n \
     else ($x.claim|has("state") and has("stage") and has("step") and has("reason") and has("next_operation")) end;
   ($lc==null or $lu==null or $lf==null) as $local_missing |
   ($dc==null or $dg==null) as $design_missing |
-  ($ic==null or $iu==null or $if==null) as $infra_missing |
+  ($ic==null or $iu==null or $ir==null) as $infra_missing |
   ($local_missing or $design_missing or $infra_missing) as $consumer_release_missing |
   ($lc!=null and $lc.schema=="gooo/local-ledger/readiness-report/v1" and $lc.decision=="RELEASE_READY" and $lc.summary=={total:12,closed:12,unknown:0,refuted:0,repository_writes:0} and
    $lu!=null and $lu.schema=="gooo/local-ledger/readiness-report/v1" and $lu.decision=="NOT_READY" and $lu.claim.state=="UNKNOWN" and
