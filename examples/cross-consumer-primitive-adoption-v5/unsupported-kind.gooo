@@ -1,0 +1,8 @@
+package claimdependencyunsupported
+namespace claimdependencyunsupported
+
+entity Seed id "gooo://claim-dependency/unsupported/seed"
+entity RootState id "gooo://claim-dependency/unsupported/root"
+entity Result id "gooo://claim-dependency/unsupported/result"
+activity Root(Seed) -> RootState computes "claim.observe:recoverable|root"
+activity Derived(RootState) -> Result computes "claim.edge:implies|derived"

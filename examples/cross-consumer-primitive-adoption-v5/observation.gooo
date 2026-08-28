@@ -1,0 +1,40 @@
+package gooolink
+namespace gooolink
+
+entity CandidateSelectionRelease id "gooo://link/release/v0.22.0-dev/claim-dependency-selection"
+entity CorePrimitiveRelease id "gooo://core/release/v0.4.0-dev/claim-dependency-causality"
+entity CoreReleaseEligibility id "gooo://core/release/v0.4.0-dev/eligibility/7-of-7"
+entity FiveOfThirtyBaseline id "gooo://link/primitive-mappings/5-of-30"
+entity ReleasedClaimDependencyCommand id "gooo://core/command/claim-dependencies/v1"
+entity EightStructuralEdges id "gooo://claim-dependency/edges/8-of-8"
+entity SixOfThirtyMapping id "gooo://link/primitive-mappings/6-of-30"
+entity ZeroConsumerIncrement id "gooo://link/independent-consumer-increment/0"
+entity UnknownCoordinates id "gooo://claim-dependency/unknown-coordinates/6-of-6"
+entity RefutedCounterexamples id "gooo://claim-dependency/refuted-counterexamples/3-of-3"
+entity MetaActivitySet id "gooo://link/cross-consumer-primitive-adoption/meta-activities/12"
+entity OptionalReadOnlyBoundary id "gooo://link/authority/optional-read-only-observation"
+entity CandidateSelectionObserved id "gooo://link/observation/candidate-selection"
+entity CoreReleaseObserved id "gooo://link/observation/core-release"
+entity EligibilityBound id "gooo://link/observation/core-eligibility"
+entity BaselineBound id "gooo://link/observation/five-of-thirty"
+entity CommandExecuted id "gooo://link/observation/released-command"
+entity EdgesBound id "gooo://link/observation/eight-edges"
+entity MappingAdvanced id "gooo://link/observation/six-of-thirty"
+entity ConsumerIncrementPreserved id "gooo://link/observation/zero-consumer-increment"
+entity UnknownCoordinatesPreserved id "gooo://link/observation/unknown-coordinates"
+entity RefutedCounterexamplesPreserved id "gooo://link/observation/refuted-counterexamples"
+entity MetaActivitiesBound id "gooo://link/observation/meta-activities"
+entity ReadOnlyBoundaryPreserved id "gooo://link/observation/read-only-boundary"
+
+activity ObserveCandidateSelectionRelease(CandidateSelectionRelease) -> CandidateSelectionObserved
+activity ObserveCorePrimitiveRelease(CorePrimitiveRelease) -> CoreReleaseObserved
+activity BindCoreReleaseEligibility(CoreReleaseEligibility) -> EligibilityBound
+activity BindFiveOfThirtyBaseline(FiveOfThirtyBaseline) -> BaselineBound
+activity ExecuteReleasedClaimDependencyCommand(ReleasedClaimDependencyCommand) -> CommandExecuted
+activity BindEightStructuralEdges(EightStructuralEdges) -> EdgesBound
+activity AdvanceToSixOfThirty(SixOfThirtyMapping) -> MappingAdvanced
+activity PreserveZeroConsumerIncrement(ZeroConsumerIncrement) -> ConsumerIncrementPreserved
+activity PreserveUnknownCoordinates(UnknownCoordinates) -> UnknownCoordinatesPreserved
+activity PreserveRefutedCounterexamples(RefutedCounterexamples) -> RefutedCounterexamplesPreserved
+activity BindTwelveMetaActivities(MetaActivitySet) -> MetaActivitiesBound
+activity PreserveOptionalReadOnlyBoundary(OptionalReadOnlyBoundary) -> ReadOnlyBoundaryPreserved

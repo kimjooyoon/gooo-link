@@ -1,0 +1,7 @@
+package claimdependencyambiguous
+namespace claimdependencyambiguous
+
+entity Seed id "gooo://claim-dependency/ambiguous/seed"
+entity SharedState id "gooo://claim-dependency/ambiguous/shared"
+activity ProducerA(Seed) -> SharedState computes "claim.observe:recoverable|producer-a"
+activity ProducerB(Seed) -> SharedState computes "claim.observe:recoverable|producer-b"

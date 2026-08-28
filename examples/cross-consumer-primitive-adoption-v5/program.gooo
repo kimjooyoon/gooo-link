@@ -1,0 +1,18 @@
+package claimdependencyadoption
+namespace claimdependencyadoption
+
+entity ClaimDependencyPrimitive id "gooo://claim-dependency/gooo.primitive.claim-dependency-causality.v1"
+entity Seed id "gooo://claim-dependency/entity/seed"
+entity RootState id "gooo://claim-dependency/entity/root-state"
+entity DerivedState id "gooo://claim-dependency/entity/derived-state"
+entity SupportState id "gooo://claim-dependency/entity/support-state"
+entity RequirementState id "gooo://claim-dependency/entity/requirement-state"
+entity ContradictionState id "gooo://claim-dependency/entity/contradiction-state"
+entity FinalState id "gooo://claim-dependency/entity/final-state"
+
+activity Root(Seed, ClaimDependencyPrimitive) -> RootState computes "claim.observe:recoverable|root-observation"
+activity Derived(RootState) -> DerivedState computes "claim.edge:requires|derived-integrity"
+activity SupportCheck(RootState, DerivedState) -> SupportState computes "claim.edge:supports|support-observation"
+activity RequirementCheck(DerivedState, SupportState) -> RequirementState computes "claim.edge:requires|requirement-integrity"
+activity ContradictionCheck(RootState, RequirementState) -> ContradictionState computes "claim.edge:contradicts|contradiction-observation"
+activity FailureEntailmentCheck(ContradictionState) -> FinalState computes "claim.edge:failure-entailment|failure-observation"
