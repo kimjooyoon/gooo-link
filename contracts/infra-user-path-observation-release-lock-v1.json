@@ -4,11 +4,11 @@
     "core": {
       "repository": "kimjooyoon/meta-ontology-go",
       "tag": "v0.3.0-dev",
-      "target_sha": "5b7af263677e43354c5dc96fc2b2609b5f99b12e",
+      "target_sha": "5b7af77549d88ba345550c1428323797e6ce1fd8",
       "asset_id": 533579198,
       "asset_name": "gooo-linux-amd64.tar.gz",
       "asset_size": 7036826,
-      "asset_sha256": "5056c82b1833463800123010cb6956367d9017112a37658fdc7c06de21a2ea40",
+      "asset_sha256": "505608f28ccc92ba191d590b3cac160be14955405c159f9dc7fb3c8826985a5e",
       "archive": "tar.gz"
     },
     "link_baseline": {
