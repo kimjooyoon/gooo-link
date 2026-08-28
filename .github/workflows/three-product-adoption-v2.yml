@@ -284,6 +284,13 @@ jobs:
             receipt_available=false
             if test "$replay_receipt_verified" = true && checksum_matches "$bundle_a" replay.json && checksum_matches "$bundle_b" replay.json; then
               receipt_available=true
+            else
+              echo "receipt digest diagnostics for $id" >&2
+              for bundle in "$bundle_a" "$bundle_b"; do
+                echo "bundle=$bundle" >&2
+                grep 'replay' "$bundle/checksums.txt" >&2 || true
+                sha256sum "$bundle/replay.json" >&2
+              done
             fi
             replay_receipt_mismatches=$((replay_receipt_comparisons_total - replay_receipt_comparisons_satisfied))
             replay_mismatches=$replay_byte_mismatches
