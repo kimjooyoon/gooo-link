@@ -100,7 +100,10 @@ jobs:
           set -euo pipefail
           gooo="$RUNNER_TEMP/gooo/gooo"
           "$gooo" version --json > "$RUNNER_TEMP/gooo-version.json"
-          jq -e '.go_version=="go1.27.0"' "$RUNNER_TEMP/gooo-version.json" >/dev/null
+          jq -e '.schema_version=="gooo-version/v1" and .language=="gooo" and .version=="0.2.0-dev"' \
+            "$RUNNER_TEMP/gooo-version.json" >/dev/null
+          go version -m "$gooo" > "$RUNNER_TEMP/gooo-build-info.txt"
+          grep -Eq 'go1\.27\.0' "$RUNNER_TEMP/gooo-build-info.txt"
           "$gooo" check --json examples/design-product-adoption/main.gooo > "$RUNNER_TEMP/design-adoption-syntax.json"
           "$gooo" check --semantic --json examples/design-product-adoption/main.gooo > "$RUNNER_TEMP/design-adoption-semantic.json"
           "$gooo" graph dump examples/design-product-adoption/main.gooo > "$RUNNER_TEMP/design-adoption-graph.json"
@@ -227,6 +230,7 @@ jobs:
             ${{ runner.temp }}/design-code-match.zip
             ${{ runner.temp }}/go-fix-observation.json
             ${{ runner.temp }}/gooo-version.json
+            ${{ runner.temp }}/gooo-build-info.txt
             ${{ runner.temp }}/design-adoption-syntax.json
             ${{ runner.temp }}/design-adoption-semantic.json
             ${{ runner.temp }}/design-adoption-graph.json
