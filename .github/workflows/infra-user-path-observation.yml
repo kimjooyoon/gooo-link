@@ -234,8 +234,8 @@ jobs:
           go_lines=$(find . -type f -name '*.go' -not -path './.git/*' -print0 | xargs -0 -r cat | wc -l)
           gooo_lines=$(find . -type f -name '*.gooo' -not -path './.git/*' -print0 | xargs -0 -r cat | wc -l)
           go_version=$(go version | awk '{print $3}' | sed 's/^go//')
-          go_file_lines=$(find . -type f -name '*.go' -not -path './.git/*' -print0 | sort -z | xargs -0 -r wc -l | sed '$d' | jq -R -s 'split("\n") | map(select(length > 0) | capture("^\\s*(?<lines>[0-9]+)\\s+(?<file>.+)$") | {file: .file, lines: (.lines | tonumber)})')
-          gooo_file_lines=$(find . -type f -name '*.gooo' -not -path './.git/*' -print0 | sort -z | xargs -0 -r wc -l | sed '$d' | jq -R -s 'split("\n") | map(select(length > 0) | capture("^\\s*(?<lines>[0-9]+)\\s+(?<file>.+)$") | {file: .file, lines: (.lines | tonumber)})')
+          go_file_lines=$(find . -type f -name '*.go' -not -path './.git/*' -print0 | sort -z | xargs -0 -r -n1 wc -l | jq -R -s 'split("\n") | map(select(length > 0) | capture("^\\s*(?<lines>[0-9]+)\\s+(?<file>.+)$") | {file: .file, lines: (.lines | tonumber)})')
+          gooo_file_lines=$(find . -type f -name '*.gooo' -not -path './.git/*' -print0 | sort -z | xargs -0 -r -n1 wc -l | jq -R -s 'split("\n") | map(select(length > 0) | capture("^\\s*(?<lines>[0-9]+)\\s+(?<file>.+)$") | {file: .file, lines: (.lines | tonumber)})')
           jq -n \
             --arg go_version "$go_version" \
             --argjson files "$files" --argjson directories "$directories" \
@@ -252,6 +252,12 @@ jobs:
               gooo: {files: $gooo_files, physical_lines: $gooo_lines, per_file: $gooo_file_lines},
               toolchain: {go_version: $go_version, go_fix_module_roots: $go_fix_roots}
             }' > "$root/repository-inventory.json"
+          jq -e '
+            (.go.per_file | length) == .go.files and
+            ([.go.per_file[].lines] | add // 0) == .go.physical_lines and
+            (.gooo.per_file | length) == .gooo.files and
+            ([.gooo.per_file[].lines] | add // 0) == .gooo.physical_lines
+          ' "$root/repository-inventory.json" >/dev/null
           jq -n \
             --argjson peak_rss_kib "$(cat "$root/peak-rss-kib.txt")" \
             --argjson wall_ms "$(cat "$root/wall-ms.txt")" \
