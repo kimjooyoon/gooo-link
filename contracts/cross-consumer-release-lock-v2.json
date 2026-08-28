@@ -1,0 +1,111 @@
+{
+  "schema": "gooo/link/cross-consumer-release-lock/v2",
+  "core": {
+    "repository": "kimjooyoon/meta-ontology-go",
+    "tag": "v0.3.0-dev",
+    "ref_type": "commit",
+    "tag_object_sha": "5b7af77549d88ba345550c1428323797e6ce1fd8",
+    "target_commit_sha": "5b7af77549d88ba345550c1428323797e6ce1fd8",
+    "asset": {
+      "id": 533579198,
+      "name": "gooo-linux-amd64.tar.gz",
+      "sha256": "505608f28ccc92ba191d590b3cac160be14955405c159f9dc7fb3c8826985a5e"
+    },
+    "source": {
+      "path": "cmd/gooo/testdata/claim-resolution/main.gooo",
+      "sha256": "c4b12d7556aea4673cc84ae029b2ac0f835bb8ae808f475b98a03d01441c5b87",
+      "activity": "UnknownDirectClaim"
+    }
+  },
+  "inputs": [
+    {
+      "id": "local-ledger",
+      "repository": "kimjooyoon/gooo-local-ledger",
+      "tag": "v0.5.0-dev",
+      "ref_type": "tag",
+      "tag_object_sha": "d9f39eeaac5cec32c0b88dd23118d40acee6e126",
+      "target_commit_sha": "a68369caa92a30e23d639ed91e56bf4a8db1a302",
+      "assets": [
+        {
+          "role": "complete",
+          "id": 533445059,
+          "name": "ready.json",
+          "output": "complete.json",
+          "sha256": "430bcc05779a47174d5fb5bb49c5750d9341b6e167928d9d797feab1b97d844c"
+        },
+        {
+          "role": "actions",
+          "id": 533445058,
+          "name": "gooo-local-ledger-v0.5.0-dev-readiness-actions.zip",
+          "output": "actions.zip",
+          "sha256": "129c78a18157e5c495ffc936670435a4b74ad918062cd65332251174b1867ec0"
+        }
+      ]
+    },
+    {
+      "id": "design-evidence",
+      "repository": "kimjooyoon/gooo-design-evidence",
+      "tag": "v0.4.0-dev",
+      "ref_type": "tag",
+      "tag_object_sha": "78bea099f784b83de7860074dc27758ab98ff7fa",
+      "target_commit_sha": "26426e1fa82db516cce332f679ec9a79f9f2a1e3",
+      "assets": [
+        {
+          "role": "complete",
+          "id": 533399569,
+          "name": "adoption-report.json",
+          "output": "complete.json",
+          "sha256": "1d6aea856611b23e0c9e4e9e2f00561c18e119586fb44b81f22e162f705550fa"
+        },
+        {
+          "role": "unknown-guard",
+          "id": 533399570,
+          "name": "invalid-unknown.json",
+          "output": "unknown-guard.json",
+          "sha256": "403e69b29d759e258b070a2d38a065d5abb74e3b787f1756b7f7e6115f1d9686"
+        }
+      ]
+    },
+    {
+      "id": "infra-evidence",
+      "repository": "kimjooyoon/gooo-infra-evidence",
+      "tag": "v0.5.0-dev",
+      "ref_type": "commit",
+      "tag_object_sha": "bbe32a92bf40d1e4f290a911eb4756a6018c1a6d",
+      "target_commit_sha": "bbe32a92bf40d1e4f290a911eb4756a6018c1a6d",
+      "assets": [
+        {
+          "role": "complete",
+          "id": 533458257,
+          "name": "gooo-infra-evidence-v0.5.0-dev-report.json",
+          "output": "complete.json",
+          "sha256": "2df0f4ea8cc0e7b356758fb5c9fa245cdc5cd9c43265dab0127dfb7ebf20156e"
+        },
+        {
+          "role": "actions",
+          "id": 533458255,
+          "name": "gooo-infra-evidence-v0.5.0-dev-actions.zip",
+          "output": "actions.zip",
+          "sha256": "1e82cb083654b93991172f513157bb97586acc99e5a75ca9c14d58fcfb63ca5b"
+        }
+      ]
+    },
+    {
+      "id": "core-experiment-backlog",
+      "repository": "kimjooyoon/gooo-link",
+      "tag": "v0.8.0-dev",
+      "ref_type": "tag",
+      "tag_object_sha": "9054dc573a96ed877bbc57e4e1e3c367124932fa",
+      "target_commit_sha": "13962fdcf314d9624ef451d386c59db9545a3ebb",
+      "assets": [
+        {
+          "role": "backlog",
+          "id": 533496282,
+          "name": "gooo-link-v0.8.0-dev-core-experiment-backlog.json",
+          "output": "backlog.json",
+          "sha256": "4a0fce2cb2a27f5d71f4582a340135919ac1b6b6ccf723d1f6e6c650cd806168"
+        }
+      ]
+    }
+  ]
+}
