@@ -1,0 +1,29 @@
+package gooolink
+namespace gooolink
+
+entity LinkBaselineRelease id "gooo://link/release/v0.16.0-dev"
+entity WorkgraphAdoptionRelease id "gooo://workgraph/release/v0.3.0-dev"
+entity ClaimResolutionCandidateIdentity id "gooo://claim-resolution/gooo.primitive.claim-resolution-tuple.v1"
+entity BaselineDirectMappingCount id "gooo://claim-resolution/direct-mappings/4-of-30"
+entity WorkgraphDirectMapping id "gooo://claim-resolution/consumer/workgraph/direct-mapping/1-of-1"
+entity FifthDirectMappingCount id "gooo://claim-resolution/direct-mappings/5-of-30"
+entity IndependentConsumerCount id "gooo://claim-resolution/independent-consumers/4"
+entity WorkgraphAdoptionEvidence id "gooo://workgraph/claim-resolution-adoption/12-of-12"
+entity WorkgraphUnknownEvidence id "gooo://workgraph/claim-resolution/unknown/2-paths"
+entity WorkgraphRefutedEvidence id "gooo://workgraph/claim-resolution/refuted/3-paths"
+entity MetaActivitySet id "gooo://link/cross-consumer-primitive-adoption/meta-activities/12"
+entity OptionalReadOnlyBoundary id "gooo://link/authority/optional-read-only-observation"
+entity ObservationDecision id "gooo://link/decision/fifth-direct-primitive-mapping"
+
+activity ObserveLinkBaselineRelease(LinkBaselineRelease) -> ObservationDecision
+activity ObserveWorkgraphAdoptionRelease(WorkgraphAdoptionRelease) -> ObservationDecision
+activity BindClaimResolutionCandidateIdentity(ClaimResolutionCandidateIdentity) -> ObservationDecision
+activity BindFourOfThirtyBaseline(BaselineDirectMappingCount) -> ObservationDecision
+activity BindWorkgraphDirectMapping(WorkgraphDirectMapping) -> ObservationDecision
+activity AdvanceToFiveOfThirty(FifthDirectMappingCount) -> ObservationDecision
+activity CountFourIndependentConsumers(IndependentConsumerCount) -> ObservationDecision
+activity BindWorkgraphAdoptionEvidence(WorkgraphAdoptionEvidence) -> ObservationDecision
+activity PreserveWorkgraphUnknownResolutions(WorkgraphUnknownEvidence) -> ObservationDecision
+activity PreserveWorkgraphRefutedResolutions(WorkgraphRefutedEvidence) -> ObservationDecision
+activity BindTwelveMetaActivities(MetaActivitySet) -> ObservationDecision
+activity PreserveOptionalReadOnlyBoundary(OptionalReadOnlyBoundary) -> ObservationDecision
