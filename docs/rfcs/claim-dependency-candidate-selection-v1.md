@@ -32,7 +32,7 @@ CI parses and lowers the source with released Gooo and observes:
 | Gooo topology | Count |
 | --- | ---: |
 | Activities | 6/6 |
-| Reconstructed graph edges | 8/8 |
+| Edges exposed by released Gooo graph | 0 |
 | Recoverable root programs | 1/1 |
 | Typed edge programs | 5/5 |
 | `REQUIRES` | 2/2 |
@@ -40,7 +40,7 @@ CI parses and lowers the source with released Gooo and observes:
 | `CONTRADICTS` | 1/1 |
 | `FAILURE_ENTAILMENT` | 1/1 |
 
-The research document is digest-locked for provenance but prose is not counted as executable evidence. The candidate ID and mapping authority live in `examples/claim-dependency-candidate-selection/main.gooo`; a title-only mapping is REFUTED.
+The research document describes eight edges reconstructed by its experimental Go implementation, but released Gooo exposes zero edges for this source. The selection does not promote that unmerged implementation claim into language evidence. The zero-edge result is preserved as part of the implementation gap. The research document is digest-locked for provenance but prose is not counted as executable evidence. The candidate ID and mapping authority live in `examples/claim-dependency-candidate-selection/main.gooo`; a title-only mapping is REFUTED.
 
 ## Meta denominator
 
