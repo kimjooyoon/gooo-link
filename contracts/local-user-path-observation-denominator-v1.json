@@ -1,0 +1,35 @@
+{
+  "schema": "gooo/link/local-user-path-observation-denominator/v1",
+  "id": "gooo://denominator/link-local-user-path-observation-v1",
+  "candidate_id": "gooo.product.local-readiness-claim-projection.v1",
+  "target_cells": 12,
+  "planned_user_verticals_previous": 0,
+  "planned_user_verticals_total": 3,
+  "primitive_direct_mappings_expected": 5,
+  "primitive_direct_mappings_total": 30,
+  "independent_consumers_expected": 4,
+  "cells": [
+    {"ordinal":1,"id":"LINK_BASELINE_RELEASE","activity":"ObserveLinkV017Baseline","stage":"BASELINE_RELEASE","step":"OBSERVE_LINK_V0_17_BASELINE","proof_choice":"FOUNDATION","indicator_class":"DRIVER","closed_reason":"LINK_V0_17_BASELINE_OBSERVED"},
+    {"ordinal":2,"id":"LOCAL_PROJECTION_RELEASE","activity":"ObserveLocalProjectionRelease","stage":"PRODUCT_RELEASE","step":"OBSERVE_LOCAL_PROJECTION_V0_7_RELEASE","proof_choice":"FOUNDATION","indicator_class":"DRIVER","closed_reason":"LOCAL_PROJECTION_V0_7_RELEASE_OBSERVED"},
+    {"ordinal":3,"id":"PRIMITIVE_BASELINE_PRESERVED","activity":"PreserveFiveOfThirtyPrimitiveBaseline","stage":"PRIMITIVE_BASELINE","step":"PRESERVE_FIVE_OF_THIRTY_PRIMITIVE_BASELINE","proof_choice":"FOUNDATION","indicator_class":"OUTCOME","closed_reason":"PRIMITIVE_BASELINE_5_OF_30_PRESERVED"},
+    {"ordinal":4,"id":"USER_VERTICAL_DENOMINATOR","activity":"BindThreeUserVerticalDenominator","stage":"VERTICAL_DENOMINATOR","step":"BIND_THREE_USER_VERTICAL_DENOMINATOR","proof_choice":"FOUNDATION","indicator_class":"GUARDRAIL","closed_reason":"USER_VERTICAL_DENOMINATOR_3_BOUND"},
+    {"ordinal":5,"id":"LOCAL_PROJECTION_CONFORMANCE","activity":"ObserveLocalProjectionConformance","stage":"PRODUCT_EVIDENCE","step":"OBSERVE_LOCAL_PROJECTION_CONFORMANCE","proof_choice":"COHERENCE","indicator_class":"DRIVER","closed_reason":"LOCAL_PROJECTION_CONFORMANCE_12_OF_12_OBSERVED"},
+    {"ordinal":6,"id":"CLAIM_FIELD_PROJECTION","activity":"ObserveFiveToSixFieldProjection","stage":"CLAIM_FIELDS","step":"OBSERVE_FIVE_TO_SIX_FIELD_PROJECTION","proof_choice":"COHERENCE","indicator_class":"OUTCOME","closed_reason":"SOURCE_15_TO_PROJECTED_18_CLAIM_FIELDS_OBSERVED"},
+    {"ordinal":7,"id":"GENERATED_GOOO_PROGRAMS","activity":"ObserveGeneratedGoooClaimPrograms","stage":"META_PROGRAMS","step":"OBSERVE_GENERATED_GOOO_CLAIM_PROGRAMS","proof_choice":"COHERENCE","indicator_class":"OUTCOME","closed_reason":"GENERATED_GOOO_CLAIM_PROGRAMS_3_OF_3_OBSERVED"},
+    {"ordinal":8,"id":"UNKNOWN_RESOLUTION","activity":"PreserveLocalProjectionUnknown","stage":"RESOLUTION","step":"PRESERVE_LOCAL_PROJECTION_UNKNOWN","proof_choice":"COHERENCE","indicator_class":"GUARDRAIL","closed_reason":"LOCAL_PROJECTION_UNKNOWN_8_CLOSED_4_UNKNOWN_PRESERVED"},
+    {"ordinal":9,"id":"REFUTED_RESOLUTION","activity":"PreserveLocalProjectionRefutation","stage":"RESOLUTION","step":"PRESERVE_LOCAL_PROJECTION_REFUTATION","proof_choice":"REGRESSION","indicator_class":"DRIVER","closed_reason":"LOCAL_PROJECTION_REFUTED_8_CLOSED_4_REFUTED_PRESERVED"},
+    {"ordinal":10,"id":"COUNTEREXAMPLE_AND_REPLAY","activity":"ObserveProjectionCounterexamplesAndReplay","stage":"REGRESSION","step":"OBSERVE_PROJECTION_COUNTEREXAMPLES_AND_REPLAY","proof_choice":"REGRESSION","indicator_class":"GUARDRAIL","closed_reason":"PROJECTION_COUNTEREXAMPLES_2_AND_REPLAY_9_OBSERVED"},
+    {"ordinal":11,"id":"META_ACTIVITY_BINDINGS","activity":"BindLocalAndLinkMetaActivities","stage":"META","step":"BIND_LOCAL_AND_LINK_META_ACTIVITIES","proof_choice":"REGRESSION","indicator_class":"GUARDRAIL","closed_reason":"LOCAL_AND_LINK_META_ACTIVITIES_12_OF_12_BOUND"},
+    {"ordinal":12,"id":"OPTIONAL_VERTICAL_PROGRESS","activity":"RecordOptionalLocalVerticalProgress","stage":"AUTHORITY","step":"RECORD_OPTIONAL_LOCAL_VERTICAL_PROGRESS","proof_choice":"REGRESSION","indicator_class":"OUTCOME","closed_reason":"LOCAL_USER_VERTICAL_PROGRESS_1_OF_3_RECORDED"}
+  ],
+  "proof_totals": [
+    {"proof_choice":"FOUNDATION","total":4},
+    {"proof_choice":"COHERENCE","total":4},
+    {"proof_choice":"REGRESSION","total":4}
+  ],
+  "indicator_totals": [
+    {"indicator_class":"DRIVER","total":4},
+    {"indicator_class":"OUTCOME","total":4},
+    {"indicator_class":"GUARDRAIL","total":4}
+  ]
+}

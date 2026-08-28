@@ -1,0 +1,29 @@
+package link
+namespace localuserpathobservation
+
+entity LinkBaselineRelease id "link://entity/local-user-path/link-baseline"
+entity LocalProjectionRelease id "link://entity/local-user-path/product-release"
+entity PrimitiveBaseline id "link://entity/local-user-path/primitive-baseline"
+entity UserVerticalDenominator id "link://entity/local-user-path/vertical-denominator"
+entity LocalProjectionConformance id "link://entity/local-user-path/conformance"
+entity ClaimFieldProjection id "link://entity/local-user-path/claim-fields"
+entity GeneratedGoooPrograms id "link://entity/local-user-path/generated-gooo-programs"
+entity LocalUnknownResolution id "link://entity/local-user-path/unknown-resolution"
+entity LocalRefutedResolution id "link://entity/local-user-path/refuted-resolution"
+entity ProjectionRegression id "link://entity/local-user-path/regression"
+entity MetaActivityBindings id "link://entity/local-user-path/meta-bindings"
+entity OptionalVerticalProgress id "link://entity/local-user-path/optional-progress"
+entity ObservationDecision id "link://entity/local-user-path/decision"
+
+activity ObserveLinkV017Baseline(LinkBaselineRelease) -> ObservationDecision
+activity ObserveLocalProjectionRelease(LocalProjectionRelease) -> ObservationDecision
+activity PreserveFiveOfThirtyPrimitiveBaseline(PrimitiveBaseline) -> ObservationDecision
+activity BindThreeUserVerticalDenominator(UserVerticalDenominator) -> ObservationDecision
+activity ObserveLocalProjectionConformance(LocalProjectionConformance) -> ObservationDecision
+activity ObserveFiveToSixFieldProjection(ClaimFieldProjection) -> ObservationDecision
+activity ObserveGeneratedGoooClaimPrograms(GeneratedGoooPrograms) -> ObservationDecision
+activity PreserveLocalProjectionUnknown(LocalUnknownResolution) -> ObservationDecision
+activity PreserveLocalProjectionRefutation(LocalRefutedResolution) -> ObservationDecision
+activity ObserveProjectionCounterexamplesAndReplay(ProjectionRegression) -> ObservationDecision
+activity BindLocalAndLinkMetaActivities(MetaActivityBindings) -> ObservationDecision
+activity RecordOptionalLocalVerticalProgress(OptionalVerticalProgress) -> ObservationDecision
