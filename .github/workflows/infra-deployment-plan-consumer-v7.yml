@@ -1,0 +1,289 @@
+name: Second independent infra deployment-plan consumer
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    env:
+      SUBJECT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.SUBJECT_SHA }}
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.27.x
+          check-latest: true
+
+      - name: Bind exact subject identity
+        run: test "$(git rev-parse HEAD)" = "$SUBJECT_SHA"
+
+      - name: Download three immutable releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          lock=contracts/infra-deployment-plan-consumer-release-lock-v7.json
+          mkdir -p "$RUNNER_TEMP/link" "$RUNNER_TEMP/infra" "$RUNNER_TEMP/core"
+
+          for scope in link infra core; do
+            repository=$(jq -r ".$scope.repository" "$lock")
+            tag=$(jq -r ".$scope.tag" "$lock")
+            target=$(jq -r ".$scope.target_commit_sha" "$lock")
+            release_id=$(jq -r ".$scope.release_id" "$lock")
+            prerelease=$(jq -r ".$scope.prerelease" "$lock")
+            gh api "repos/$repository/releases/tags/$tag" > "$RUNNER_TEMP/$scope-release.json"
+            gh api "repos/$repository/git/ref/tags/$tag" > "$RUNNER_TEMP/$scope-ref.json"
+            jq -e --arg tag "$tag" --arg target "$target" --argjson release_id "$release_id" --argjson prerelease "$prerelease" '
+              .id==$release_id and .tag_name==$tag and .target_commitish==$target and
+              .draft==false and .prerelease==$prerelease
+            ' "$RUNNER_TEMP/$scope-release.json" >/dev/null
+            jq -e --arg target "$target" '.object.type=="commit" and .object.sha==$target' "$RUNNER_TEMP/$scope-ref.json" >/dev/null
+          done
+
+          download_asset() {
+            scope=$1
+            selector=$2
+            destination=$3
+            release="$RUNNER_TEMP/$scope-release.json"
+            name=$(jq -r --arg selector "$selector" ".$scope.assets[$selector].name" "$lock")
+            id=$(jq -r --arg selector "$selector" ".$scope.assets[$selector].id" "$lock")
+            size=$(jq -r --arg selector "$selector" ".$scope.assets[$selector].size" "$lock")
+            digest=$(jq -r --arg selector "$selector" ".$scope.assets[$selector].digest" "$lock")
+            jq -e --arg name "$name" --arg digest "$digest" --argjson id "$id" --argjson size "$size" '
+              .assets[] | select(.name==$name and .id==$id and .size==$size and .digest==$digest)
+            ' "$release" >/dev/null
+            url=$(jq -r --arg name "$name" '.assets[]|select(.name==$name)|.browser_download_url' "$release")
+            curl --fail --location --retry 3 "$url" --output "$destination"
+            test "$(wc -c < "$destination" | tr -d ' ')" -eq "$size"
+            test "sha256:$(sha256sum "$destination" | awk '{print $1}')" = "$digest"
+          }
+
+          download_asset link report "$RUNNER_TEMP/link/report.json"
+          for selector in $(jq -r '.infra.assets | keys[]' "$lock"); do
+            name=$(jq -r --arg selector "$selector" '.infra.assets[$selector].name' "$lock")
+            download_asset infra "$selector" "$RUNNER_TEMP/infra/$name"
+          done
+          test "$(jq '.infra.assets|length' "$lock")" -eq 10
+          download_asset core binary "$RUNNER_TEMP/core/gooo.tar.gz"
+          download_asset core checksums "$RUNNER_TEMP/core/SHA256SUMS"
+          binary_name=$(jq -r '.core.assets.binary.name' "$lock")
+          test "$(sha256sum "$RUNNER_TEMP/core/gooo.tar.gz" | awk '{print $1}')" = "$(awk -v name="$binary_name" '$2==name {print $1}' "$RUNNER_TEMP/core/SHA256SUMS")"
+          tar -xzf "$RUNNER_TEMP/core/gooo.tar.gz" -C "$RUNNER_TEMP/core"
+          chmod +x "$RUNNER_TEMP/core/gooo"
+
+      - name: Observe released product through Gooo meta code
+        shell: bash
+        run: |
+          set -euo pipefail
+          gooo="$RUNNER_TEMP/core/gooo"
+          observation=examples/infra-deployment-plan-consumer-v7/observation.gooo
+          git status --porcelain=v1 -z --untracked-files=all > "$RUNNER_TEMP/before.bin"
+
+          module_roots=$(find . -name go.mod -not -path './.git/*' | wc -l | tr -d ' ')
+          find . -name go.mod -not -path './.git/*' -print0 |
+            while IFS= read -r -d '' module; do
+              (cd "$(dirname "$module")" && go fix ./...)
+            done
+
+          "$gooo" check --json "$observation" > "$RUNNER_TEMP/observation-syntax.json"
+          "$gooo" check --semantic --json "$observation" > "$RUNNER_TEMP/observation-semantic.json"
+          "$gooo" graph dump "$observation" > "$RUNNER_TEMP/graph.json"
+
+          start_ns=$(date +%s%N)
+          /usr/bin/time -v -o "$RUNNER_TEMP/time.txt" \
+            jq -e 'type=="object"' \
+              "$RUNNER_TEMP/infra/semantic-deployment-plan-evaluation.json" \
+              "$RUNNER_TEMP/infra/deployment-plan.json" \
+              "$RUNNER_TEMP/infra/semantic-deployment-plan-runtime.json" \
+              "$RUNNER_TEMP/infra/semantic-deployment-plan-replay.json" \
+              "$RUNNER_TEMP/infra/semantic-deployment-plan-inventory.json" >/dev/null
+          end_ns=$(date +%s%N)
+          wall_ms=$(( (end_ns-start_ns)/1000000 ))
+          peak_rss_kib=$(awk -F: '/Maximum resident set size/ {gsub(/ /,"",$2); print $2}' "$RUNNER_TEMP/time.txt")
+
+          git status --porcelain=v1 -z --untracked-files=all > "$RUNNER_TEMP/after.bin"
+          if cmp -s "$RUNNER_TEMP/before.bin" "$RUNNER_TEMP/after.bin"; then writes=0; else writes=1; fi
+          go_version=$(go env GOVERSION)
+          jq -S -n \
+            --arg subject_sha "$SUBJECT_SHA" \
+            --arg go_version "$go_version" \
+            --argjson peak_rss_kib "$peak_rss_kib" \
+            --argjson wall_ms "$wall_ms" \
+            --argjson writes "$writes" \
+            --argjson module_roots "$module_roots" '
+            {
+              schema:"gooo/link/infra-deployment-plan-consumer-runtime/v7",
+              subject_sha:$subject_sha,
+              go_version:$go_version,
+              releases:{link:true,infra:true,core:true},
+              release_assets_observed:10,
+              primitive_mapping_increment:0,
+              independent_consumer_previous:1,
+              independent_consumer_increment:1,
+              performance:{release_validation_peak_rss_kib:$peak_rss_kib,release_validation_wall_ms:$wall_ms},
+              repository_writes:$writes,
+              local_tests_run:0,
+              cross_project_required_gates:0,
+              generator_authority:false,
+              central_orchestration_authorized:false,
+              go_fix_module_roots:$module_roots
+            }
+          ' > "$RUNNER_TEMP/observation-runtime.json"
+
+      - name: Evaluate normal and counterexample paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          evaluator=scripts/observe-infra-deployment-plan-consumer-v7.sh
+
+          evaluate() {
+            report=$1
+            observation_runtime=$2
+            output=$3
+            phase=$4
+            graph=$5
+            bash "$evaluator" \
+              "$GITHUB_WORKSPACE" \
+              "$graph" \
+              "$RUNNER_TEMP/link-release.json" \
+              "$RUNNER_TEMP/link/report.json" \
+              "$RUNNER_TEMP/infra-release.json" \
+              "$report" \
+              "$RUNNER_TEMP/infra/deployment-plan.json" \
+              "$RUNNER_TEMP/infra/deployment-plan.md" \
+              "$RUNNER_TEMP/infra/semantic-deployment-plan-runtime.json" \
+              "$RUNNER_TEMP/infra/semantic-deployment-plan-replay.json" \
+              "$RUNNER_TEMP/infra/semantic-deployment-plan-inventory.json" \
+              "$observation_runtime" \
+              "$output" \
+              "$SUBJECT_SHA" \
+              "$phase"
+          }
+
+          product="$RUNNER_TEMP/infra/semantic-deployment-plan-evaluation.json"
+          evaluate "$product" "$RUNNER_TEMP/observation-runtime.json" "$RUNNER_TEMP/report.json" complete "$RUNNER_TEMP/graph.json"
+
+          jq '.releases.infra=false' "$RUNNER_TEMP/observation-runtime.json" > "$RUNNER_TEMP/missing-release-runtime.json"
+          evaluate "$product" "$RUNNER_TEMP/missing-release-runtime.json" "$RUNNER_TEMP/unknown.json" missing-product-release "$RUNNER_TEMP/graph.json"
+
+          jq '.summary.cells_closed=11' "$product" > "$RUNNER_TEMP/tampered-product.json"
+          evaluate "$RUNNER_TEMP/tampered-product.json" "$RUNNER_TEMP/observation-runtime.json" "$RUNNER_TEMP/product-refuted.json" tampered-product-report "$RUNNER_TEMP/graph.json"
+
+          jq '.utility.state="CLOSED"' "$product" > "$RUNNER_TEMP/laundered-utility.json"
+          evaluate "$RUNNER_TEMP/laundered-utility.json" "$RUNNER_TEMP/observation-runtime.json" "$RUNNER_TEMP/utility-refuted.json" utility-laundering "$RUNNER_TEMP/graph.json"
+
+          jq '.independent_consumer_increment=2' "$RUNNER_TEMP/observation-runtime.json" > "$RUNNER_TEMP/escalated-consumer-runtime.json"
+          evaluate "$product" "$RUNNER_TEMP/escalated-consumer-runtime.json" "$RUNNER_TEMP/consumer-refuted.json" consumer-increment "$RUNNER_TEMP/graph.json"
+
+          jq '.cross_project_required_gates=1' "$RUNNER_TEMP/observation-runtime.json" > "$RUNNER_TEMP/escalated-authority-runtime.json"
+          evaluate "$product" "$RUNNER_TEMP/escalated-authority-runtime.json" "$RUNNER_TEMP/authority-refuted.json" authority-escalation "$RUNNER_TEMP/graph.json"
+
+          jq 'del(.nodes[]|select(.kind=="Activity" and .name=="BindTwelveConsumerMetaActivities"))' "$RUNNER_TEMP/graph.json" > "$RUNNER_TEMP/missing-meta-graph.json"
+          evaluate "$product" "$RUNNER_TEMP/observation-runtime.json" "$RUNNER_TEMP/meta-refuted.json" missing-meta-activity "$RUNNER_TEMP/missing-meta-graph.json"
+
+          jq -e '
+            .decision=="INFRA_DEPLOYMENT_PLAN_CONSUMER_OBSERVED" and .claim.state=="CLOSED" and
+            .summary.closed_cells==12 and .summary.total_cells==12 and .summary.unknown_cells==0 and .summary.refuted_cells==0 and
+            .summary.primitive_mappings_current==6 and .summary.primitive_mapping_increment==0 and
+            .summary.independent_consumers_previous==1 and .summary.independent_consumer_increment==1 and .summary.independent_consumers_current==2 and
+            .summary.product_release_assets_observed==10 and .summary.product_cells_observed==12 and
+            .summary.product_activities_observed==6 and .summary.product_dependencies_observed==8 and .summary.product_dependency_kinds_observed==4 and
+            .summary.prior_contract_cells_observed==15 and .summary.prior_semantic_edges_observed==6 and
+            .summary.prior_openapi_bindings_observed==1 and .summary.prior_terraform_bindings_observed==1 and
+            .summary.generated_artifacts_observed==2 and .summary.unknown_coordinates_observed==6 and
+            .summary.refuted_boundaries_observed==3 and .summary.replay_comparisons_observed==7 and
+            .summary.external_use_cases_evidenced==0 and .summary.external_use_cases_declared==1 and .summary.utility_state=="UNKNOWN" and
+            .summary.link_meta_activities_observed==12 and
+            ([.proofs[]|select(.closed==4 and .total==4)]|length)==3 and
+            ([.indicator_classes[]|select(.closed==4 and .total==4)]|length)==3 and
+            .authority.independent_release_is_external_utility==false and .authority.utility_claimed==false and
+            .authority.cross_project_required_gates==0 and .authority.local_tests_run==0 and .authority.source_repository_writes==0
+          ' "$RUNNER_TEMP/report.json" >/dev/null
+
+          jq -e '
+            .decision=="INFRA_DEPLOYMENT_PLAN_CONSUMER_UNKNOWN" and .claim.state=="UNKNOWN" and
+            .claim.stage=="PRODUCT_RELEASE" and .claim.step=="OBSERVE_INFRA_DEPLOYMENT_PLAN_RELEASE" and
+            .claim.reason=="INFRA_DEPLOYMENT_PLAN_RELEASE_UNAVAILABLE" and .claim.unknown_class=="DIRECT_MISSING" and
+            .claim.next_operation=="FETCH_PINNED_INFRA_PRODUCT_RELEASE" and (.claim.blocked_by|length)==1 and
+            .summary.closed_cells==4 and .summary.unknown_cells==8 and .summary.refuted_cells==0 and .summary.independent_consumer_increment==0
+          ' "$RUNNER_TEMP/unknown.json" >/dev/null
+          jq -e '.decision=="FAIL_CLOSED" and .claim.reason=="INFRA_DEPLOYMENT_PLAN_REPORT_MISMATCH" and .summary.closed_cells==4 and .summary.refuted_cells==8 and .summary.independent_consumer_increment==0' "$RUNNER_TEMP/product-refuted.json" >/dev/null
+          jq -e '.decision=="FAIL_CLOSED" and .claim.reason=="PRODUCT_UTILITY_LAUNDERED" and .summary.closed_cells==11 and .summary.refuted_cells==1 and .summary.independent_consumer_increment==0' "$RUNNER_TEMP/utility-refuted.json" >/dev/null
+          jq -e '.decision=="FAIL_CLOSED" and .claim.reason=="INDEPENDENT_CONSUMER_INCREMENT_MISMATCH" and .summary.closed_cells==11 and .summary.refuted_cells==1' "$RUNNER_TEMP/consumer-refuted.json" >/dev/null
+          jq -e '.decision=="FAIL_CLOSED" and .claim.reason=="OBSERVATION_AUTHORITY_ESCALATED" and .summary.closed_cells==11 and .summary.refuted_cells==1' "$RUNNER_TEMP/authority-refuted.json" >/dev/null
+          jq -e '.decision=="FAIL_CLOSED" and .claim.reason=="GOOO_META_ACTIVITY_MISSING" and .summary.closed_cells==11 and .summary.refuted_cells==1' "$RUNNER_TEMP/meta-refuted.json" >/dev/null
+
+      - name: Publish exact human-readable indicators
+        shell: bash
+        run: |
+          {
+            echo "## Second independent infra deployment-plan consumer"
+            echo
+            jq -r '
+              "- decision: \(.decision)",
+              "- cells: \(.summary.closed_cells)/\(.summary.total_cells) CLOSED; UNKNOWN \(.summary.unknown_cells); REFUTED \(.summary.refuted_cells)",
+              "- primitive mappings: \(.summary.primitive_mappings_previous)/30 -> \(.summary.primitive_mappings_current)/30; increment \(.summary.primitive_mapping_increment)",
+              "- independent product consumers: \(.summary.independent_consumers_previous) -> \(.summary.independent_consumers_current); increment \(.summary.independent_consumer_increment)",
+              "- released product assets: \(.summary.product_release_assets_observed)/\(.summary.product_release_asset_total)",
+              "- product cells/activities/dependencies: \(.summary.product_cells_observed)/12 / \(.summary.product_activities_observed)/6 / \(.summary.product_dependencies_observed)/8",
+              "- prior contract cells/edges: \(.summary.prior_contract_cells_observed)/15 / \(.summary.prior_semantic_edges_observed)/6",
+              "- prior OpenAPI/Terraform bindings: \(.summary.prior_openapi_bindings_observed)/1 / \(.summary.prior_terraform_bindings_observed)/1",
+              "- generated artifacts: \(.summary.generated_artifacts_observed)/\(.summary.generated_artifact_total)",
+              "- UNKNOWN coordinates: \(.summary.unknown_coordinates_observed)/\(.summary.unknown_coordinate_total)",
+              "- REFUTED boundaries: \(.summary.refuted_boundaries_observed)/\(.summary.refuted_boundary_total)",
+              "- deterministic replay: \(.summary.replay_comparisons_observed)/\(.summary.replay_comparison_total)",
+              "- external utility evidence: \(.summary.external_use_cases_evidenced)/\(.summary.external_use_cases_declared) \(.summary.utility_state)",
+              "- product memory/time: \(.product_metrics.max_rss_kib) KiB / \(.product_metrics.elapsed_ms) ms",
+              "- product repository files/directories: \(.product_metrics.repository_files)/\(.product_metrics.descendant_directories)",
+              "- product Go files/lines: \(.product_metrics.go_files)/\(.product_metrics.go_lines)",
+              "- product Gooo files/lines: \(.product_metrics.gooo_files)/\(.product_metrics.gooo_lines)",
+              "- Link repository files/directories: \(.inventory.repository_files)/\(.inventory.descendant_directories)",
+              "- Link Go files/lines: \(.inventory.go.files)/\(.inventory.go.lines)",
+              "- Link Gooo files/lines: \(.inventory.gooo.files)/\(.inventory.gooo.lines)",
+              "- repository writes/local tests/cross-project gates: \(.summary.repository_writes)/\(.summary.local_tests_run)/\(.summary.cross_project_required_gates)",
+              "",
+              "### Per-file Link language lines",
+              (.inventory.per_file[]|"- \(.path): \(.lines) \(.language) lines")
+            ' "$RUNNER_TEMP/report.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce read-only repository effect
+        run: test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: infra-deployment-plan-consumer-${{ env.SUBJECT_SHA }}
+          path: |
+            ${{ runner.temp }}/report.json
+            ${{ runner.temp }}/unknown.json
+            ${{ runner.temp }}/product-refuted.json
+            ${{ runner.temp }}/utility-refuted.json
+            ${{ runner.temp }}/consumer-refuted.json
+            ${{ runner.temp }}/authority-refuted.json
+            ${{ runner.temp }}/meta-refuted.json
+            ${{ runner.temp }}/observation-runtime.json
+            ${{ runner.temp }}/graph.json
+            ${{ runner.temp }}/observation-syntax.json
+            ${{ runner.temp }}/observation-semantic.json
+            ${{ runner.temp }}/link-release.json
+            ${{ runner.temp }}/infra-release.json
+            ${{ runner.temp }}/core-release.json
+            ${{ runner.temp }}/infra/semantic-deployment-plan-evaluation.json
+            ${{ runner.temp }}/infra/deployment-plan.json
+            ${{ runner.temp }}/infra/deployment-plan.md
+            ${{ runner.temp }}/infra/semantic-deployment-plan-runtime.json
+            ${{ runner.temp }}/infra/semantic-deployment-plan-replay.json
+            ${{ runner.temp }}/infra/semantic-deployment-plan-inventory.json
+
