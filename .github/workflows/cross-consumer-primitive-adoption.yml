@@ -159,7 +159,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          "$GOOO" check --syntax --json "$SOURCE" > _artifact/adoption-syntax.json
+          "$GOOO" check --json "$SOURCE" > _artifact/adoption-syntax.json
           jq -e '.status == "ok"' _artifact/adoption-syntax.json >/dev/null
           "$GOOO" check --semantic --json "$SOURCE" > _artifact/adoption-semantic.json
           jq -e '.status == "ok"' _artifact/adoption-semantic.json >/dev/null
