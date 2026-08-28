@@ -1,0 +1,29 @@
+{
+  "schema": "gooo/evidence-generator/denominator/v1",
+  "id": "gooo://denominator/local-project-plan-consumer/v6",
+  "target_cells": 12,
+  "proof_totals": [
+    {"proof_choice":"FOUNDATION","total":4},
+    {"proof_choice":"COHERENCE","total":4},
+    {"proof_choice":"REGRESSION","total":4}
+  ],
+  "indicator_totals": [
+    {"indicator_class":"DRIVER","total":4},
+    {"indicator_class":"OUTCOME","total":4},
+    {"indicator_class":"GUARDRAIL","total":4}
+  ],
+  "cells": [
+    {"ordinal":1,"id":"SIXTH_MAPPING_RELEASE","activity":"ObserveSixthMappingRelease","stage":"LINK_RELEASE","step":"OBSERVE_LINK_V0_23_MAPPING","proof_choice":"FOUNDATION","indicator_class":"DRIVER","closed_reason":"LINK_V0_23_SIXTH_MAPPING_OBSERVED","refuted_reason":"LINK_V0_23_MAPPING_MISMATCH","next_operation":"RESTORE_PINNED_LINK_RELEASE"},
+    {"ordinal":2,"id":"CORE_META_TOOL_RELEASE","activity":"ObserveCoreMetaToolRelease","stage":"CORE_RELEASE","step":"OBSERVE_CORE_V0_4_META_TOOL","proof_choice":"FOUNDATION","indicator_class":"DRIVER","closed_reason":"CORE_V0_4_META_TOOL_OBSERVED","refuted_reason":"CORE_META_TOOL_RELEASE_MISMATCH","next_operation":"RESTORE_PINNED_CORE_RELEASE"},
+    {"ordinal":3,"id":"LOCAL_PRODUCT_RELEASE","activity":"ObserveLocalProjectPlanRelease","stage":"PRODUCT_RELEASE","step":"OBSERVE_LOCAL_PROJECT_PLAN_RELEASE","proof_choice":"FOUNDATION","indicator_class":"OUTCOME","closed_reason":"LOCAL_PROJECT_PLAN_RELEASE_OBSERVED","refuted_reason":"LOCAL_PROJECT_PLAN_RELEASE_MISMATCH","next_operation":"RESTORE_PINNED_LOCAL_PRODUCT_RELEASE"},
+    {"ordinal":4,"id":"LOCAL_RELEASE_ASSETS","activity":"BindEightLocalReleaseAssets","stage":"PRODUCT_RELEASE","step":"BIND_EIGHT_LOCAL_RELEASE_ASSETS","proof_choice":"FOUNDATION","indicator_class":"GUARDRAIL","closed_reason":"EIGHT_LOCAL_RELEASE_ASSETS_BOUND","refuted_reason":"LOCAL_RELEASE_ASSET_SET_MISMATCH","next_operation":"RESTORE_LOCAL_RELEASE_ASSETS"},
+    {"ordinal":5,"id":"PRODUCT_TWELVE_CELLS","activity":"BindProductTwelveCells","stage":"PRODUCT_CONFORMANCE","step":"BIND_TWELVE_PRODUCT_CELLS","proof_choice":"COHERENCE","indicator_class":"DRIVER","closed_reason":"TWELVE_PRODUCT_CELLS_BOUND","refuted_reason":"LOCAL_PRODUCT_REPORT_MISMATCH","next_operation":"RESTORE_LOCAL_PRODUCT_REPORT"},
+    {"ordinal":6,"id":"PRODUCT_SIX_ACTIVITIES","activity":"BindProductSixActivities","stage":"PRODUCT_SEMANTICS","step":"BIND_SIX_PROJECT_ACTIVITIES","proof_choice":"COHERENCE","indicator_class":"OUTCOME","closed_reason":"SIX_PROJECT_ACTIVITIES_BOUND","refuted_reason":"PROJECT_ACTIVITY_COUNT_MISMATCH","next_operation":"RESTORE_GOOO_PROJECT_ACTIVITIES"},
+    {"ordinal":7,"id":"PRODUCT_EIGHT_DEPENDENCIES","activity":"BindProductEightDependencies","stage":"PRODUCT_SEMANTICS","step":"BIND_EIGHT_PROJECT_DEPENDENCIES","proof_choice":"COHERENCE","indicator_class":"OUTCOME","closed_reason":"EIGHT_PROJECT_DEPENDENCIES_BOUND","refuted_reason":"PROJECT_DEPENDENCY_COUNT_MISMATCH","next_operation":"RESTORE_GOOO_PROJECT_DEPENDENCIES"},
+    {"ordinal":8,"id":"FIRST_INDEPENDENT_CONSUMER","activity":"RecordFirstIndependentConsumer","stage":"CONSUMER_EVIDENCE","step":"RECORD_FIRST_INDEPENDENT_CONSUMER","proof_choice":"COHERENCE","indicator_class":"OUTCOME","closed_reason":"FIRST_INDEPENDENT_CONSUMER_RECORDED","refuted_reason":"INDEPENDENT_CONSUMER_INCREMENT_MISMATCH","next_operation":"RESTORE_ONE_CONSUMER_INCREMENT"},
+    {"ordinal":9,"id":"UTILITY_UNKNOWN","activity":"PreserveProductUtilityUnknown","stage":"UTILITY","step":"PRESERVE_EXTERNAL_UTILITY_UNKNOWN","proof_choice":"REGRESSION","indicator_class":"GUARDRAIL","closed_reason":"EXTERNAL_UTILITY_REMAINS_UNKNOWN","refuted_reason":"PRODUCT_UTILITY_LAUNDERED","next_operation":"REMOVE_UNEVIDENCED_UTILITY_CLAIM"},
+    {"ordinal":10,"id":"RESOLUTION_BOUNDARIES","activity":"PreserveProductResolutionBoundaries","stage":"RESOLUTION","step":"PRESERVE_UNKNOWN_AND_REFUTED_BOUNDARIES","proof_choice":"REGRESSION","indicator_class":"GUARDRAIL","closed_reason":"PRODUCT_RESOLUTION_BOUNDARIES_PRESERVED","refuted_reason":"PRODUCT_RESOLUTION_BOUNDARY_MISMATCH","next_operation":"RESTORE_PRODUCT_RESOLUTION_EVIDENCE"},
+    {"ordinal":11,"id":"TWELVE_META_ACTIVITIES","activity":"BindTwelveConsumerMetaActivities","stage":"META_GRAPH","step":"BIND_TWELVE_CONSUMER_META_ACTIVITIES","proof_choice":"REGRESSION","indicator_class":"DRIVER","closed_reason":"TWELVE_CONSUMER_META_ACTIVITIES_BOUND","refuted_reason":"GOOO_META_ACTIVITY_MISSING","next_operation":"RESTORE_GOOO_META_ACTIVITY"},
+    {"ordinal":12,"id":"OPTIONAL_READ_ONLY_BOUNDARY","activity":"PreserveOptionalConsumerBoundary","stage":"AUTHORITY","step":"PRESERVE_OPTIONAL_READ_ONLY_CONSUMER","proof_choice":"REGRESSION","indicator_class":"GUARDRAIL","closed_reason":"OPTIONAL_READ_ONLY_CONSUMER_PRESERVED","refuted_reason":"OBSERVATION_AUTHORITY_ESCALATED","next_operation":"REMOVE_OBSERVATION_AUTHORITY"}
+  ]
+}
