@@ -64,7 +64,10 @@ jobs:
           (cd "$tool_dir" && go fix ./...)
           after=$(sha256sum "$tool_dir/main.go" | awk '{print $1}')
           diff -u scripts/evaluate-generator-consumer-promotion.go "$tool_dir/main.go" > "$RUNNER_TEMP/go-fix.diff" || true
-          test "$before" = "$after"
+          if test "$before" != "$after"; then
+            cat "$RUNNER_TEMP/go-fix.diff"
+            exit 1
+          fi
           echo "TOOL_DIR=$tool_dir" >> "$GITHUB_ENV"
 
       - name: Require zero Go vet findings and build observer
