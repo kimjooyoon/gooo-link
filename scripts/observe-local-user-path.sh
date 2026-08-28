@@ -189,14 +189,14 @@ jq -S -n \
   ($baseline[0] // {}) as $baseline |
   ($local_normal[0] // {}) as $local |
   ($local_runtime[0] // {}) as $runtime |
-  [$d.cells[] |
+  [$d.cells[] | .id as $cell_id |
     {id,activity,proof_choice,indicator_class,state:"CLOSED",stage:null,step:null,
       reason:.closed_reason,unknown_class:null,next_operation:"NONE",blocked_by:[]} |
     if $scenario=="missing-local-report" and .id=="LOCAL_PROJECTION_CONFORMANCE" then
       .+{state:"UNKNOWN",stage:"PRODUCT_EVIDENCE",step:"OBSERVE_LOCAL_PROJECTION_CONFORMANCE",
         reason:"LOCAL_PROJECTION_REPORT_UNAVAILABLE",unknown_class:"DIRECT_MISSING",
         next_operation:"PUBLISH_LOCAL_PROJECTION_REPORT",blocked_by:["projection-report.json"]}
-    elif $scenario=="missing-local-report" and (["CLAIM_FIELD_PROJECTION","GENERATED_GOOO_PROGRAMS","UNKNOWN_RESOLUTION","REFUTED_RESOLUTION","COUNTEREXAMPLE_AND_REPLAY","OPTIONAL_VERTICAL_PROGRESS"]|index(.id))!=null then
+    elif $scenario=="missing-local-report" and (["CLAIM_FIELD_PROJECTION","GENERATED_GOOO_PROGRAMS","UNKNOWN_RESOLUTION","REFUTED_RESOLUTION","COUNTEREXAMPLE_AND_REPLAY","OPTIONAL_VERTICAL_PROGRESS"]|index($cell_id))!=null then
       .+{state:"UNKNOWN",stage:"DEPENDENCY",step:.activity,reason:"DEPENDENCY_EVIDENCE_UNAVAILABLE",
         unknown_class:"DEPENDENCY_BLOCKED",next_operation:"RESOLVE_LOCAL_PROJECTION_CONFORMANCE",
         blocked_by:["LOCAL_PROJECTION_CONFORMANCE"]}
