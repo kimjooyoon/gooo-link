@@ -163,8 +163,14 @@ jobs:
           jq -e '.status == "ok"' _artifact/adoption-syntax.json >/dev/null
           "$GOOO" check --semantic --json "$SOURCE" > _artifact/adoption-semantic.json
           jq -e '.status == "ok"' _artifact/adoption-semantic.json >/dev/null
-          "$GOOO" graph dump "$SOURCE" > _artifact/adoption-graph.json
-          jq -e '.schema_version == "gooo-graph/v1" or .schema == "gooo-graph/v1"' _artifact/adoption-graph.json >/dev/null
+          if ! "$GOOO" graph dump "$SOURCE" > _artifact/adoption-graph.json 2> _artifact/adoption-graph.stderr; then
+            cat _artifact/adoption-graph.stderr >&2
+            exit 1
+          fi
+          if ! jq -e '.schema_version == "gooo-graph/v1" or .schema == "gooo-graph/v1"' _artifact/adoption-graph.json >/dev/null; then
+            jq -c '{keys:keys}' _artifact/adoption-graph.json >&2
+            exit 1
+          fi
 
       - name: Evaluate adoption and adverse paths
         shell: bash
