@@ -1,0 +1,14 @@
+{
+  "schema": "gooo/link/portfolio-selection-release-lock/v1",
+  "repository": "kimjooyoon/gooo-link",
+  "tag": "v0.7.0-dev",
+  "tag_object_sha": "f0b5532189a88aadf890b4fdbe32c5cfbc0ed4ba",
+  "target_commit_sha": "46f494b3e4b42bf802e62f9454a0d3dc49885317",
+  "draft": false,
+  "prerelease": true,
+  "assets": [
+    { "kind": "promotion", "name": "gooo-link-v0.7.0-dev-generator-promotion-report.json", "sha256": "032280c1af0c3451c1c0f2037e72da8d29a586af2470d462605d1ac8069f6bc9" },
+    { "kind": "consumer-releases", "name": "gooo-link-v0.7.0-dev-consumer-release-observation.json", "sha256": "840a526f13061c861331bb789dde05e1d1bbdd7628d12d7c512ec3f5f7a9a0a9" },
+    { "kind": "queue", "name": "gooo-link-v0.7.0-dev-queue-report.json", "sha256": "4cb26afaeac14c27045b39bb8a95e01efc477469c5338a739b032d1dd28ee7cd" }
+  ]
+}

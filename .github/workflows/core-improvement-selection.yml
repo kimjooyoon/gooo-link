@@ -181,6 +181,86 @@ jobs:
             jq -r '"- invalid core decision: REFUTED \(.summary.refuted); first \(.claim.stage) / \(.claim.step) / \(.claim.reason)"' "$RUNNER_TEMP/invalid-core-decision.json"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Recompute portfolio-aware core selection
+        shell: bash
+        run: |
+          set -euo pipefail
+          lock=contracts/gooo-link-v0.7-release-lock-v1.json
+          repository=$(jq -r .repository "$lock")
+          tag=$(jq -r .tag "$lock")
+          tag_object=$(jq -r .tag_object_sha "$lock")
+          target=$(jq -r .target_commit_sha "$lock")
+          gh api "repos/$repository/git/ref/tags/$tag" > "$RUNNER_TEMP/portfolio-ref.json"
+          jq -e --arg sha "$tag_object" '.object.type=="tag" and .object.sha==$sha' "$RUNNER_TEMP/portfolio-ref.json" >/dev/null
+          gh api "repos/$repository/git/tags/$tag_object" > "$RUNNER_TEMP/portfolio-tag.json"
+          jq -e --arg sha "$target" '.object.type=="commit" and .object.sha==$sha' "$RUNNER_TEMP/portfolio-tag.json" >/dev/null
+          gh api "repos/$repository/releases/tags/$tag" > "$RUNNER_TEMP/portfolio-release.json"
+          for kind in promotion consumer-releases queue; do
+            name=$(jq -r --arg kind "$kind" '.assets[]|select(.kind==$kind)|.name' "$lock")
+            digest=$(jq -r --arg kind "$kind" '.assets[]|select(.kind==$kind)|.sha256' "$lock")
+            asset_id=$(jq -r --arg name "$name" '.assets[]|select(.name==$name)|.id' "$RUNNER_TEMP/portfolio-release.json")
+            gh api -H 'Accept: application/octet-stream' "repos/$repository/releases/assets/$asset_id" > "$RUNNER_TEMP/portfolio-$kind.json"
+            printf '%s  %s\n' "$digest" "$RUNNER_TEMP/portfolio-$kind.json" | sha256sum -c -
+          done
+          jq -e '.decision=="GENERATOR_PROMOTION_ELIGIBLE" and .summary.closed==12 and .observations.independent_consumers=={observed:2,total:2}' "$RUNNER_TEMP/portfolio-promotion.json" >/dev/null
+
+          source=examples/portfolio-core-selection/main.gooo
+          denominator=contracts/portfolio-core-selection-denominator-v1.json
+          gooo="$RUNNER_TEMP/core/gooo"
+          "$gooo" check --json "$source" > "$RUNNER_TEMP/portfolio-syntax.json"
+          "$gooo" check --semantic --json "$source" > "$RUNNER_TEMP/portfolio-semantic.json"
+          "$gooo" graph dump "$source" > "$RUNNER_TEMP/portfolio-graph.json"
+          jq -e '.status=="ok"' "$RUNNER_TEMP/portfolio-syntax.json" "$RUNNER_TEMP/portfolio-semantic.json" >/dev/null
+          jq -e '([.nodes[]|select(.kind=="Activity")]|length)==12' "$RUNNER_TEMP/portfolio-graph.json" >/dev/null
+          while IFS=$'\t' read -r activity; do
+            "$gooo" graph resolve-activity "$source" --name "$activity" > "$RUNNER_TEMP/portfolio-$activity.json"
+            jq -e --arg activity "$activity" '.decision=="CLOSED" and .selector.name==$activity and .occurrences==1 and .claim.state=="CLOSED"' "$RUNNER_TEMP/portfolio-$activity.json" >/dev/null
+          done < <(jq -r '.cells[]|[.activity]|@tsv' "$denominator")
+
+          gh api --paginate 'repos/kimjooyoon/meta-ontology-go/pulls?state=open&per_page=100' > "$RUNNER_TEMP/core-open-pr-pages.jsonl"
+          jq -s 'add//[]' "$RUNNER_TEMP/core-open-pr-pages.jsonl" > "$RUNNER_TEMP/core-open-prs.json"
+          jq -S -n --slurpfile contract contracts/core-experiment-backlog-v1.json --slurpfile open "$RUNNER_TEMP/core-open-prs.json" '
+            ($contract[0].experiments|map(.number)) as $expected |
+            [$open[0][]|select(.number as $number|$expected|index($number))|{number,title:.title,state:.state,url:.html_url,candidate_id:null,mapping_state:"UNKNOWN"}] as $observed |
+            {schema:$contract[0].schema,repository:$contract[0].repository,observed_open_experiments:($observed|length),primitive_candidates_observed:0,mapped_pull_requests:0,merge_eligible_pull_requests:0,mapping_state:"UNKNOWN",experiments:$observed,unknown_contract:$contract[0].unknown_contract}
+          ' > "$RUNNER_TEMP/observed-backlog.json"
+          jq -e '.observed_open_experiments==29 and (.experiments|length)==29 and .primitive_candidates_observed==0 and .mapped_pull_requests==0 and .merge_eligible_pull_requests==0' "$RUNNER_TEMP/observed-backlog.json" >/dev/null
+
+          cp "$RUNNER_TEMP/selection.json" "$RUNNER_TEMP/historical-selection.json"
+          evaluator=scripts/recompute-portfolio-core-selection.sh
+          args=("$RUNNER_TEMP/portfolio-graph.json" "$denominator" "$RUNNER_TEMP/portfolio-promotion.json" "$RUNNER_TEMP/portfolio-consumer-releases.json" "$RUNNER_TEMP/portfolio-queue.json" "$RUNNER_TEMP/historical-selection.json" "$RUNNER_TEMP/observed-backlog.json")
+          start_ns=$(date +%s%N)
+          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/portfolio-selector-rss" bash "$evaluator" "${args[@]}" "$RUNNER_TEMP/selection.json" "$SUBJECT_SHA" complete
+          end_ns=$(date +%s%N)
+          wall_ms=$(( (end_ns-start_ns)/1000000 ))
+          bash "$evaluator" "${args[@]}" "$RUNNER_TEMP/portfolio-replay.json" "$SUBJECT_SHA" complete
+          cmp -s "$RUNNER_TEMP/selection.json" "$RUNNER_TEMP/portfolio-replay.json"
+          jq -e '.decision=="CORE_PRIMITIVE_SELECTION_UNKNOWN" and .summary=={closed:5,dependency_blocked:5,direct_missing:2,external_consumers:2,mapped_pull_requests:0,merge_eligible_pull_requests:0,open_experiments:29,refuted:0,total:12,unknown:7} and .claim.state=="UNKNOWN" and .claim.reason=="CORE_PRIMITIVE_EVIDENCE_UNAVAILABLE" and .claim.unknown_class=="DIRECT_MISSING" and .claim.next_operation=="OBSERVE_CROSS_CONSUMER_PRIMITIVE_NEED" and .candidate.observed==0 and .experiments.mapped==0 and .experiments.merge_eligible==0 and .experiments.automatic_merge_allowed==false and .stale_operation.state=="REFUTED"' "$RUNNER_TEMP/selection.json" >/dev/null
+
+          printf 'null\n' > "$RUNNER_TEMP/missing-portfolio-promotion.json"
+          missing_args=("$RUNNER_TEMP/portfolio-graph.json" "$denominator" "$RUNNER_TEMP/missing-portfolio-promotion.json" "$RUNNER_TEMP/portfolio-consumer-releases.json" "$RUNNER_TEMP/portfolio-queue.json" "$RUNNER_TEMP/historical-selection.json" "$RUNNER_TEMP/observed-backlog.json")
+          bash "$evaluator" "${missing_args[@]}" "$RUNNER_TEMP/missing-portfolio-selection.json" "$SUBJECT_SHA" missing-promotion
+          jq -e '.decision=="CORE_PRIMITIVE_SELECTION_UNKNOWN" and .summary.closed==0 and .summary.unknown==12 and .summary.direct_missing==3 and .summary.dependency_blocked==9 and .claim.reason=="GENERATOR_PROMOTION_RELEASE_UNAVAILABLE"' "$RUNNER_TEMP/missing-portfolio-selection.json" >/dev/null
+
+          jq '.authority.generator_scope="CORE_LANGUAGE_PRIMITIVE"' "$RUNNER_TEMP/portfolio-promotion.json" > "$RUNNER_TEMP/scope-escalation-promotion.json"
+          scope_args=("$RUNNER_TEMP/portfolio-graph.json" "$denominator" "$RUNNER_TEMP/scope-escalation-promotion.json" "$RUNNER_TEMP/portfolio-consumer-releases.json" "$RUNNER_TEMP/portfolio-queue.json" "$RUNNER_TEMP/historical-selection.json" "$RUNNER_TEMP/observed-backlog.json")
+          bash "$evaluator" "${scope_args[@]}" "$RUNNER_TEMP/scope-escalation.json" "$SUBJECT_SHA" scope-escalation
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed==4 and .summary.unknown==6 and .summary.refuted==2 and .claim.reason=="PORTFOLIO_EVIDENCE_SCOPE_ESCALATION"' "$RUNNER_TEMP/scope-escalation.json" >/dev/null
+
+          jq '.claim.next_operation="MERGE_CORE_EXPERIMENT"' "$RUNNER_TEMP/historical-selection.json" > "$RUNNER_TEMP/unauthorized-historical-selection.json"
+          unauthorized_args=("$RUNNER_TEMP/portfolio-graph.json" "$denominator" "$RUNNER_TEMP/portfolio-promotion.json" "$RUNNER_TEMP/portfolio-consumer-releases.json" "$RUNNER_TEMP/portfolio-queue.json" "$RUNNER_TEMP/unauthorized-historical-selection.json" "$RUNNER_TEMP/observed-backlog.json")
+          bash "$evaluator" "${unauthorized_args[@]}" "$RUNNER_TEMP/unauthorized-selection.json" "$SUBJECT_SHA" unauthorized-selection
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed==4 and .summary.unknown==6 and .summary.refuted==2 and .claim.reason=="UNAUTHORIZED_OR_UNRECOGNIZED_NEXT_OPERATION"' "$RUNNER_TEMP/unauthorized-selection.json" >/dev/null
+
+          test -z "$(git status --porcelain=v1)"
+          jq -S -n --arg subject_sha "$SUBJECT_SHA" --argjson peak_rss_kib "$(cat "$RUNNER_TEMP/portfolio-selector-rss")" --argjson wall_ms "$wall_ms" '{schema:"gooo/link/portfolio-core-selection-runtime/v1",subject_sha:$subject_sha,selector:{peak_rss_kib:$peak_rss_kib,wall_ms:$wall_ms},repository_writes:0,local_tests_run:0,cross_project_required_gates:0}' > "$RUNNER_TEMP/portfolio-runtime.json"
+          {
+            echo '## Portfolio-aware core improvement selection'
+            jq -r '"- decision: \(.decision)","- meta cells: \(.summary.closed)/\(.summary.total) CLOSED; UNKNOWN \(.summary.unknown); REFUTED \(.summary.refuted)","- direct missing / dependency blocked: \(.summary.direct_missing) / \(.summary.dependency_blocked)","- external consumers: \(.summary.external_consumers)/2","- core primitive candidates: \(.candidate.observed)/\(.candidate.required)","- experiment mappings: \(.experiments.mapped)/\(.experiments.open)","- merge-eligible experiment PRs: \(.experiments.merge_eligible)/1","- stale operation: \(.stale_operation.operation) [\(.stale_operation.state)]","- next operation: \(.claim.next_operation)"' "$RUNNER_TEMP/selection.json"
+            jq -sr '"- missing promotion: CLOSED \(.[0].summary.closed), UNKNOWN \(.[0].summary.unknown), direct \(.[0].summary.direct_missing), dependency \(.[0].summary.dependency_blocked)","- scope escalation: CLOSED \(.[1].summary.closed), UNKNOWN \(.[1].summary.unknown), REFUTED \(.[1].summary.refuted), \(.[1].claim.reason)","- unauthorized selection: CLOSED \(.[2].summary.closed), UNKNOWN \(.[2].summary.unknown), REFUTED \(.[2].summary.refuted), \(.[2].claim.reason)"' "$RUNNER_TEMP/missing-portfolio-selection.json" "$RUNNER_TEMP/scope-escalation.json" "$RUNNER_TEMP/unauthorized-selection.json"
+            jq -r '"- selector: \(.selector.peak_rss_kib) KiB / \(.selector.wall_ms) ms","- repository writes: \(.repository_writes)","- local test executions: \(.local_tests_run)","- cross-project required gates: \(.cross_project_required_gates)"' "$RUNNER_TEMP/portfolio-runtime.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload selection evidence
         if: always()
         uses: actions/upload-artifact@v6
@@ -189,6 +269,14 @@ jobs:
           if-no-files-found: warn
           path: |
             ${{ runner.temp }}/selection.json
+            ${{ runner.temp }}/historical-selection.json
+            ${{ runner.temp }}/portfolio-replay.json
+            ${{ runner.temp }}/missing-portfolio-selection.json
+            ${{ runner.temp }}/scope-escalation.json
+            ${{ runner.temp }}/unauthorized-selection.json
+            ${{ runner.temp }}/portfolio-runtime.json
+            ${{ runner.temp }}/portfolio-graph.json
+            ${{ runner.temp }}/observed-backlog.json
             ${{ runner.temp }}/replay.json
             ${{ runner.temp }}/missing-adoption.json
             ${{ runner.temp }}/refuted-selection.json

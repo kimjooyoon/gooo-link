@@ -1,0 +1,31 @@
+{
+  "schema": "gooo/link/portfolio-core-selection-denominator/v1",
+  "total": 12,
+  "required_external_consumers": 2,
+  "required_primitive_candidates": 1,
+  "required_merge_eligible_pull_requests": 1,
+  "proofs": [
+    { "choice": "FOUNDATION", "total": 4 },
+    { "choice": "COHERENCE", "total": 4 },
+    { "choice": "REGRESSION", "total": 4 }
+  ],
+  "indicator_classes": [
+    { "class": "OUTCOME", "total": 3 },
+    { "class": "DRIVER", "total": 5 },
+    { "class": "GUARDRAIL", "total": 4 }
+  ],
+  "cells": [
+    { "id": "generator-promotion-release", "activity": "ObserveGeneratorPromotionRelease", "proof": "FOUNDATION", "indicator_class": "DRIVER", "depends_on": [] },
+    { "id": "external-consumer-contract", "activity": "BindExternalConsumerEvidence", "proof": "FOUNDATION", "indicator_class": "DRIVER", "depends_on": ["generator-promotion-release"] },
+    { "id": "independent-consumer-repetition", "activity": "BindIndependentConsumerRepetition", "proof": "FOUNDATION", "indicator_class": "DRIVER", "depends_on": ["external-consumer-contract"] },
+    { "id": "portfolio-authority-boundary", "activity": "PreservePortfolioAuthorityBoundary", "proof": "FOUNDATION", "indicator_class": "GUARDRAIL", "depends_on": ["generator-promotion-release"] },
+    { "id": "stale-adoption-operation", "activity": "RefuteCompletedAdoptionOperation", "proof": "COHERENCE", "indicator_class": "OUTCOME", "depends_on": ["generator-promotion-release"] },
+    { "id": "core-primitive-candidate", "activity": "ObserveCorePrimitiveCandidate", "proof": "COHERENCE", "indicator_class": "DRIVER", "depends_on": [] },
+    { "id": "cross-consumer-primitive-need", "activity": "BindCrossConsumerPrimitiveNeed", "proof": "COHERENCE", "indicator_class": "DRIVER", "depends_on": ["core-primitive-candidate"] },
+    { "id": "primitive-semantic-invariant", "activity": "BindPrimitiveSemanticInvariant", "proof": "COHERENCE", "indicator_class": "GUARDRAIL", "depends_on": ["cross-consumer-primitive-need"] },
+    { "id": "primitive-version-lock", "activity": "BindPrimitiveVersionLock", "proof": "REGRESSION", "indicator_class": "GUARDRAIL", "depends_on": ["primitive-semantic-invariant"] },
+    { "id": "experiment-pr-mapping", "activity": "BindExperimentPullRequestMapping", "proof": "REGRESSION", "indicator_class": "GUARDRAIL", "depends_on": [] },
+    { "id": "single-selected-implementation-pr", "activity": "EnforceSelectedImplementationPullRequest", "proof": "REGRESSION", "indicator_class": "OUTCOME", "depends_on": ["experiment-pr-mapping"] },
+    { "id": "next-self-improvement-operation", "activity": "SelectNextSelfImprovementOperation", "proof": "REGRESSION", "indicator_class": "OUTCOME", "depends_on": ["stale-adoption-operation", "core-primitive-candidate", "cross-consumer-primitive-need", "primitive-semantic-invariant", "primitive-version-lock", "experiment-pr-mapping", "single-selected-implementation-pr"] }
+  ]
+}
