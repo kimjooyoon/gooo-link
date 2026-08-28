@@ -31,11 +31,14 @@ jobs:
           set -euo pipefail
           test "$(go env GOVERSION)" = "go1.27.0"
           go_files=$(find . -type f -name '*.go' | wc -l | tr -d ' ')
-          if test "$go_files" -gt 0; then
-            go fix ./...
-          fi
+          go_modules=$(find . -type f -name 'go.mod' | wc -l | tr -d ' ')
+          while IFS= read -r -d '' module; do
+            (cd "$(dirname "$module")" && go fix ./...)
+          done < <(find . -type f -name 'go.mod' -print0)
           jq -n --arg go_version "$(go env GOVERSION)" --argjson go_files "$go_files" \
-            '{schema:"gooo/link-go-fix-observation/v1",go_version:$go_version,go_files:$go_files,go_fix_targets:$go_files}' \
+            --argjson go_modules "$go_modules" \
+            '{schema:"gooo/link-go-fix-observation/v1",go_version:$go_version,go_files:$go_files,
+              go_modules:$go_modules,go_fix_targets:$go_modules}' \
             > "$RUNNER_TEMP/go-fix-observation.json"
 
       - name: Observe immutable public releases
