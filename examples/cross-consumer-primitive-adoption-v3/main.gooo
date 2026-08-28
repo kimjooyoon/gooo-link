@@ -1,0 +1,29 @@
+package gooolink
+namespace gooolink
+
+entity LinkBaselineRelease id "gooo://link/release/v0.15.0-dev"
+entity InfraAdoptionRelease id "gooo://infra-evidence/release/v0.6.0-dev"
+entity ClaimResolutionCandidateIdentity id "gooo://claim-resolution/gooo.primitive.claim-resolution-tuple.v1"
+entity BaselineDirectMappingCount id "gooo://claim-resolution/direct-mappings/3-of-30"
+entity InfraDirectMapping id "gooo://claim-resolution/consumer/infra-evidence/direct-mapping/1-of-1"
+entity FourthDirectMappingCount id "gooo://claim-resolution/direct-mappings/4-of-30"
+entity IndependentConsumerCount id "gooo://claim-resolution/independent-consumers/3"
+entity InfraAdoptionEvidence id "gooo://infra-evidence/claim-resolution-adoption/12-of-12"
+entity InfraUnknownEvidence id "gooo://infra-evidence/claim-resolution/unknown/core-receipt"
+entity InfraRefutedEvidence id "gooo://infra-evidence/claim-resolution/refuted/2-paths"
+entity MetaActivitySet id "gooo://link/cross-consumer-primitive-adoption/meta-activities/12"
+entity OptionalReadOnlyBoundary id "gooo://link/authority/optional-read-only-observation"
+entity ObservationDecision id "gooo://link/decision/fourth-direct-primitive-mapping"
+
+activity ObserveLinkBaselineRelease(LinkBaselineRelease) -> ObservationDecision
+activity ObserveInfraAdoptionRelease(InfraAdoptionRelease) -> ObservationDecision
+activity BindClaimResolutionCandidateIdentity(ClaimResolutionCandidateIdentity) -> ObservationDecision
+activity BindThreeOfThirtyBaseline(BaselineDirectMappingCount) -> ObservationDecision
+activity BindInfraDirectMapping(InfraDirectMapping) -> ObservationDecision
+activity AdvanceToFourOfThirty(FourthDirectMappingCount) -> ObservationDecision
+activity CountThreeIndependentConsumers(IndependentConsumerCount) -> ObservationDecision
+activity BindInfraAdoptionEvidence(InfraAdoptionEvidence) -> ObservationDecision
+activity PreserveInfraUnknownResolution(InfraUnknownEvidence) -> ObservationDecision
+activity PreserveInfraRefutedResolution(InfraRefutedEvidence) -> ObservationDecision
+activity BindTwelveMetaActivities(MetaActivitySet) -> ObservationDecision
+activity PreserveOptionalReadOnlyBoundary(OptionalReadOnlyBoundary) -> ObservationDecision
