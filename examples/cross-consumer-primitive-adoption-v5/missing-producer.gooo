@@ -1,0 +1,6 @@
+package claimdependencyunknown
+namespace claimdependencyunknown
+
+entity External id "gooo://claim-dependency/external"
+entity Result id "gooo://claim-dependency/result"
+activity Derived(External) -> Result computes "claim.edge:requires|external-evidence"

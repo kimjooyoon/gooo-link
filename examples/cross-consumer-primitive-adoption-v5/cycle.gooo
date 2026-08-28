@@ -1,0 +1,7 @@
+package claimdependencycycle
+namespace claimdependencycycle
+
+entity AState id "gooo://claim-dependency/cycle/a"
+entity BState id "gooo://claim-dependency/cycle/b"
+activity A(BState) -> AState computes "claim.edge:requires|a"
+activity B(AState) -> BState computes "claim.edge:requires|b"

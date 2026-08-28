@@ -1,0 +1,166 @@
+name: Sixth claim dependency primitive adoption
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    env:
+      SUBJECT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SUBJECT_SHA }}
+      - name: Bind exact subject identity
+        run: test "$(git rev-parse HEAD)" = "$SUBJECT_SHA"
+      - name: Download two immutable releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          lock=contracts/cross-consumer-primitive-adoption-release-lock-v5.json
+          mkdir -p "$RUNNER_TEMP/link" "$RUNNER_TEMP/core"
+          for scope in link core; do
+            repository=$(jq -r ".$scope.repository" "$lock"); tag=$(jq -r ".$scope.tag" "$lock"); target=$(jq -r ".$scope.target_commit_sha" "$lock")
+            release_id=$(jq -r ".$scope.release_id" "$lock"); prerelease=$(jq -r ".$scope.prerelease" "$lock")
+            gh api "repos/$repository/releases/tags/$tag" > "$RUNNER_TEMP/$scope-release.json"
+            gh api "repos/$repository/git/ref/tags/$tag" > "$RUNNER_TEMP/$scope-ref.json"
+            jq -e --arg tag "$tag" --arg target "$target" --argjson release_id "$release_id" --argjson prerelease "$prerelease" \
+              '.id==$release_id and .tag_name==$tag and .target_commitish==$target and .draft==false and .prerelease==$prerelease' "$RUNNER_TEMP/$scope-release.json" >/dev/null
+            jq -e --arg target "$target" '.object.type=="commit" and .object.sha==$target' "$RUNNER_TEMP/$scope-ref.json" >/dev/null
+          done
+          download_asset() {
+            scope=$1; selector=$2; destination=$3; release="$RUNNER_TEMP/$scope-release.json"
+            name=$(jq -r ".$scope.$selector.name" "$lock"); id=$(jq -r ".$scope.$selector.id" "$lock"); size=$(jq -r ".$scope.$selector.size" "$lock"); digest=$(jq -r ".$scope.$selector.digest" "$lock")
+            jq -e --arg name "$name" --arg digest "$digest" --argjson id "$id" --argjson size "$size" '.assets[]|select(.name==$name and .id==$id and .size==$size and .digest==$digest)' "$release" >/dev/null
+            url=$(jq -r --arg name "$name" '.assets[]|select(.name==$name)|.browser_download_url' "$release")
+            curl --fail --location --retry 3 "$url" --output "$destination"
+            test "$(wc -c < "$destination"|tr -d ' ')" -eq "$size"; test "sha256:$(sha256sum "$destination"|awk '{print $1}')" = "$digest"
+          }
+          download_asset link asset "$RUNNER_TEMP/link/candidate.zip"
+          unzip -qq "$RUNNER_TEMP/link/candidate.zip" -d "$RUNNER_TEMP/link/unpacked"
+          report_path=$(jq -r '.link.report_path' "$lock"); test -f "$RUNNER_TEMP/link/unpacked/$report_path"
+          printf '%s\n' "$RUNNER_TEMP/link/unpacked/$report_path" > "$RUNNER_TEMP/baseline-report-path"
+          download_asset core binary_asset "$RUNNER_TEMP/core/gooo.tar.gz"
+          download_asset core checksum_asset "$RUNNER_TEMP/core/SHA256SUMS"
+          download_asset core report_asset "$RUNNER_TEMP/core/release-report.json"
+          download_asset core eligibility_asset "$RUNNER_TEMP/core/release-eligibility.json"
+          binary_name=$(jq -r '.core.binary_asset.name' "$lock")
+          test "$(sha256sum "$RUNNER_TEMP/core/gooo.tar.gz"|awk '{print $1}')" = "$(awk -v name="$binary_name" '$2==name {print $1}' "$RUNNER_TEMP/core/SHA256SUMS")"
+          tar -xzf "$RUNNER_TEMP/core/gooo.tar.gz" -C "$RUNNER_TEMP/core"
+      - name: Execute released primitive and observe Gooo meta graph
+        run: |
+          set -euo pipefail
+          gooo="$RUNNER_TEMP/core/gooo"; dir=examples/cross-consumer-primitive-adoption-v5
+          git status --porcelain=v1 -z --untracked-files=all > "$RUNNER_TEMP/before.bin"
+          "$gooo" version --json > "$RUNNER_TEMP/version.json"
+          "$gooo" check --json "$dir/program.gooo" > "$RUNNER_TEMP/program-syntax.json"
+          "$gooo" check --semantic --json "$dir/program.gooo" > "$RUNNER_TEMP/program-semantic.json"
+          "$gooo" check --json "$dir/observation.gooo" > "$RUNNER_TEMP/observation-syntax.json"
+          "$gooo" check --semantic --json "$dir/observation.gooo" > "$RUNNER_TEMP/observation-semantic.json"
+          "$gooo" graph dump "$dir/observation.gooo" > "$RUNNER_TEMP/graph.json"
+          start_ns=$(date +%s%N)
+          /usr/bin/time -v -o "$RUNNER_TEMP/time.txt" "$gooo" claim dependencies "$dir/program.gooo" --json > "$RUNNER_TEMP/dependency.json"
+          end_ns=$(date +%s%N)
+          run_adverse() {
+            source=$1; output=$2; code_file=$3
+            set +e; "$gooo" claim dependencies "$source" --json > "$output"; code=$?; set -e
+            printf '%s\n' "$code" > "$code_file"; test "$code" -ne 0
+          }
+          run_adverse "$dir/missing-producer.gooo" "$RUNNER_TEMP/missing.json" "$RUNNER_TEMP/missing-code.txt"
+          run_adverse "$dir/unsupported-kind.gooo" "$RUNNER_TEMP/unsupported.json" "$RUNNER_TEMP/unsupported-code.txt"
+          run_adverse "$dir/ambiguous-producer.gooo" "$RUNNER_TEMP/ambiguous.json" "$RUNNER_TEMP/ambiguous-code.txt"
+          run_adverse "$dir/cycle.gooo" "$RUNNER_TEMP/cycle.json" "$RUNNER_TEMP/cycle-code.txt"
+          wall_ms=$(( (end_ns-start_ns)/1000000 )); peak_rss_kib=$(awk -F: '/Maximum resident set size/ {gsub(/ /,"",$2); print $2}' "$RUNNER_TEMP/time.txt")
+          module_roots=$(find . -name go.mod -not -path './.git/*' | wc -l | tr -d ' '); test "$module_roots" -eq 0
+          git status --porcelain=v1 -z --untracked-files=all > "$RUNNER_TEMP/after.bin"; if cmp -s "$RUNNER_TEMP/before.bin" "$RUNNER_TEMP/after.bin"; then writes=0; else writes=1; fi
+          jq -n --arg subject_sha "$SUBJECT_SHA" --argjson peak_rss_kib "$peak_rss_kib" --argjson wall_ms "$wall_ms" --argjson writes "$writes" --argjson module_roots "$module_roots" \
+            '{schema:"gooo/link/cross-consumer-primitive-adoption-runtime/v5",subject_sha:$subject_sha,releases:{link:true,core:true},
+              performance:{command_peak_rss_kib:$peak_rss_kib,command_wall_ms:$wall_ms},repository_writes:$writes,local_tests_run:0,
+              cross_project_required_gates:0,independent_consumer_increment:0,generator_authority:false,central_orchestration_authorized:false,
+              go_fix_module_roots:$module_roots}' > "$RUNNER_TEMP/runtime.json"
+      - name: Evaluate exact adoption and resolution propagation
+        run: |
+          set -euo pipefail
+          evaluator=scripts/observe-cross-consumer-primitive-adoption-v5.sh; baseline=$(cat "$RUNNER_TEMP/baseline-report-path")
+          common=("$GITHUB_WORKSPACE" "$RUNNER_TEMP/graph.json" "$baseline" "$RUNNER_TEMP/core/release-report.json" "$RUNNER_TEMP/core/release-eligibility.json")
+          adverse=("$RUNNER_TEMP/missing.json" "$RUNNER_TEMP/unsupported.json" "$RUNNER_TEMP/ambiguous.json" "$RUNNER_TEMP/cycle.json")
+          bash "$evaluator" "${common[@]}" "$RUNNER_TEMP/dependency.json" "${adverse[@]}" "$RUNNER_TEMP/runtime.json" "$RUNNER_TEMP/report.json" "$SUBJECT_SHA" complete
+          jq -e '.decision=="CLAIM_DEPENDENCY_PRIMITIVE_ADOPTED" and .summary.closed_cells==12 and .summary.total_cells==12 and .summary.unknown_cells==0 and .summary.refuted_cells==0 and
+            .summary.primitive_mapping_previous==5 and .summary.primitive_mapping_increment==1 and .summary.direct_mappings==6 and .summary.mapping_denominator==30 and .summary.mapping_remaining==24 and
+            .summary.independent_consumer_increment==0 and .summary.core_release_cases_observed==20 and .summary.core_release_cells_observed==7 and
+            .summary.claim_activities_observed==6 and .summary.recoverable_roots==1 and .summary.typed_declarations==5 and .summary.dependency_inputs==8 and .summary.typed_edges==8 and
+            .summary.edge_kinds_observed==4 and .summary.requires_edges==3 and .summary.supports_edges==2 and .summary.contradicts_edges==2 and .summary.failure_entailment_edges==1 and
+            .summary.core_indicators_satisfied==8 and .summary.unknown_coordinates_observed==6 and .summary.refuted_paths_observed==3 and .summary.link_meta_activities_observed==12 and
+            ([.proofs[]|select(.closed==4 and .total==4)]|length)==3 and ([.indicator_classes[]|select(.closed==4 and .total==4)]|length)==3 and
+            .authority.generator_authority==false and .authority.central_orchestration_authorized==false and .authority.cross_project_required_gates==0 and
+            .authority.local_tests_run==0 and .authority.source_repository_writes==0 and .authority.go_fix_module_roots==0 and .authority.root_readme_readiness=="EXCLUDED"' "$RUNNER_TEMP/report.json" >/dev/null
+
+          bash "$evaluator" "${common[@]}" "$RUNNER_TEMP/missing.json" "${adverse[@]}" "$RUNNER_TEMP/runtime.json" "$RUNNER_TEMP/unknown.json" "$SUBJECT_SHA" primary-unknown
+          jq -e '.decision=="CLAIM_DEPENDENCY_ADOPTION_UNKNOWN" and .summary.closed_cells==9 and .summary.unknown_cells==3 and .summary.direct_mappings==5 and
+            .claim.stage=="DEPENDENCY_DISCOVERY" and .claim.step=="BIND_INPUT_PRODUCER" and .claim.reason=="CLAIM_INPUT_PRODUCER_UNAVAILABLE" and
+            .claim.unknown_class=="DIRECT_MISSING" and .claim.next_operation=="DECLARE_INPUT_PRODUCER" and (.claim.blocked_by|length)==1' "$RUNNER_TEMP/unknown.json" >/dev/null
+          for scenario in unsupported ambiguous cycle; do
+            bash "$evaluator" "${common[@]}" "$RUNNER_TEMP/$scenario.json" "${adverse[@]}" "$RUNNER_TEMP/runtime.json" "$RUNNER_TEMP/$scenario-primary.json" "$SUBJECT_SHA" "primary-$scenario"
+            jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==9 and .summary.refuted_cells==3 and .summary.direct_mappings==5 and .claim.state=="REFUTED"' "$RUNNER_TEMP/$scenario-primary.json" >/dev/null
+          done
+          jq '.summary.primitive_mappings=4' "$baseline" > "$RUNNER_TEMP/tampered-baseline.json"
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/graph.json" "$RUNNER_TEMP/tampered-baseline.json" "$RUNNER_TEMP/core/release-report.json" "$RUNNER_TEMP/core/release-eligibility.json" "$RUNNER_TEMP/dependency.json" "${adverse[@]}" "$RUNNER_TEMP/runtime.json" "$RUNNER_TEMP/baseline-refuted.json" "$SUBJECT_SHA" baseline-refuted
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==9 and .summary.refuted_cells==3 and .claim.reason=="CANDIDATE_SELECTION_RELEASE_MISMATCH"' "$RUNNER_TEMP/baseline-refuted.json" >/dev/null
+          jq '.cross_project_required_gates=1' "$RUNNER_TEMP/runtime.json" > "$RUNNER_TEMP/escalated-runtime.json"
+          bash "$evaluator" "${common[@]}" "$RUNNER_TEMP/dependency.json" "${adverse[@]}" "$RUNNER_TEMP/escalated-runtime.json" "$RUNNER_TEMP/authority-refuted.json" "$SUBJECT_SHA" authority-refuted
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==11 and .summary.refuted_cells==1 and .claim.reason=="OBSERVATION_AUTHORITY_ESCALATED"' "$RUNNER_TEMP/authority-refuted.json" >/dev/null
+          jq 'del(.nodes[]|select(.kind=="Activity" and .name=="BindTwelveMetaActivities"))' "$RUNNER_TEMP/graph.json" > "$RUNNER_TEMP/missing-meta-graph.json"
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/missing-meta-graph.json" "$baseline" "$RUNNER_TEMP/core/release-report.json" "$RUNNER_TEMP/core/release-eligibility.json" "$RUNNER_TEMP/dependency.json" "${adverse[@]}" "$RUNNER_TEMP/runtime.json" "$RUNNER_TEMP/meta-refuted.json" "$SUBJECT_SHA" meta-refuted
+          jq -e '.decision=="FAIL_CLOSED" and .summary.closed_cells==11 and .summary.refuted_cells==1 and .claim.reason=="GOOO_META_ACTIVITY_MISSING"' "$RUNNER_TEMP/meta-refuted.json" >/dev/null
+      - name: Publish exact human-readable indicators
+        run: |
+          {
+            echo '## Sixth direct primitive mapping'; echo
+            jq -r '"- decision: \(.decision)","- cells: \(.summary.closed_cells)/\(.summary.total_cells) CLOSED; UNKNOWN \(.summary.unknown_cells); REFUTED \(.summary.refuted_cells)",
+              "- direct mappings: \(.summary.primitive_mapping_previous)/30 -> \(.summary.direct_mappings)/30; increment \(.summary.primitive_mapping_increment)",
+              "- mapping remaining: \(.summary.mapping_remaining)/\(.summary.mapping_denominator)","- independent consumer increment: \(.summary.independent_consumer_increment)",
+              "- Core release cases: \(.summary.core_release_cases_observed)/\(.summary.core_release_case_total)","- Core release cells: \(.summary.core_release_cells_observed)/\(.summary.core_release_cell_total)",
+              "- claim activities: \(.summary.claim_activities_observed)/\(.summary.claim_activity_total)","- dependency edges: \(.summary.typed_edges)/8",
+              "- edge kinds requires/supports/contradicts/failure-entailment: \(.summary.requires_edges)/\(.summary.supports_edges)/\(.summary.contradicts_edges)/\(.summary.failure_entailment_edges)",
+              "- Core indicators: \(.summary.core_indicators_satisfied)/\(.summary.core_indicator_total)","- UNKNOWN coordinates: \(.summary.unknown_coordinates_observed)/\(.summary.unknown_coordinate_total)",
+              "- REFUTED paths: \(.summary.refuted_paths_observed)/\(.summary.refuted_path_total)","- Link Gooo meta activities: \(.summary.link_meta_activities_observed)/\(.summary.link_meta_activity_total)",
+              "- repository files: \(.inventory.repository_files)","- descendant directories: \(.inventory.descendant_directories)",
+              "- Go: \(.inventory.go.files) files, \(.inventory.go.lines) lines","- Gooo: \(.inventory.gooo.files) files, \(.inventory.gooo.lines) lines",
+              "- command peak RSS: \(.performance.command_peak_rss_kib) KiB","- command wall time: \(.performance.command_wall_ms) ms",
+              "- repository writes: \(.authority.source_repository_writes)","- local tests: \(.authority.local_tests_run)",
+              "- cross-project required gates: \(.authority.cross_project_required_gates)","- root README readiness: \(.authority.root_readme_readiness)","","### Per-file language lines",(.inventory.per_file[]|"- \(.path): \(.lines) \(.language) lines")' "$RUNNER_TEMP/report.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Enforce read-only repository effect
+        run: test -z "$(git status --porcelain=v1 --untracked-files=all)"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: sixth-primitive-adoption-${{ env.SUBJECT_SHA }}
+          path: |
+            ${{ runner.temp }}/report.json
+            ${{ runner.temp }}/runtime.json
+            ${{ runner.temp }}/dependency.json
+            ${{ runner.temp }}/missing.json
+            ${{ runner.temp }}/unsupported.json
+            ${{ runner.temp }}/ambiguous.json
+            ${{ runner.temp }}/cycle.json
+            ${{ runner.temp }}/unknown.json
+            ${{ runner.temp }}/unsupported-primary.json
+            ${{ runner.temp }}/ambiguous-primary.json
+            ${{ runner.temp }}/cycle-primary.json
+            ${{ runner.temp }}/baseline-refuted.json
+            ${{ runner.temp }}/authority-refuted.json
+            ${{ runner.temp }}/meta-refuted.json
+            ${{ runner.temp }}/graph.json
+            ${{ runner.temp }}/program-syntax.json
+            ${{ runner.temp }}/program-semantic.json
+            ${{ runner.temp }}/observation-syntax.json
+            ${{ runner.temp }}/observation-semantic.json

@@ -1,0 +1,29 @@
+{
+  "schema": "gooo/evidence-generator/denominator/v1",
+  "id": "gooo://denominator/cross-consumer-primitive-adoption/v5",
+  "target_cells": 12,
+  "proof_totals": [
+    {"proof_choice":"FOUNDATION","total":4},
+    {"proof_choice":"COHERENCE","total":4},
+    {"proof_choice":"REGRESSION","total":4}
+  ],
+  "indicator_totals": [
+    {"indicator_class":"DRIVER","total":4},
+    {"indicator_class":"OUTCOME","total":4},
+    {"indicator_class":"GUARDRAIL","total":4}
+  ],
+  "cells": [
+    {"ordinal":1,"id":"CANDIDATE_SELECTION_RELEASE","activity":"ObserveCandidateSelectionRelease","stage":"BASELINE_RELEASE","step":"OBSERVE_LINK_V0_22_SELECTION","proof_choice":"FOUNDATION","indicator_class":"DRIVER","closed_reason":"LINK_V0_22_CANDIDATE_SELECTION_OBSERVED","unknown_reason":"CANDIDATE_SELECTION_RELEASE_UNAVAILABLE","refuted_reason":"CANDIDATE_SELECTION_RELEASE_MISMATCH","next_operation":"FETCH_PINNED_CANDIDATE_SELECTION_RELEASE"},
+    {"ordinal":2,"id":"CORE_PRIMITIVE_RELEASE","activity":"ObserveCorePrimitiveRelease","stage":"CORE_RELEASE","step":"OBSERVE_CORE_V0_4_PRIMITIVE","proof_choice":"FOUNDATION","indicator_class":"DRIVER","closed_reason":"CORE_V0_4_CLAIM_DEPENDENCY_RELEASE_OBSERVED","unknown_reason":"CORE_PRIMITIVE_RELEASE_UNAVAILABLE","refuted_reason":"CORE_PRIMITIVE_RELEASE_MISMATCH","next_operation":"FETCH_PINNED_CORE_PRIMITIVE_RELEASE"},
+    {"ordinal":3,"id":"CORE_RELEASE_ELIGIBILITY","activity":"BindCoreReleaseEligibility","stage":"CORE_RELEASE","step":"BIND_CORE_RELEASE_ELIGIBILITY","proof_choice":"FOUNDATION","indicator_class":"OUTCOME","closed_reason":"CORE_RELEASE_ELIGIBILITY_CLOSED","unknown_reason":"CORE_RELEASE_ELIGIBILITY_UNAVAILABLE","refuted_reason":"CORE_RELEASE_ELIGIBILITY_MISMATCH","next_operation":"RESTORE_CORE_RELEASE_ELIGIBILITY"},
+    {"ordinal":4,"id":"FIVE_OF_THIRTY_BASELINE","activity":"BindFiveOfThirtyBaseline","stage":"BASELINE","step":"BIND_FIVE_OF_THIRTY_BASELINE","proof_choice":"FOUNDATION","indicator_class":"OUTCOME","closed_reason":"FIVE_OF_THIRTY_BASELINE_BOUND","unknown_reason":"BASELINE_MAPPING_COUNT_UNAVAILABLE","refuted_reason":"BASELINE_MAPPING_COUNT_MISMATCH","next_operation":"RESTORE_FIVE_OF_THIRTY_BASELINE"},
+    {"ordinal":5,"id":"RELEASED_COMMAND_EXECUTION","activity":"ExecuteReleasedClaimDependencyCommand","stage":"PRIMITIVE_EXECUTION","step":"EXECUTE_RELEASED_CLAIM_DEPENDENCIES","proof_choice":"COHERENCE","indicator_class":"DRIVER","closed_reason":"RELEASED_CLAIM_DEPENDENCY_COMMAND_CLOSED","unknown_reason":"RELEASED_CLAIM_DEPENDENCY_COMMAND_UNKNOWN","refuted_reason":"RELEASED_CLAIM_DEPENDENCY_COMMAND_REFUTED","next_operation":"RESTORE_RELEASED_CLAIM_DEPENDENCY_EXECUTION"},
+    {"ordinal":6,"id":"EIGHT_STRUCTURAL_EDGES","activity":"BindEightStructuralEdges","stage":"PRIMITIVE_EVIDENCE","step":"BIND_EIGHT_STRUCTURAL_EDGES","proof_choice":"COHERENCE","indicator_class":"OUTCOME","closed_reason":"EIGHT_STRUCTURAL_EDGES_BOUND","unknown_reason":"STRUCTURAL_EDGE_EVIDENCE_UNKNOWN","refuted_reason":"STRUCTURAL_EDGE_EVIDENCE_MISMATCH","next_operation":"RESTORE_STRUCTURAL_EDGE_EVIDENCE"},
+    {"ordinal":7,"id":"SIX_OF_THIRTY","activity":"AdvanceToSixOfThirty","stage":"ACCUMULATION","step":"ADVANCE_TO_SIX_OF_THIRTY","proof_choice":"COHERENCE","indicator_class":"OUTCOME","closed_reason":"SIXTH_DIRECT_MAPPING_OBSERVED","unknown_reason":"SIXTH_DIRECT_MAPPING_UNKNOWN","refuted_reason":"SIXTH_DIRECT_MAPPING_ARITHMETIC_MISMATCH","next_operation":"RESTORE_MAPPING_ACCUMULATION"},
+    {"ordinal":8,"id":"ZERO_CONSUMER_INCREMENT","activity":"PreserveZeroConsumerIncrement","stage":"INDEPENDENCE","step":"PRESERVE_ZERO_CONSUMER_INCREMENT","proof_choice":"COHERENCE","indicator_class":"GUARDRAIL","closed_reason":"ZERO_INDEPENDENT_CONSUMER_INCREMENT_PRESERVED","unknown_reason":"CONSUMER_INCREMENT_UNAVAILABLE","refuted_reason":"INDEPENDENT_CONSUMER_COUNT_INFLATED","next_operation":"RESTORE_ZERO_CONSUMER_INCREMENT"},
+    {"ordinal":9,"id":"UNKNOWN_COORDINATES","activity":"PreserveUnknownCoordinates","stage":"RESOLUTION","step":"PRESERVE_UNKNOWN_COORDINATES","proof_choice":"REGRESSION","indicator_class":"GUARDRAIL","closed_reason":"UNKNOWN_COORDINATES_PRESERVED","unknown_reason":"UNKNOWN_COUNTEREXAMPLE_UNAVAILABLE","refuted_reason":"UNKNOWN_COORDINATE_MISMATCH","next_operation":"RESTORE_UNKNOWN_COUNTEREXAMPLE"},
+    {"ordinal":10,"id":"REFUTED_COUNTEREXAMPLES","activity":"PreserveRefutedCounterexamples","stage":"RESOLUTION","step":"PRESERVE_REFUTED_COUNTEREXAMPLES","proof_choice":"REGRESSION","indicator_class":"GUARDRAIL","closed_reason":"THREE_REFUTED_COUNTEREXAMPLES_PRESERVED","unknown_reason":"REFUTED_COUNTEREXAMPLES_UNAVAILABLE","refuted_reason":"REFUTED_COUNTEREXAMPLE_MISMATCH","next_operation":"RESTORE_REFUTED_COUNTEREXAMPLES"},
+    {"ordinal":11,"id":"META_ACTIVITY_SET","activity":"BindTwelveMetaActivities","stage":"META","step":"BIND_TWELVE_META_ACTIVITIES","proof_choice":"REGRESSION","indicator_class":"DRIVER","closed_reason":"TWELVE_GOOO_META_ACTIVITIES_BOUND","unknown_reason":"GOOO_META_ACTIVITY_GRAPH_UNAVAILABLE","refuted_reason":"GOOO_META_ACTIVITY_SET_MISMATCH","next_operation":"RESTORE_TWELVE_GOOO_META_ACTIVITIES"},
+    {"ordinal":12,"id":"OPTIONAL_READ_ONLY_BOUNDARY","activity":"PreserveOptionalReadOnlyBoundary","stage":"AUTHORITY","step":"PRESERVE_OPTIONAL_READ_ONLY_BOUNDARY","proof_choice":"REGRESSION","indicator_class":"GUARDRAIL","closed_reason":"OPTIONAL_READ_ONLY_BOUNDARY_PRESERVED","unknown_reason":"AUTHORITY_OBSERVATION_UNAVAILABLE","refuted_reason":"OBSERVATION_AUTHORITY_ESCALATED","next_operation":"RESTORE_OPTIONAL_READ_ONLY_BOUNDARY"}
+  ]
+}
