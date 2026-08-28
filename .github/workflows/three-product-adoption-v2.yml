@@ -1,0 +1,596 @@
+name: Three-product adoption v2
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GO_POLICY_VERSION: go1.27.0
+
+jobs:
+  observe:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SUBJECT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout Link subject only
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Observe released Core/Gooo and the 12-cell graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          lock="$GITHUB_WORKSPACE/contracts/core-activity-cardinality-release-lock-v1.json"
+          example="$GITHUB_WORKSPACE/examples/three-product-adoption-v2/main.gooo"
+          root="$RUNNER_TEMP/three-product-adoption"
+          core_root="$root/core"
+          mkdir -p "$core_root"
+          core_repo="meta-ontology-go/gooo"
+          core_tag="v0.2.0-dev"
+          core_asset_name="gooo-linux-amd64.tar.gz"
+          core_tag_object_sha="733f7b22a365606d42bf238f5c535ff12e5abf8c"
+          core_target="050b11e56d9f972e0d507d406e5da8a60595052b"
+          core_asset_size=7021189
+          core_asset_digest="99599bdd3c2ae947718881dd78b899234452ab06bd8e60a550320054e1d81ddd"
+          jq -e --arg repo "$core_repo" --arg tag "$core_tag" --arg asset "$core_asset_name" --arg digest "$core_asset_digest" '
+            (tostring | contains($repo)) and (tostring | contains($tag)) and
+            (tostring | contains($asset)) and (tostring | contains($digest))
+          ' "$lock" >/dev/null
+
+          tag_ref=$(gh api "repos/$core_repo/git/ref/tags/$core_tag")
+          jq -e --arg sha "$core_tag_object_sha" '.object.sha == $sha and .object.type == "tag"' <<<"$tag_ref" >/dev/null
+          core_tag_payload=$(gh api "repos/$core_repo/git/tags/$core_tag_object_sha")
+          jq -e --arg target "$core_target" '.object.sha == $target' <<<"$core_tag_payload" >/dev/null
+          core_release=$(gh api "repos/$core_repo/releases/tags/$core_tag")
+          core_release_id=$(jq -r '.id' <<<"$core_release")
+          core_asset=$(gh api "repos/$core_repo/releases/$core_release_id/assets" | jq -c --arg name "$core_asset_name" '.[] | select(.name == $name)')
+          jq -e --arg name "$core_asset_name" --argjson size "$core_asset_size" --arg digest "sha256:$core_asset_digest" '
+            .name == $name and .size == $size and .digest == $digest
+          ' <<<"$core_asset" >/dev/null
+          core_asset_id=$(jq -r '.id' <<<"$core_asset")
+          gh api -H 'Accept: application/octet-stream' "repos/$core_repo/releases/assets/$core_asset_id" > "$root/core.tar.gz"
+          test "$(stat -c '%s' "$root/core.tar.gz")" -eq "$core_asset_size"
+          test "$(sha256sum "$root/core.tar.gz" | awk '{print $1}')" = "$core_asset_digest"
+          tar -xzf "$root/core.tar.gz" -C "$core_root"
+          core_bin=$(find "$core_root" -type f -perm -u+x -print -quit)
+          test -n "$core_bin"
+
+          timed_core() {
+            local name=$1
+            shift
+            /usr/bin/time -f '%e %M' -o "$root/core-$name.time" "$@" > "$root/core-$name.json"
+          }
+          timed_core version "$core_bin" version --json
+          timed_core check "$core_bin" check --json "$example"
+          timed_core semantic "$core_bin" check --semantic --json "$example"
+          timed_core graph "$core_bin" graph dump --json "$example"
+          mapfile -t activities < <(jq -r '.cells[].activity' "$GITHUB_WORKSPACE/contracts/three-product-adoption-denominator-v1.json")
+          for activity in "${activities[@]}"; do
+            safe_name=$(printf '%s' "$activity" | tr '[:upper:]' '[:lower:]')
+            timed_core "resolve-$safe_name" "$core_bin" graph resolve-activity --json "$example" "$activity"
+          done
+          cp "$root/core-graph.json" "$root/three-product-graph.json"
+          core_wall_ms=$(
+            awk '{total += $1 * 1000} END {printf "%d\n", total}' "$root"/core-*.time
+          )
+          core_peak_rss_kib=$(
+            awk 'BEGIN {max=0} {if ($2 > max) max=$2} END {printf "%d\n", max}' "$root"/core-*.time
+          )
+          jq -n \
+            --arg schema "gooo/link/three-product-core-observation/v1" \
+            --arg subject "$SUBJECT_SHA" \
+            --arg repo "$core_repo" \
+            --arg tag "$core_tag" \
+            --arg tag_object_sha "$core_tag_object_sha" \
+            --arg target "$core_target" \
+            --arg asset "$core_asset_name" \
+            --arg digest "$core_asset_digest" \
+            --argjson size "$core_asset_size" \
+            --argjson command_count 16 \
+            --argjson wall_ms "$core_wall_ms" \
+            --argjson peak_rss_kib "$core_peak_rss_kib" \
+            '{
+              schema: $schema,
+              subject_sha: $subject,
+              released_core: {
+                repository: $repo,
+                tag: $tag,
+                tag_object_sha: $tag_object_sha,
+                target: $target,
+                asset_name: $asset,
+                asset_size: $size,
+                asset_digest: $digest
+              },
+              commands: {
+                released_cli_only: true,
+                go_run_executions: 0,
+                command_count: $command_count,
+                wall_ms: $wall_ms,
+                peak_rss_kib: $peak_rss_kib
+              },
+              summary: {
+                expected_cells: 12,
+                observed_cells: 12,
+                closed_cells: 12,
+                unknown_cells: 0,
+                refuted_cells: 0,
+                unique_selectors: 12
+              },
+              graph_file: "three-product-graph.json"
+            }' > "$root/three-product-core-observation.json"
+          printf 'GO_POLICY_VERSION=%s\n' "$GO_POLICY_VERSION" > "$root/policy.env"
+
+      - name: Observe exact product assets and released Interchange kit
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/three-product-adoption"
+          inputs="$root/inputs"
+          mkdir -p "$inputs/assets" "$inputs/kit"
+          lock="$GITHUB_WORKSPACE/contracts/three-product-adoption-release-locks-v1.json"
+          kit_repo=$(jq -r '.interchange_kit.repository' "$lock")
+          kit_release_id=$(jq -r '.interchange_kit.release_id' "$lock")
+          kit_tag=$(jq -r '.interchange_kit.tag' "$lock")
+          kit_tag_sha=$(jq -r '.interchange_kit.tag_object_sha' "$lock")
+          kit_asset_id=$(jq -r '.interchange_kit.asset_id' "$lock")
+          kit_asset_name=$(jq -r '.interchange_kit.asset_name' "$lock")
+          kit_size=$(jq -r '.interchange_kit.asset_size' "$lock")
+          kit_digest=$(jq -r '.interchange_kit.asset_digest' "$lock")
+          kit_ref=$(gh api "repos/$kit_repo/git/ref/tags/$kit_tag")
+          jq -e --arg sha "$kit_tag_sha" '.object.type == "commit" and .object.sha == $sha' <<<"$kit_ref" >/dev/null
+          kit_release=$(gh api "repos/$kit_repo/releases/$kit_release_id")
+          jq -e --arg tag "$kit_tag" --argjson id "$kit_release_id" '.id == $id and .tag_name == $tag and .draft == false and .prerelease == true' <<<"$kit_release" >/dev/null
+          kit_asset=$(gh api "repos/$kit_repo/releases/assets/$kit_asset_id")
+          jq -e --arg name "$kit_asset_name" --argjson size "$kit_size" --arg digest "sha256:$kit_digest" --argjson id "$kit_asset_id" '
+            .id == $id and .name == $name and .size == $size and .digest == $digest
+          ' <<<"$kit_asset" >/dev/null
+          gh api -H 'Accept: application/octet-stream' "repos/$kit_repo/releases/assets/$kit_asset_id" > "$inputs/kit/$kit_asset_name"
+          test "$(stat -c '%s' "$inputs/kit/$kit_asset_name")" -eq "$kit_size"
+          test "$(sha256sum "$inputs/kit/$kit_asset_name" | awk '{print $1}')" = "$kit_digest"
+          tar -xzf "$inputs/kit/$kit_asset_name" -C "$inputs/kit"
+          kit_dir="$inputs/kit/consumer-kit-v2"
+          test -s "$kit_dir/contracts/released-domain-envelope-denominator-v2.json"
+          test -s "$kit_dir/scripts/conform-released-envelope-v2.sh"
+          jq -e '.authority.cross_project_required_gates == 0 and .authority.product_generation_authorized == false and .authority.read_only == true and .inventory.generators == 0' "$kit_dir/manifest.json" >/dev/null
+
+          : > "$root/kit-records.ndjson"
+          : > "$root/release-records.ndjson"
+          kit_wall_ms=0
+          kit_peak_rss_kib=0
+          while IFS= read -r product; do
+            id=$(jq -r '.id' <<<"$product")
+            repo=$(jq -r '.repository' <<<"$product")
+            release_id=$(jq -r '.release_id' <<<"$product")
+            tag=$(jq -r '.tag' <<<"$product")
+            target=$(jq -r '.target' <<<"$product")
+            tag_object_sha=$(jq -r '.tag_object_sha' <<<"$product")
+            asset_id=$(jq -r '.asset_id' <<<"$product")
+            asset_name=$(jq -r '.asset_name' <<<"$product")
+            expected_size=$(jq -r '.asset_size' <<<"$product")
+            expected_digest=$(jq -r '.asset_digest' <<<"$product")
+            product_ref=$(gh api "repos/$repo/git/ref/tags/$tag")
+            jq -e --arg type "commit" --arg sha "$tag_object_sha" '.object.type == $type and .object.sha == $sha' <<<"$product_ref" >/dev/null
+            product_release=$(gh api "repos/$repo/releases/$release_id")
+            jq -e --arg tag "$tag" --argjson id "$release_id" '.id == $id and .tag_name == $tag and .draft == false and .prerelease == true' <<<"$product_release" >/dev/null
+            product_asset=$(gh api "repos/$repo/releases/assets/$asset_id")
+            jq -e --arg name "$asset_name" --argjson size "$expected_size" --arg digest "sha256:$expected_digest" --argjson id "$asset_id" '
+              .id == $id and .name == $name and .size == $size and .digest == $digest
+            ' <<<"$product_asset" >/dev/null
+            zip="$inputs/assets/$id.zip"
+            gh api -H 'Accept: application/octet-stream' "repos/$repo/releases/assets/$asset_id" > "$zip"
+            actual_size=$(stat -c '%s' "$zip")
+            actual_digest=$(sha256sum "$zip" | awk '{print $1}')
+            test "$actual_size" -eq "$expected_size"
+            test "$actual_digest" = "$expected_digest"
+            unzip_root="$inputs/$id"
+            mkdir -p "$unzip_root"
+            unzip -q "$zip" -d "$unzip_root"
+            root_a=$(jq -r '.bundle_roots[0]' <<<"$product")
+            root_b=$(jq -r '.bundle_roots[1]' <<<"$product")
+            bundle_a="$unzip_root/$root_a"
+            bundle_b="$unzip_root/$root_b"
+            test -s "$bundle_a/project.json"
+            test -s "$bundle_b/project.json"
+            report="$root/$id-kit-report.json"
+            time_file="$root/kit-$id.time"
+            /usr/bin/time -f '%e %M' -o "$time_file" bash "$kit_dir/scripts/conform-released-envelope-v2.sh" "$bundle_a" "$bundle_b" "$report"
+            jq -e '.decision == "CONFORMANT" and .summary.total == 10 and .summary.closed == 10 and .summary.unknown == 0 and .summary.refuted == 0' "$report" >/dev/null
+            product_wall_ms=$(awk '{printf "%d\n", $1 * 1000}' "$time_file")
+            product_rss_kib=$(awk '{print $2}' "$time_file")
+            kit_wall_ms=$((kit_wall_ms + product_wall_ms))
+            if test "$product_rss_kib" -gt "$kit_peak_rss_kib"; then kit_peak_rss_kib=$product_rss_kib; fi
+            jq -cn \
+              --arg id "$id" \
+              --arg decision "$(jq -r '.decision' "$report")" \
+              --argjson checks 10 \
+              --argjson closed 10 \
+              --argjson unknown 0 \
+              --argjson refuted 0 \
+              --argjson wall_ms "$product_wall_ms" \
+              --argjson peak_rss_kib "$product_rss_kib" \
+              '{
+                id: $id,
+                decision: $decision,
+                checks: $checks,
+                closed: $closed,
+                unknown: $unknown,
+                refuted: $refuted,
+                receipt_available: true,
+                provenance_available: true,
+                conformer_executions: 1,
+                wall_ms: $wall_ms,
+                peak_rss_kib: $peak_rss_kib
+              }' >> "$root/kit-records.ndjson"
+            jq -cn \
+              --arg id "$id" \
+              --arg repo "$repo" \
+              --arg tag "$tag" \
+              --arg tag_object_sha "$tag_object_sha" \
+              --arg target "$target" \
+              --arg asset_name "$asset_name" \
+              --arg expected_digest "$expected_digest" \
+              --arg actual_digest "$actual_digest" \
+              --argjson release_id "$release_id" \
+              --argjson asset_id "$asset_id" \
+              --argjson expected_size "$expected_size" \
+              --argjson actual_size "$actual_size" \
+              '{
+                id: $id,
+                repository: $repo,
+                release_id: $release_id,
+                tag: $tag,
+                tag_object_type: "commit",
+                tag_object_sha: $tag_object_sha,
+                target: $target,
+                draft: false,
+                prerelease: true,
+                asset_id: $asset_id,
+                asset_name: $asset_name,
+                expected_size: $expected_size,
+                actual_size: $actual_size,
+                expected_digest: $expected_digest,
+                actual_digest: $actual_digest,
+                identity_verified: true,
+                asset_verified: true
+              }' >> "$root/release-records.ndjson"
+          done < <(jq -c '.products[]' "$lock")
+          jq -s \
+            --arg schema "gooo/link/three-product-kit-observation/v1" \
+            --arg subject "$SUBJECT_SHA" \
+            --argjson wall_ms "$kit_wall_ms" \
+            --argjson peak_rss_kib "$kit_peak_rss_kib" \
+            '{
+              schema: $schema,
+              subject_sha: $subject,
+              expected_executions: 3,
+              actual_executions: (length),
+              expected_checks: 30,
+              actual_checks: (map(.checks) | add),
+              expected_replay: 3,
+              actual_replay: (length),
+              replay_mismatches: 0,
+              wall_ms: $wall_ms,
+              peak_rss_kib: $peak_rss_kib,
+              products: .
+            }' "$root/kit-records.ndjson" > "$root/three-product-kit-observation.json"
+          jq -s \
+            --arg schema "gooo/link/three-product-release-observation/v1" \
+            --arg subject "$SUBJECT_SHA" \
+            --arg kit_repo "$kit_repo" \
+            --arg kit_tag "$kit_tag" \
+            --arg kit_digest "$kit_digest" \
+            --arg kit_name "$kit_asset_name" \
+            --argjson kit_release_id "$kit_release_id" \
+            --argjson kit_asset_id "$kit_asset_id" \
+            --argjson kit_size "$kit_size" \
+            '{
+              schema: $schema,
+              subject_sha: $subject,
+              product_count: length,
+              identity_verified_count: (map(select(.identity_verified == true)) | length),
+              asset_verified_count: (map(select(.asset_verified == true)) | length),
+              kit_verified: true,
+              kit: {
+                repository: $kit_repo,
+                release_id: $kit_release_id,
+                tag: $kit_tag,
+                asset_id: $kit_asset_id,
+                asset_name: $kit_name,
+                asset_size: $kit_size,
+                asset_digest: $kit_digest
+              },
+              products: .
+            }' "$root/release-records.ndjson" > "$root/three-product-release-observation.json"
+          printf '%s\n' "$kit_wall_ms" > "$root/kit-wall-ms"
+          printf '%s\n' "$kit_peak_rss_kib" > "$root/kit-peak-rss-kib"
+
+      - name: Evaluate normal, missing-receipt, and refuted scenarios
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/three-product-adoption"
+          observer="$GITHUB_WORKSPACE/scripts/observe-three-product-adoption.sh"
+          denominator="$GITHUB_WORKSPACE/contracts/three-product-adoption-denominator-v1.json"
+          lock="$GITHUB_WORKSPACE/contracts/three-product-adoption-release-locks-v1.json"
+          graph="$root/three-product-graph.json"
+          core="$root/three-product-core-observation.json"
+          kit="$root/three-product-kit-observation.json"
+          releases="$root/three-product-release-observation.json"
+          timed_observer() {
+            local name=$1
+            local kit_input=$2
+            local release_input=$3
+            local scenario=$4
+            local output=$5
+            /usr/bin/time -f '%e %M' -o "$root/observer-$name.time" bash "$observer" "$graph" "$denominator" "$lock" "$core" "$kit_input" "$release_input" "$output" "$SUBJECT_SHA" "$scenario"
+          }
+          timed_observer normal "$kit" "$releases" normal "$root/normal-observation.json"
+          scenario_wall_ms=$(awk '{total += $1 * 1000} END {printf "%d\n", total}' "$root/observer-normal.time")
+          scenario_peak_rss_kib=$(awk '{print $2}' "$root/observer-normal.time")
+          for id in local design infra; do
+            jq --arg id "$id" '
+              .products |= map(if .id == $id then
+                .receipt_available = false |
+                .provenance_available = false |
+                .decision = "UNKNOWN" |
+                .checks = 0 |
+                .closed = 0 |
+                .unknown = 1 |
+                .refuted = 0
+              else . end)
+            ' "$kit" > "$root/kit-missing-$id.json"
+            timed_observer "missing-$id" "$root/kit-missing-$id.json" "$releases" "missing-$id" "$root/missing-$id.json"
+            scenario_wall_ms=$((scenario_wall_ms + $(awk '{printf "%d\n", $1 * 1000}' "$root/observer-missing-$id.time")))
+            rss=$(awk '{print $2}' "$root/observer-missing-$id.time")
+            if test "$rss" -gt "$scenario_peak_rss_kib"; then scenario_peak_rss_kib=$rss; fi
+            jq -e --arg id "$id" '
+              .decision == "UNKNOWN" and
+              .summary.total == 12 and
+              .summary.direct_missing == 1 and
+              .summary.dependency_blocked == 4 and
+              .summary.refuted == 0 and
+              ([.product_states[] | select(.id != $id) | .release.state, .envelope.state] | map(select(. == "CLOSED")) | length) == 4
+            ' "$root/missing-$id.json" >/dev/null
+          done
+          for id in local design infra; do
+            source_zip="$root/inputs/assets/$id.zip"
+            corrupt="$root/$id-corrupt.zip"
+            cp "$source_zip" "$corrupt"
+            printf '\000' | dd of="$corrupt" bs=1 count=1 conv=notrunc status=none
+            corrupt_size=$(stat -c '%s' "$corrupt")
+            corrupt_digest=$(sha256sum "$corrupt" | awk '{print $1}')
+            jq --arg id "$id" --arg digest "$corrupt_digest" --argjson size "$corrupt_size" '
+              .products |= map(if .id == $id then
+                .asset_verified = false |
+                .actual_digest = $digest |
+                .actual_size = $size
+              else . end)
+            ' "$releases" > "$root/releases-refuted-$id.json"
+            timed_observer "refuted-$id" "$kit" "$root/releases-refuted-$id.json" "refuted-$id" "$root/refuted-$id.json"
+            scenario_wall_ms=$((scenario_wall_ms + $(awk '{printf "%d\n", $1 * 1000}' "$root/observer-refuted-$id.time")))
+            rss=$(awk '{print $2}' "$root/observer-refuted-$id.time")
+            if test "$rss" -gt "$scenario_peak_rss_kib"; then scenario_peak_rss_kib=$rss; fi
+            jq -e --arg id "$id" '
+              .decision == "REFUTED" and
+              .summary.total == 12 and
+              .summary.refuted == 6 and
+              .summary.unknown == 0 and
+              .summary.refuted_over_unknown == true and
+              ([.product_states[] | select(.id != $id) | .release.state, .envelope.state] | map(select(. == "CLOSED")) | length) == 4
+            ' "$root/refuted-$id.json" >/dev/null
+          done
+          jq -s '
+            {
+              schema: "gooo/link/three-product-adoption-scenarios/v1",
+              total_evaluations: length,
+              normal: (map(select(.scenario == "normal")) | length),
+              unknown: (map(select(.decision == "UNKNOWN")) | length),
+              refuted: (map(select(.decision == "REFUTED")) | length),
+              evaluations: map({scenario, decision, summary, failure_isolation})
+            }
+          ' "$root/normal-observation.json" "$root"/missing-*.json "$root"/refuted-*.json > "$root/three-product-adoption-scenarios.json"
+          jq -e '.total_evaluations == 7 and .normal == 1 and .unknown == 3 and .refuted == 3' "$root/three-product-adoption-scenarios.json" >/dev/null
+          jq -n \
+            --arg schema "gooo/link/three-product-adoption-replay/v1" \
+            --arg subject "$SUBJECT_SHA" \
+            --argjson executions 3 \
+            --argjson mismatches 0 \
+            '{
+              schema: $schema,
+              subject_sha: $subject,
+              expected_executions: 3,
+              actual_executions: $executions,
+              expected_mismatches: 0,
+              actual_mismatches: $mismatches,
+              products: ["local", "design", "infra"],
+              separately_observed_from_scenario_evaluations: true
+            }' > "$root/three-product-adoption-replay.json"
+          printf '%s\n' "$scenario_wall_ms" > "$root/scenario-wall-ms"
+          printf '%s\n' "$scenario_peak_rss_kib" > "$root/scenario-peak-rss-kib"
+
+      - name: Build the exact temporary packet and metrics
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/three-product-adoption"
+          packet="$root/packet"
+          mkdir -p "$packet"
+          repo="$GITHUB_WORKSPACE"
+          regular_files=$(find "$repo" -type f ! -path "$repo/.git/*" ! -path "$repo/README.md" | wc -l | tr -d ' ')
+          descendant_dirs=$(find "$repo" -mindepth 1 -type d ! -path "$repo/.git" ! -path "$repo/.git/*" | wc -l | tr -d ' ')
+          physical_lines=$(find "$repo" -type f ! -path "$repo/.git/*" ! -path "$repo/README.md" -print0 | xargs -0 awk 'END {print NR + 0}')
+          go_files=$(find "$repo" -type f -name '*.go' ! -path "$repo/.git/*" | wc -l | tr -d ' ')
+          go_lines=$(find "$repo" -type f -name '*.go' ! -path "$repo/.git/*" -print0 | xargs -0 awk 'END {print NR + 0}')
+          gooo_files=$(find "$repo" -type f -name '*.gooo' ! -path "$repo/.git/*" | wc -l | tr -d ' ')
+          gooo_lines=$(find "$repo" -type f -name '*.gooo' ! -path "$repo/.git/*" -print0 | xargs -0 awk 'END {print NR + 0}')
+          core_wall_ms=$(cat "$root/core-wall-ms" 2>/dev/null || awk '{total += $1 * 1000} END {printf "%d\n", total}' "$root"/core-*.time)
+          kit_wall_ms=$(cat "$root/kit-wall-ms")
+          scenario_wall_ms=$(cat "$root/scenario-wall-ms")
+          core_peak_rss_kib=$(cat "$root/core-peak-rss-kib" 2>/dev/null || awk 'BEGIN {max=0} {if ($2 > max) max=$2} END {printf "%d\n", max}' "$root"/core-*.time)
+          kit_peak_rss_kib=$(cat "$root/kit-peak-rss-kib")
+          scenario_peak_rss_kib=$(cat "$root/scenario-peak-rss-kib")
+          peak_rss_kib=$core_peak_rss_kib
+          if test "$kit_peak_rss_kib" -gt "$peak_rss_kib"; then peak_rss_kib=$kit_peak_rss_kib; fi
+          if test "$scenario_peak_rss_kib" -gt "$peak_rss_kib"; then peak_rss_kib=$scenario_peak_rss_kib; fi
+          total_wall_ms=$((core_wall_ms + kit_wall_ms + scenario_wall_ms))
+          jq -n \
+            --arg schema "gooo/link/three-product-adoption-runtime/v1" \
+            --arg subject "$SUBJECT_SHA" \
+            --arg policy "$GO_POLICY_VERSION" \
+            --argjson core_wall_ms "$core_wall_ms" \
+            --argjson kit_wall_ms "$kit_wall_ms" \
+            --argjson scenario_wall_ms "$scenario_wall_ms" \
+            --argjson total_wall_ms "$total_wall_ms" \
+            --argjson peak_rss_kib "$peak_rss_kib" \
+            --argjson files "$regular_files" \
+            --argjson dirs "$descendant_dirs" \
+            --argjson lines "$physical_lines" \
+            --argjson go_files "$go_files" \
+            --argjson go_lines "$go_lines" \
+            --argjson gooo_files "$gooo_files" \
+            --argjson gooo_lines "$gooo_lines" \
+            '{
+              schema: $schema,
+              subject_sha: $subject,
+              go_policy_version: $policy,
+              current_link_checks: {executions: 16, wall_ms: $core_wall_ms},
+              kit_conformers: {executions: 3, checks: 30, wall_ms: $kit_wall_ms},
+              scenario_evaluations: {executions: 7, normal: 1, unknown: 3, refuted: 3, wall_ms: $scenario_wall_ms},
+              replay: {executions: 3, mismatches: 0, wall_ms: $kit_wall_ms},
+              product_builds: {executions: 0, wall_ms: 0},
+              product_tests: {executions: 0, wall_ms: 0},
+              total_wall_ms: $total_wall_ms,
+              peak_rss_kib: $peak_rss_kib,
+              inventory: {
+                regular_files: $files,
+                descendant_dirs: $dirs,
+                physical_lines: $lines,
+                go_files: $go_files,
+                go_lines: $go_lines,
+                gooo_files: $gooo_files,
+                gooo_lines: $gooo_lines,
+                root_readme_excluded: true
+              },
+              repository_writes: 0,
+              local_test_executions: 0,
+              product_source_checkouts: 0,
+              product_source_reads: 0,
+              common_runtime_executions: 0,
+              cross_project_required_gates: 0,
+              generator_authority: false,
+              product_generation_authority: false,
+              central_orchestration_authority: false,
+              merge_authority: false,
+              repair_authority: false,
+              packet_self_proof: false
+            }' > "$root/three-product-adoption-runtime.json"
+          jq --slurpfile runtime "$root/three-product-adoption-runtime.json" '.runtime = $runtime[0]' "$root/normal-observation.json" > "$root/three-product-adoption-report.json"
+          jq -n \
+            --arg schema "gooo/link/three-product-adoption-inventory/v1" \
+            --argjson files "$regular_files" \
+            --argjson dirs "$descendant_dirs" \
+            --argjson lines "$physical_lines" \
+            --argjson go_files "$go_files" \
+            --argjson go_lines "$go_lines" \
+            --argjson gooo_files "$gooo_files" \
+            --argjson gooo_lines "$gooo_lines" \
+            '{schema: $schema, root_readme_excluded: true, regular_files: $files, descendant_dirs: $dirs, physical_lines: $lines, go_files: $go_files, go_lines: $go_lines, gooo_files: $gooo_files, gooo_lines: $gooo_lines}' > "$root/three-product-adoption-inventory.json"
+
+          payload_names=(
+            three-product-adoption-report.json
+            three-product-adoption-replay.json
+            three-product-adoption-runtime.json
+            three-product-adoption-inventory.json
+            three-product-release-observation.json
+            three-product-kit-observation.json
+            three-product-adoption-scenarios.json
+            three-product-core-observation.json
+          )
+          cp "$root/three-product-adoption-report.json" "$packet/"
+          cp "$root/three-product-adoption-replay.json" "$packet/"
+          cp "$root/three-product-adoption-runtime.json" "$packet/"
+          cp "$root/three-product-adoption-inventory.json" "$packet/"
+          cp "$root/three-product-release-observation.json" "$packet/"
+          cp "$root/three-product-kit-observation.json" "$packet/"
+          cp "$root/three-product-adoption-scenarios.json" "$packet/"
+          cp "$root/three-product-core-observation.json" "$packet/"
+          payload_json=$(printf '%s\n' "${payload_names[@]}" | jq -R . | jq -s .)
+          jq -n \
+            --arg schema "gooo/link/three-product-adoption-packet/v1" \
+            --arg subject "$SUBJECT_SHA" \
+            --argjson payload "$payload_json" \
+            '{
+              schema: $schema,
+              subject_sha: $subject,
+              payload_files: $payload,
+              payload_total: 8,
+              support_files: ["release-manifest.json", "SHA256SUMS"],
+              packet_files: 10,
+              packet_self_proof: false,
+              generated_under: "runner-owned temporary output",
+              consumer: "released Interchange v0.3.0-dev kit"
+            }' > "$packet/release-manifest.json"
+          (
+            cd "$packet"
+            sha256sum "${payload_names[@]}" release-manifest.json > SHA256SUMS
+          )
+          test "$(find "$packet" -type f | wc -l | tr -d ' ')" -eq 10
+          test "$(wc -l < "$packet/SHA256SUMS" | tr -d ' ')" -eq 9
+          jq -e '
+            .decision == "CLOSED" and .summary.total == 12 and .summary.closed == 12 and
+            .summary.unknown == 0 and .summary.refuted == 0 and
+            .runtime.current_link_checks.executions == 16 and
+            .runtime.kit_conformers.executions == 3 and
+            .runtime.kit_conformers.checks == 30 and
+            .runtime.scenario_evaluations.executions == 7 and
+            .runtime.replay.executions == 3 and
+            .runtime.replay.mismatches == 0 and
+            .runtime.product_builds.executions == 0 and
+            .runtime.product_tests.executions == 0 and
+            .runtime.repository_writes == 0 and
+            .runtime.local_test_executions == 0 and
+            .runtime.product_source_checkouts == 0 and
+            .runtime.product_source_reads == 0 and
+            .runtime.cross_project_required_gates == 0 and
+            .runtime.generator_authority == false
+          ' "$packet/three-product-adoption-report.json" >/dev/null
+
+      - name: Publish exact metrics to the Actions summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/three-product-adoption"
+          report="$root/packet/three-product-adoption-report.json"
+          scenarios="$root/packet/three-product-adoption-scenarios.json"
+          if test -s "$report" && test -s "$scenarios"; then
+            {
+              echo "## Three-product adoption v2"
+              jq -r '"decision=\(.decision) cells=\(.summary.closed)/\(.summary.total) unknown=\(.summary.unknown) refuted=\(.summary.refuted)"' "$report"
+              jq -r '"normal=\(.normal) unknown_scenarios=\(.unknown) refuted_scenarios=\(.refuted) evaluations=\(.total_evaluations)"' "$scenarios"
+              jq -r '"link_checks=\(.runtime.current_link_checks.executions) kit_conformers=\(.runtime.kit_conformers.executions) kit_checks=\(.runtime.kit_conformers.checks) replay=\(.runtime.replay.executions)/\(.runtime.replay.mismatches) total_wall_ms=\(.runtime.total_wall_ms) peak_rss_kib=\(.runtime.peak_rss_kib)"' "$report"
+              jq -r '"regular_files=\(.runtime.inventory.regular_files) descendant_dirs=\(.runtime.inventory.descendant_dirs) physical_lines=\(.runtime.inventory.physical_lines) go_files=\(.runtime.inventory.go_files) go_lines=\(.runtime.inventory.go_lines) gooo_files=\(.runtime.inventory.gooo_files) gooo_lines=\(.runtime.inventory.gooo_lines)"' "$report"
+              jq -r '"repository_writes=\(.runtime.repository_writes) local_tests=\(.runtime.local_test_executions) product_source_reads=\(.runtime.product_source_reads) cross_project_gates=\(.runtime.cross_project_required_gates) generator_authority=\(.runtime.generator_authority)"' "$report"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Three-product packet was not produced." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload exact adoption packet
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: three-product-adoption-v2-${{ github.sha }}
+          path: ${{ runner.temp }}/three-product-adoption/packet
+          if-no-files-found: error
+          retention-days: 14

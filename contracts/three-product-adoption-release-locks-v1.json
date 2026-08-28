@@ -1,0 +1,102 @@
+{
+  "schema": "gooo/link/three-product-adoption-release-locks/v1",
+  "core_lock": "contracts/core-activity-cardinality-release-lock-v1.json",
+  "interchange_kit": {
+    "repository": "kimjooyoon/gooo-interchange-spec",
+    "release_id": 378636646,
+    "tag": "v0.3.0-dev",
+    "tag_object_type": "commit",
+    "tag_object_sha": "ad3b1f4afca3cc3a8dba662804360e3fffd4aefb",
+    "target": "ad3b1f4afca3cc3a8dba662804360e3fffd4aefb",
+    "draft": false,
+    "prerelease": true,
+    "asset_id": 534100046,
+    "asset_name": "gooo-interchange-consumer-kit-v2.tar.gz",
+    "asset_size": 7230,
+    "asset_digest": "a87fff90f4c80a9f8634275c7bc7c7bf2c42e5ccee7e4a686c8cff4efb33233c",
+    "asset_api_digest": "sha256:a87fff90f4c80a9f8634275c7bc7c7bf2c42e5ccee7e4a686c8cff4efb33233c"
+  },
+  "products": [
+    {
+      "id": "local",
+      "repository": "kimjooyoon/gooo-local",
+      "release_id": 378677462,
+      "tag": "v0.9.0-dev",
+      "tag_object_type": "commit",
+      "tag_object_sha": "8b01cc4bf26e0c7877dd4df89c3beab190328a1c",
+      "target": "8b01cc4bf26e0c7877dd4df89c3beab190328a1c",
+      "draft": false,
+      "prerelease": true,
+      "asset_id": 534176148,
+      "asset_name": "local-released-domain-envelope-v2-ci-artifact.zip",
+      "asset_size": 31920,
+      "asset_digest": "05473fa82ec15b90d80f619e8708957b42f41a4d8055f3d314cd9c9968d37b9e",
+      "asset_api_digest": "sha256:05473fa82ec15b90d80f619e8708957b42f41a4d8055f3d314cd9c9968d37b9e",
+      "bundle_roots": [
+        "bundle-a",
+        "bundle-b"
+      ]
+    },
+    {
+      "id": "design",
+      "repository": "kimjooyoon/gooo-design-evidence",
+      "release_id": 378665910,
+      "tag": "v0.8.0-dev",
+      "tag_object_type": "commit",
+      "tag_object_sha": "c5a6a21d1e54f4bce8d6f1bd2571f2186b9bd08b",
+      "target": "c5a6a21d1e54f4bce8d6f1bd2571f2186b9bd08b",
+      "draft": false,
+      "prerelease": true,
+      "asset_id": 534157523,
+      "asset_name": "design-released-domain-envelope-v2-ci-artifact.zip",
+      "asset_size": 31798,
+      "asset_digest": "7fc242c806ed739e6dc19eb5968f4965397cd65397556532edee37695dc82871",
+      "asset_api_digest": "sha256:7fc242c806ed739e6dc19eb5968f4965397cd65397556532edee37695dc82871",
+      "bundle_roots": [
+        "envelope-a",
+        "envelope-b"
+      ]
+    },
+    {
+      "id": "infra",
+      "repository": "kimjooyoon/gooo-infra-evidence",
+      "release_id": 378714549,
+      "tag": "v0.9.0-dev",
+      "tag_object_type": "commit",
+      "tag_object_sha": "b29771f812fe6eb659c9f2ae34eb0ed11c121c9b",
+      "target": "b29771f812fe6eb659c9f2ae34eb0ed11c121c9b",
+      "draft": false,
+      "prerelease": true,
+      "asset_id": 534247353,
+      "asset_name": "released-domain-envelope-v2-b29771f812fe6eb659c9f2ae34eb0ed11c121c9b.zip",
+      "asset_size": 38202,
+      "asset_digest": "56a727e866168d12b4f7874e42c5ee90d2cea250875590a44e40c151fb774b31",
+      "asset_api_digest": "sha256:56a727e866168d12b4f7874e42c5ee90d2cea250875590a44e40c151fb774b31",
+      "bundle_roots": [
+        "bundle-a",
+        "bundle-b"
+      ]
+    }
+  ],
+  "expected": {
+    "products": 3,
+    "selected_product_assets": 3,
+    "kit_conformers": 3,
+    "kit_checks": 30,
+    "replay_receipts": 3,
+    "replay_mismatches": 0
+  },
+  "authority": {
+    "product_source_checkouts": 0,
+    "product_source_reads": 0,
+    "product_build_executions": 0,
+    "product_test_executions": 0,
+    "common_generator_authorized": false,
+    "central_orchestration_authorized": false,
+    "product_generation_authorized": false,
+    "merge_authorized": false,
+    "repair_authorized": false,
+    "cross_project_required_gates": 0,
+    "platform_immutable_claimed": false
+  }
+}

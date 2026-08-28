@@ -1,0 +1,215 @@
+{
+  "schema": "gooo/link/three-product-adoption-denominator/v1",
+  "id": "gooo://link/denominator/three-product-adoption/v1",
+  "target_cells": 12,
+  "proof_choices": {
+    "FOUNDATION": 4,
+    "COHERENCE": 4,
+    "REGRESSION": 4
+  },
+  "indicator_classes": {
+    "DRIVER": 4,
+    "OUTCOME": 4,
+    "GUARDRAIL": 4
+  },
+  "cells": [
+    {
+      "cell_id": "CORE_RELEASE_IDENTITY",
+      "stage": "foundation",
+      "step": "observe-core-release",
+      "proof_choice": "FOUNDATION",
+      "indicator_class": "DRIVER",
+      "activity": "ObserveCoreReleaseIdentity",
+      "output_entity": "gooo://link/three-product-adoption/entity/core-identity",
+      "depends_on": [],
+      "closed_reason": "released Core/Gooo identity and graph were observed through the released CLI",
+      "unknown_reason": "released Core/Gooo observation is unavailable",
+      "refuted_reason": "released Core/Gooo identity or graph observation is contradictory",
+      "next_operation": "observe the pinned released Core/Gooo asset with the released CLI"
+    },
+    {
+      "cell_id": "LOCAL_RELEASE_IDENTITY",
+      "stage": "foundation",
+      "step": "observe-local-release",
+      "proof_choice": "FOUNDATION",
+      "indicator_class": "DRIVER",
+      "activity": "ObserveLocalProductRelease",
+      "output_entity": "gooo://link/three-product-adoption/entity/local-release",
+      "depends_on": [
+        "CORE_RELEASE_IDENTITY"
+      ],
+      "closed_reason": "the exact Local release and asset digest matched the public lock",
+      "unknown_reason": "the exact Local release receipt is unavailable",
+      "refuted_reason": "the exact Local release or asset digest contradicted the public lock",
+      "next_operation": "re-read the pinned Local release metadata and asset digest"
+    },
+    {
+      "cell_id": "DESIGN_RELEASE_IDENTITY",
+      "stage": "foundation",
+      "step": "observe-design-release",
+      "proof_choice": "FOUNDATION",
+      "indicator_class": "DRIVER",
+      "activity": "ObserveDesignProductRelease",
+      "output_entity": "gooo://link/three-product-adoption/entity/design-release",
+      "depends_on": [
+        "CORE_RELEASE_IDENTITY"
+      ],
+      "closed_reason": "the exact Design release and asset digest matched the public lock",
+      "unknown_reason": "the exact Design release receipt is unavailable",
+      "refuted_reason": "the exact Design release or asset digest contradicted the public lock",
+      "next_operation": "re-read the pinned Design release metadata and asset digest"
+    },
+    {
+      "cell_id": "INFRA_RELEASE_IDENTITY",
+      "stage": "foundation",
+      "step": "observe-infra-release",
+      "proof_choice": "FOUNDATION",
+      "indicator_class": "DRIVER",
+      "activity": "ObserveInfraProductRelease",
+      "output_entity": "gooo://link/three-product-adoption/entity/infra-release",
+      "depends_on": [
+        "CORE_RELEASE_IDENTITY"
+      ],
+      "closed_reason": "the exact Infra release and asset digest matched the public lock",
+      "unknown_reason": "the exact Infra release receipt is unavailable",
+      "refuted_reason": "the exact Infra release or asset digest contradicted the public lock",
+      "next_operation": "re-read the pinned Infra release metadata and asset digest"
+    },
+    {
+      "cell_id": "INTERCHANGE_KIT_RELEASE",
+      "stage": "coherence",
+      "step": "observe-interchange-kit",
+      "proof_choice": "COHERENCE",
+      "indicator_class": "OUTCOME",
+      "activity": "ObserveInterchangeKitRelease",
+      "output_entity": "gooo://link/three-product-adoption/entity/interchange-kit",
+      "depends_on": [
+        "CORE_RELEASE_IDENTITY"
+      ],
+      "closed_reason": "the released Interchange consumer kit identity and digest matched the public lock",
+      "unknown_reason": "the released Interchange consumer kit receipt is unavailable",
+      "refuted_reason": "the released Interchange consumer kit identity or digest contradicted the public lock",
+      "next_operation": "re-read the pinned Interchange release metadata and asset digest"
+    },
+    {
+      "cell_id": "LOCAL_ENVELOPE_CONFORMANCE",
+      "stage": "coherence",
+      "step": "conform-local-envelope",
+      "proof_choice": "COHERENCE",
+      "indicator_class": "OUTCOME",
+      "activity": "ConformLocalEnvelope",
+      "output_entity": "gooo://link/three-product-adoption/entity/local-envelope",
+      "depends_on": [
+        "LOCAL_RELEASE_IDENTITY",
+        "INTERCHANGE_KIT_RELEASE"
+      ],
+      "closed_reason": "the Local release asset conformed to the released Interchange kit",
+      "unknown_reason": "the Local claim-resolution or provenance receipt is directly missing",
+      "refuted_reason": "the Local release asset or digest was refuted",
+      "next_operation": "re-read the Local release asset and its released kit receipt"
+    },
+    {
+      "cell_id": "DESIGN_ENVELOPE_CONFORMANCE",
+      "stage": "coherence",
+      "step": "conform-design-envelope",
+      "proof_choice": "COHERENCE",
+      "indicator_class": "OUTCOME",
+      "activity": "ConformDesignEnvelope",
+      "output_entity": "gooo://link/three-product-adoption/entity/design-envelope",
+      "depends_on": [
+        "DESIGN_RELEASE_IDENTITY",
+        "INTERCHANGE_KIT_RELEASE"
+      ],
+      "closed_reason": "the Design release asset conformed to the released Interchange kit",
+      "unknown_reason": "the Design claim-resolution or provenance receipt is directly missing",
+      "refuted_reason": "the Design release asset or digest was refuted",
+      "next_operation": "re-read the Design release asset and its released kit receipt"
+    },
+    {
+      "cell_id": "INFRA_ENVELOPE_CONFORMANCE",
+      "stage": "coherence",
+      "step": "conform-infra-envelope",
+      "proof_choice": "COHERENCE",
+      "indicator_class": "OUTCOME",
+      "activity": "ConformInfraEnvelope",
+      "output_entity": "gooo://link/three-product-adoption/entity/infra-envelope",
+      "depends_on": [
+        "INFRA_RELEASE_IDENTITY",
+        "INTERCHANGE_KIT_RELEASE"
+      ],
+      "closed_reason": "the Infra release asset conformed to the released Interchange kit",
+      "unknown_reason": "the Infra claim-resolution or provenance receipt is directly missing",
+      "refuted_reason": "the Infra release asset or digest was refuted",
+      "next_operation": "re-read the Infra release asset and its released kit receipt"
+    },
+    {
+      "cell_id": "CLAIM_RESOLUTION_BINDING",
+      "stage": "regression",
+      "step": "bind-claim-resolution-receipts",
+      "proof_choice": "REGRESSION",
+      "indicator_class": "GUARDRAIL",
+      "activity": "BindClaimResolutionReceipts",
+      "output_entity": "gooo://link/three-product-adoption/entity/claim-resolution",
+      "depends_on": [
+        "LOCAL_ENVELOPE_CONFORMANCE",
+        "DESIGN_ENVELOPE_CONFORMANCE",
+        "INFRA_ENVELOPE_CONFORMANCE"
+      ],
+      "closed_reason": "all three digest-bound claim-resolution receipts were read without mutation",
+      "unknown_reason": "a required product conformance receipt is unresolved through dependency propagation",
+      "refuted_reason": "a required product release was refuted",
+      "next_operation": "resolve the minimal upstream product frontier before rebinding receipts"
+    },
+    {
+      "cell_id": "PROVENANCE_BINDING",
+      "stage": "regression",
+      "step": "bind-released-provenance",
+      "proof_choice": "REGRESSION",
+      "indicator_class": "GUARDRAIL",
+      "activity": "BindReleasedProvenance",
+      "output_entity": "gooo://link/three-product-adoption/entity/provenance",
+      "depends_on": [
+        "LOCAL_ENVELOPE_CONFORMANCE",
+        "DESIGN_ENVELOPE_CONFORMANCE",
+        "INFRA_ENVELOPE_CONFORMANCE"
+      ],
+      "closed_reason": "all three released provenance receipts were read without mutation",
+      "unknown_reason": "a required product provenance receipt is unresolved through dependency propagation",
+      "refuted_reason": "a required product release was refuted",
+      "next_operation": "resolve the minimal upstream product frontier before rebinding provenance"
+    },
+    {
+      "cell_id": "THREE_PRODUCT_REPLAY",
+      "stage": "regression",
+      "step": "verify-three-product-replay",
+      "proof_choice": "REGRESSION",
+      "indicator_class": "GUARDRAIL",
+      "activity": "VerifyThreeProductReplay",
+      "output_entity": "gooo://link/three-product-adoption/entity/replay",
+      "depends_on": [
+        "CLAIM_RESOLUTION_BINDING",
+        "PROVENANCE_BINDING"
+      ],
+      "closed_reason": "three product receipts replayed with zero mismatches",
+      "unknown_reason": "replay is blocked by an unresolved receipt frontier",
+      "refuted_reason": "replay depends on a refuted product observation",
+      "next_operation": "resolve the minimal receipt frontier and replay all three products"
+    },
+    {
+      "cell_id": "READ_ONLY_AUTHORITY",
+      "stage": "regression",
+      "step": "preserve-read-only-authority",
+      "proof_choice": "REGRESSION",
+      "indicator_class": "GUARDRAIL",
+      "activity": "PreserveReadOnlyAuthority",
+      "output_entity": "gooo://link/three-product-adoption/entity/read-only-authority",
+      "depends_on": [
+        "THREE_PRODUCT_REPLAY"
+      ],
+      "closed_reason": "the packet records observation only and keeps every generation and repair authority false",
+      "unknown_reason": "authority status cannot be established before replay resolves",
+      "refuted_reason": "the observation attempted generation, orchestration, merge, or repair authority",
+      "next_operation": "remove mutation authority and replay the read-only observation"
+    }
+  ]
+}
