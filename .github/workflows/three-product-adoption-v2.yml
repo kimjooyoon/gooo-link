@@ -35,7 +35,7 @@ jobs:
           root="$RUNNER_TEMP/three-product-adoption"
           core_root="$root/core"
           mkdir -p "$core_root"
-          core_repo="meta-ontology-go/gooo"
+          core_repo="kimjooyoon/meta-ontology-go"
           core_tag="v0.2.0-dev"
           core_asset_name="gooo-linux-amd64.tar.gz"
           core_tag_object_sha="733f7b22a365606d42bf238f5c535ff12e5abf8c"
