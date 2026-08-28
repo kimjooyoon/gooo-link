@@ -1,7 +1,7 @@
 package claimdependencyselection
 namespace claimdependencyselection
 
-entity Candidate id "gooo.primitive.claim-dependency-causality.v1"
+entity Candidate id "gooo://link/claim-dependency-selection/candidate/gooo.primitive.claim-dependency-causality.v1"
 entity RoleQueueRelease id "gooo://link/claim-dependency-selection/entity/role-queue-release"
 entity LocalUserPathRelease id "gooo://link/claim-dependency-selection/entity/local-user-path-release"
 entity DesignUserPathRelease id "gooo://link/claim-dependency-selection/entity/design-user-path-release"

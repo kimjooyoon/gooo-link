@@ -248,7 +248,11 @@ jobs:
             ${{ runner.temp }}/claim-dependency-selection/invalid-meta-report.json
             ${{ runner.temp }}/claim-dependency-selection/consumer-dependency-observation.json
             ${{ runner.temp }}/claim-dependency-selection/research-observation.json
+            ${{ runner.temp }}/claim-dependency-selection/research-syntax.json
+            ${{ runner.temp }}/claim-dependency-selection/research-semantic.json
             ${{ runner.temp }}/claim-dependency-selection/research-graph.json
+            ${{ runner.temp }}/claim-dependency-selection/selection-syntax.json
+            ${{ runner.temp }}/claim-dependency-selection/selection-semantic.json
             ${{ runner.temp }}/claim-dependency-selection/selection-graph.json
             ${{ runner.temp }}/claim-dependency-selection/selection-meta-observation.json
             ${{ runner.temp }}/claim-dependency-selection/missing-selection-activity.json
