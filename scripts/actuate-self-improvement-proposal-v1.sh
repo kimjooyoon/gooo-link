@@ -24,21 +24,27 @@ for required in "$graph" "$input" "$denominator" "$policy" "$predecessor" "$sour
   esac
 done
 
-jq -e --slurpfile denominator "$denominator" '
+if ! jq -e --slurpfile denominator "$denominator" '
   .schema_version == "gooo-graph/v1" and
   ([.nodes[]? | select(.kind == "Activity") | .name] | unique | sort) ==
     ([$denominator[0].cells[].activity] | unique | sort) and
   ([.nodes[]? | select(.kind == "Activity") | .name] | length) == 12 and
   all(.nodes[]? | select(.kind == "Activity"); .namespace == "selfimprovementactuator" and (.id|type) == "string" and (.id|length) > 0)
-' "$graph" >/dev/null
-jq -e '
+' "$graph" >/dev/null; then
+  echo "released semantic graph binding failed" >&2
+  exit 1
+fi
+if ! jq -e '
   .schema == "gooo/link/self-improvement-actuator-denominator/v1" and
   .target_cells == 12 and (.cells | length) == 12 and
   ([.cells[].proof_choice] | sort | group_by(.) | map(length)) == [4,4,4] and
   ([.cells[].indicator_class] | sort | group_by(.) | map(length)) == [4,4,4] and
   ([.cells[].activity] | unique | length) == 12
-' "$denominator" >/dev/null
-jq -e '
+' "$denominator" >/dev/null; then
+  echo "actuator denominator binding failed" >&2
+  exit 1
+fi
+if ! jq -e '
   .schema == "gooo/link/self-improvement-actuator-policy/v1" and
   .input_states == ["UNKNOWN", "REFUTED"] and
   .decision_precedence == ["REFUTED", "UNKNOWN"] and
@@ -50,7 +56,10 @@ jq -e '
   .expected_effect.activity == "PreserveUnknownImprovementClaim" and
   .history_policy.preserve_historical_unknown == true and
   .history_policy.retroactive_closure_allowed == false
-' "$policy" >/dev/null
+' "$policy" >/dev/null; then
+  echo "actuator policy binding failed" >&2
+  exit 1
+fi
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
