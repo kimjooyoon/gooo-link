@@ -224,7 +224,7 @@ jobs:
                 bindings:{policy_digest:$policy_digest,toolchain_digest:$toolchain_digest,workflow_digest:$workflow_digest,proof_choice:$proof_choice},
                 target:{release_url:$release_url,tag:$release_tag,target_commit_sha:$release_target,zip_digest:$release_zip_digest,sha256sums_digest:$release_sha256sums_digest},
                 future_commit_sha_predeclared:false,merge_mapping:"SQUASH_COMMIT_TO_EXPECTED_TREE"}' > "$root/ticket.json"
-            jq -S -c . "$root/ticket.json" | sha256sum | awk '{print $1 "  ticket.json"}' > "$root/ticket.sha256"
+            sha256sum "$root/ticket.json" | awk '{print $1 "  ticket.json"}' > "$root/ticket.sha256"
             jq -S -n --arg ticket_digest "sha256:$(awk '{print $1}' "$root/ticket.sha256")" --arg tree_digest "$tree_digest" \
               --arg proposal_digest "$proposal_digest" --arg policy_digest "$policy_digest" --arg workflow_digest "$workflow_digest" \
               '{schema:"gooo/link/temporal-transition-predeclare-manifest/v1",ticket_digest:$ticket_digest,expected_tree_digest:$tree_digest,proposal_digest:$proposal_digest,policy_digest:$policy_digest,workflow_digest:$workflow_digest}' \
