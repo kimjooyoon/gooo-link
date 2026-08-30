@@ -1,0 +1,28 @@
+package temporaltransitioncoherence
+namespace temporaltransitioncoherence
+
+entity CounterexamplePerformanceObservation id "gooo://temporal-transition-coherence/entity/counterexample-performance-observation"
+entity MetaActivityComparableMetric id "gooo://temporal-transition-coherence/entity/meta-activity-comparable-metric"
+entity SemanticIRPerformancePair id "gooo://temporal-transition-coherence/entity/semantic-ir-performance-pair"
+entity RevisionProposal id "gooo://temporal-transition-coherence/entity/revision-proposal"
+entity GeneratedPerformancePatch id "gooo://temporal-transition-coherence/entity/generated-performance-patch"
+entity ExpectedTreeBinding id "gooo://temporal-transition-coherence/entity/expected-tree-binding"
+entity PredecessorPerformanceEvidence id "gooo://temporal-transition-coherence/entity/predecessor-performance-evidence"
+entity PredeclaredCoherenceTransition id "gooo://temporal-transition-coherence/entity/predeclared-coherence-transition"
+entity SuccessorPerformanceObservation id "gooo://temporal-transition-coherence/entity/successor-performance-observation"
+entity ConsumeOnceLedger id "gooo://temporal-transition-coherence/entity/consume-once-ledger"
+entity TransitionDecisionPrecedence id "gooo://temporal-transition-coherence/entity/decision-precedence"
+entity CoherenceDossier id "gooo://temporal-transition-coherence/entity/coherence-dossier"
+
+activity ObserveReleasedTransitionCore(CounterexamplePerformanceObservation) -> PredeclaredCoherenceTransition
+activity BindTransitionTicketActivities(MetaActivityComparableMetric) -> PredeclaredCoherenceTransition
+activity DeclarePredecessorIdentity(SemanticIRPerformancePair) -> PredeclaredCoherenceTransition
+activity BindPredecessorArtifactReport(RevisionProposal) -> PredeclaredCoherenceTransition
+activity DeclareProposalTreeExpectation(GeneratedPerformancePatch) -> PredeclaredCoherenceTransition
+activity BindTransitionPolicy(ExpectedTreeBinding) -> PredeclaredCoherenceTransition
+activity DeclareTicketLifetimeAndNonce(PredecessorPerformanceEvidence) -> PredeclaredCoherenceTransition
+activity PredeclareTransitionTicket(PredeclaredCoherenceTransition) -> SuccessorPerformanceObservation
+activity ObserveSuccessorMergeReceipt(SuccessorPerformanceObservation) -> ConsumeOnceLedger
+activity ConsumeTransitionTicketOnce(ConsumeOnceLedger) -> TransitionDecisionPrecedence
+activity EnforceTransitionDecisionPrecedence(TransitionDecisionPrecedence) -> CoherenceDossier
+activity PublishTransitionHumanDossier(CoherenceDossier) -> CoherenceDossier

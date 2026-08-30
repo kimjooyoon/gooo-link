@@ -50,14 +50,31 @@ mismatch, replay, laundering, unknown-decision, post-hoc, retroactive, and
 authority cases through the external conformer. The main-push run consumes
 the actual PR artifact ticket once and then records the replay refusal.
 
+## Coherence revision
+
+After bootstrap main success, the machine-readable runtime identified one
+deficiency: `claims.performance_improvement` remained `UNKNOWN` because no
+comparable before/after pair was captured. The follow-up contract records the
+counterexample from the bootstrap artifact, the `RecordComparableBeforeAfterMetric`
+meta-activity, a 12-activity semantic IR, the generated patch file set, and
+the expected-tree/squash-receipt binding.
+
+The revision captures the exact
+`performance.normal_transition_evaluator_wall_ms` field as `223 ms` before
+and the protected-main successor value after. This closes observability
+completeness only. Runner equivalence, performance direction, causal
+improvement, and external utility remain `UNKNOWN` unless independently
+established.
+
 ## Authority and non-claims
 
 The workflow writes only caller-owned temporary output and uploaded evidence.
 It performs no source-repository writes, local tests, builds, releases,
 deployments, or automatic merges. GitHub Actions is the only validation
 environment. External utility and performance improvement remain `UNKNOWN`
-because this bootstrap supplies neither independent utility evidence nor a
-comparable before/after performance pair.
+because no independent utility evidence or runner-equivalent performance
+comparison is established. The coherence revision records the exact before
+and after field values and closes observability completeness only.
 
 The historical `meta-ontology-go` failures are not retroactively closed.
 They remain outside this ticket's authority and are represented only by the
