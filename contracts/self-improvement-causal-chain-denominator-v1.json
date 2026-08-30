@@ -1,0 +1,67 @@
+{
+  "schema": "gooo/evidence-generator/denominator/v1",
+  "id": "gooo://denominator/self-improvement-causal-chain/v1",
+  "target_cells": 12,
+  "proof_totals": [
+    {"proof_choice":"FOUNDATION","total":4},
+    {"proof_choice":"COHERENCE","total":4},
+    {"proof_choice":"REGRESSION","total":4}
+  ],
+  "indicator_totals": [
+    {"indicator_class":"DRIVER","total":4},
+    {"indicator_class":"OUTCOME","total":4},
+    {"indicator_class":"GUARDRAIL","total":4}
+  ],
+  "stage_sequence": [
+    {"ordinal":1,"id":"OBSERVATION_RECEIPT","entity":"ObservationReceipt","activity":"ReceiveObservation","next":"COUNTEREXAMPLE_OR_UNKNOWN"},
+    {"ordinal":2,"id":"COUNTEREXAMPLE_OR_UNKNOWN","entity":"CounterexampleOrUnknown","activity":"EvaluateCounterexampleOrUnknown","next":"REVISION_PROPOSAL"},
+    {"ordinal":3,"id":"REVISION_PROPOSAL","entity":"RevisionProposal","activity":"ProposeRevision","next":"CONFORMANCE_RECEIPT"},
+    {"ordinal":4,"id":"CONFORMANCE_RECEIPT","entity":"ConformanceReceipt","activity":"CheckConformance","next":"HUMAN_DECISION"},
+    {"ordinal":5,"id":"HUMAN_DECISION","entity":"HumanDecision","activity":"ResolveHumanDecision","next":"MERGE_OR_DEFER_RECEIPT"},
+    {"ordinal":6,"id":"MERGE_OR_DEFER_RECEIPT","entity":"MergeOrDeferReceipt","activity":"RecordMergeOrDefer","next":"SUCCESSOR_OBSERVATION"},
+    {"ordinal":7,"id":"SUCCESSOR_OBSERVATION","entity":"SuccessorObservation","activity":"ObserveSuccessor","next":null}
+  ],
+  "edge_sequence": [
+    {"ordinal":1,"from":"OBSERVATION_RECEIPT","to":"COUNTEREXAMPLE_OR_UNKNOWN"},
+    {"ordinal":2,"from":"COUNTEREXAMPLE_OR_UNKNOWN","to":"REVISION_PROPOSAL"},
+    {"ordinal":3,"from":"REVISION_PROPOSAL","to":"CONFORMANCE_RECEIPT"},
+    {"ordinal":4,"from":"CONFORMANCE_RECEIPT","to":"HUMAN_DECISION"},
+    {"ordinal":5,"from":"HUMAN_DECISION","to":"MERGE_OR_DEFER_RECEIPT"},
+    {"ordinal":6,"from":"MERGE_OR_DEFER_RECEIPT","to":"SUCCESSOR_OBSERVATION"}
+  ],
+  "required_edge_fields": [
+    "producer_identity",
+    "producer_release_or_run",
+    "artifact_digest",
+    "scenario",
+    "toolchain_digest",
+    "policy_digest"
+  ],
+  "unknown_coordinates": ["stage","step","reason","unknown_class","next_operation","blocked_by"],
+  "scenarios": [
+    {"id":"closed","expected_state":"CLOSED"},
+    {"id":"missing-observation","expected_state":"UNKNOWN"},
+    {"id":"dependency-blocked-revision","expected_state":"UNKNOWN"},
+    {"id":"stale-conformance","expected_state":"UNKNOWN"},
+    {"id":"ambiguous-human-decision","expected_state":"UNKNOWN"},
+    {"id":"explicit-counterexample","expected_state":"REFUTED"},
+    {"id":"digest-laundering","expected_state":"REFUTED"},
+    {"id":"unknown-top-level-decision","expected_state":"REFUTED"},
+    {"id":"mixed-refuted-over-unknown","expected_state":"REFUTED"},
+    {"id":"authority-write-escalation","expected_state":"REFUTED"}
+  ],
+  "cells": [
+    {"ordinal":1,"id":"OBSERVATION_STAGE","activity":"ReceiveObservation","stage":"OBSERVATION","step":"RECEIVE_OBSERVATION_RECEIPT","proof_choice":"FOUNDATION","indicator_class":"DRIVER","closed_reason":"OBSERVATION_RECEIPT_BOUND","unknown_reason":"OBSERVATION_RECEIPT_MISSING","refuted_reason":"OBSERVATION_STAGE_INVALID","next_operation":"PROVIDE_OBSERVATION_RECEIPT","depends_on":[]},
+    {"ordinal":2,"id":"COUNTEREXAMPLE_STAGE","activity":"EvaluateCounterexampleOrUnknown","stage":"COUNTEREXAMPLE","step":"EVALUATE_COUNTEREXAMPLE_OR_UNKNOWN","proof_choice":"FOUNDATION","indicator_class":"DRIVER","closed_reason":"COUNTEREXAMPLE_OR_UNKNOWN_BOUND","unknown_reason":"COUNTEREXAMPLE_EVIDENCE_MISSING","refuted_reason":"EXPLICIT_COUNTEREXAMPLE_OBSERVED","next_operation":"PROVIDE_COUNTEREXAMPLE_EVIDENCE","depends_on":["OBSERVATION_STAGE"]},
+    {"ordinal":3,"id":"REVISION_STAGE","activity":"ProposeRevision","stage":"REVISION","step":"PROPOSE_REVISION","proof_choice":"FOUNDATION","indicator_class":"DRIVER","closed_reason":"REVISION_PROPOSAL_BOUND","unknown_reason":"REVISION_DEPENDENCY_BLOCKED","refuted_reason":"REVISION_PROPOSAL_INVALID","next_operation":"RESOLVE_COUNTEREXAMPLE_OR_UNKNOWN","depends_on":["COUNTEREXAMPLE_STAGE"]},
+    {"ordinal":4,"id":"CONFORMANCE_STAGE","activity":"CheckConformance","stage":"CONFORMANCE","step":"CHECK_CONFORMANCE_RECEIPT","proof_choice":"COHERENCE","indicator_class":"OUTCOME","closed_reason":"CONFORMANCE_RECEIPT_BOUND","unknown_reason":"CONFORMANCE_RECEIPT_STALE","refuted_reason":"CONFORMANCE_RECEIPT_INVALID","next_operation":"REISSUE_CONFORMANCE_RECEIPT","depends_on":["REVISION_STAGE"]},
+    {"ordinal":5,"id":"HUMAN_STAGE","activity":"ResolveHumanDecision","stage":"DECISION","step":"RESOLVE_HUMAN_DECISION","proof_choice":"COHERENCE","indicator_class":"OUTCOME","closed_reason":"HUMAN_DECISION_BOUND","unknown_reason":"HUMAN_DECISION_AMBIGUOUS","refuted_reason":"HUMAN_DECISION_INVALID","next_operation":"OBTAIN_EXPLICIT_HUMAN_DECISION","depends_on":["CONFORMANCE_STAGE"]},
+    {"ordinal":6,"id":"MERGE_OR_DEFER_STAGE","activity":"RecordMergeOrDefer","stage":"MERGE_OR_DEFER","step":"RECORD_MERGE_OR_DEFER_RECEIPT","proof_choice":"COHERENCE","indicator_class":"OUTCOME","closed_reason":"MERGE_OR_DEFER_RECEIPT_BOUND","unknown_reason":"MERGE_OR_DEFER_RECEIPT_MISSING","refuted_reason":"MERGE_OR_DEFER_RECEIPT_INVALID","next_operation":"RECORD_EXPLICIT_MERGE_OR_DEFER","depends_on":["HUMAN_STAGE"]},
+    {"ordinal":7,"id":"SUCCESSOR_STAGE","activity":"ObserveSuccessor","stage":"SUCCESSOR","step":"OBSERVE_SUCCESSOR","proof_choice":"COHERENCE","indicator_class":"OUTCOME","closed_reason":"SUCCESSOR_OBSERVATION_BOUND","unknown_reason":"SUCCESSOR_OBSERVATION_MISSING","refuted_reason":"SUCCESSOR_OBSERVATION_INVALID","next_operation":"PROVIDE_SUCCESSOR_OBSERVATION","depends_on":["MERGE_OR_DEFER_STAGE"]},
+    {"ordinal":8,"id":"EDGE_PROVENANCE","activity":"VerifyImmutableEdgeProvenance","stage":"EDGE","step":"VERIFY_IMMUTABLE_EDGE_PROVENANCE","proof_choice":"FOUNDATION","indicator_class":"GUARDRAIL","closed_reason":"EDGE_PROVENANCE_BOUND","unknown_reason":"EDGE_PROVENANCE_MISSING","refuted_reason":"DIGEST_LAUNDERING_DETECTED","next_operation":"RESTORE_EDGE_PROVENANCE","depends_on":["SUCCESSOR_STAGE"]},
+    {"ordinal":9,"id":"SCENARIO_BINDING","activity":"VerifyScenarioBinding","stage":"SCENARIO","step":"VERIFY_SCENARIO_BINDING","proof_choice":"REGRESSION","indicator_class":"GUARDRAIL","closed_reason":"SCENARIO_BINDING_BOUND","unknown_reason":"SCENARIO_BINDING_MISSING","refuted_reason":"SCENARIO_BINDING_INVALID","next_operation":"RESTORE_SCENARIO_BINDING","depends_on":["EDGE_PROVENANCE"]},
+    {"ordinal":10,"id":"UNKNOWN_FRONTIER","activity":"PreserveUnknownCausalFrontier","stage":"UNCERTAINTY","step":"PRESERVE_UNKNOWN_CAUSAL_FRONTIER","proof_choice":"REGRESSION","indicator_class":"GUARDRAIL","closed_reason":"UNKNOWN_FRONTIER_PRESERVED","unknown_reason":"UNKNOWN_FRONTIER_MISSING","refuted_reason":"UNKNOWN_FRONTIER_INVALID","next_operation":"PRESERVE_UNKNOWN_COORDINATES","depends_on":["SCENARIO_BINDING"]},
+    {"ordinal":11,"id":"REFUTATION_PRECEDENCE","activity":"EnforceRefutationPrecedence","stage":"DECISION","step":"ENFORCE_REFUTATION_PRECEDENCE","proof_choice":"REGRESSION","indicator_class":"DRIVER","closed_reason":"REFUTATION_PRECEDENCE_ENFORCED","unknown_reason":"DECISION_PRECEDENCE_UNAVAILABLE","refuted_reason":"UNKNOWN_TOP_LEVEL_DECISION","next_operation":"RESTORE_RECOGNIZED_DECISION","depends_on":["UNKNOWN_FRONTIER"]},
+    {"ordinal":12,"id":"CALLER_OWNED_AUTHORITY","activity":"PreserveCallerOwnedAuthority","stage":"AUTHORITY","step":"PRESERVE_CALLER_OWNED_AUTHORITY","proof_choice":"REGRESSION","indicator_class":"GUARDRAIL","closed_reason":"CALLER_OWNED_AUTHORITY_PRESERVED","unknown_reason":"AUTHORITY_BOUNDARY_UNAVAILABLE","refuted_reason":"AUTHORITY_WRITE_ESCALATION","next_operation":"RESTORE_CALLER_OWNED_BOUNDARY","depends_on":["REFUTATION_PRECEDENCE"]}
+  ]
+}
