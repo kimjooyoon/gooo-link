@@ -1,0 +1,299 @@
+name: Self-improvement actuator v1
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  self-improvement-actuator:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SUBJECT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      ARTIFACT_NAME: self-improvement-actuator-v1-${{ github.event.pull_request.head.sha || github.sha }}
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.SUBJECT_SHA }}
+          fetch-depth: 0
+
+      - name: Bind exact subject and read-only repository snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/self-improvement-actuator-v1"
+          mkdir -p "$root/artifacts/inputs" "$root/artifacts/reports"
+          test "$(git rev-parse HEAD)" = "$SUBJECT_SHA"
+          snapshot() {
+            find "$GITHUB_WORKSPACE" -path "$GITHUB_WORKSPACE/.git" -prune -o -type f -print0 |
+              sort -z | xargs -0 -r sha256sum | sha256sum | awk '{print $1}'
+          }
+          snapshot > "$root/repository-before"
+
+      - name: Acquire exact released Gooo CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/self-improvement-actuator-v1"
+          lock=contracts/core-release-lock-v1.json
+          repository=$(jq -r .repository "$lock")
+          tag=$(jq -r .tag "$lock")
+          tag_object=$(jq -r .tag_object_sha "$lock")
+          target=$(jq -r .target_commit_sha "$lock")
+          asset_name=$(jq -r '.consumer.binary_asset' "$lock")
+          asset_size=$(jq -r --arg name "$asset_name" '.assets[]|select(.name==$name)|.size' "$lock")
+          asset_digest=$(jq -r --arg name "$asset_name" '.assets[]|select(.name==$name)|.digest' "$lock")
+
+          gh api "repos/$repository/git/ref/tags/$tag" > "$root/core-ref.json"
+          jq -e --arg sha "$tag_object" '.object.type=="tag" and .object.sha==$sha' "$root/core-ref.json" >/dev/null
+          gh api "repos/$repository/git/tags/$tag_object" > "$root/core-tag.json"
+          jq -e --arg sha "$target" '.object.type=="commit" and .object.sha==$sha' "$root/core-tag.json" >/dev/null
+          gh api "repos/$repository/releases/tags/$tag" > "$root/core-release.json"
+          jq -e --arg name "$asset_name" --arg digest "$asset_digest" --argjson size "$asset_size" \
+            '.draft==false and .prerelease==true and any(.assets[]; .name==$name and .digest==$digest and .size==$size)' \
+            "$root/core-release.json" >/dev/null
+          release_asset_id=$(jq -r --arg name "$asset_name" \
+            '.assets[]|select(.name==$name)|.id' "$root/core-release.json")
+          gh api -H 'Accept: application/octet-stream' "repos/$repository/releases/assets/$release_asset_id" > "$root/$asset_name"
+          test "$(wc -c < "$root/$asset_name" | tr -d ' ')" -eq "$asset_size"
+          test "sha256:$(sha256sum "$root/$asset_name" | awk '{print $1}')" = "$asset_digest"
+          mkdir -p "$root/gooo"
+          tar -xzf "$root/$asset_name" -C "$root/gooo"
+          test -x "$root/gooo/gooo"
+          jq -S -n --arg repository "$repository" --arg tag "$tag" --arg target "$target" \
+            --arg asset "$asset_name" --arg digest "$asset_digest" \
+            '{schema:"gooo/link/released-gooo-cli/v1",repository:$repository,tag:$tag,target_commit_sha:$target,asset:$asset,digest:$digest}' \
+            > "$root/released-gooo.json"
+
+      - name: Generate the released semantic graph and bind twelve activities
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/self-improvement-actuator-v1"
+          gooo="$root/gooo/gooo"
+          source=examples/self-improvement-actuator-v1/main.gooo
+          "$gooo" version --json > "$root/version.json"
+          "$gooo" check --json "$source" > "$root/syntax.json"
+          "$gooo" check --semantic --json "$source" > "$root/semantic.json"
+          "$gooo" graph dump "$source" > "$root/graph.json"
+          source_digest=$(sha256sum "$source" | awk '{print $1}')
+          jq -e '.schema_version=="gooo-version/v1" and .language=="gooo"' "$root/version.json" >/dev/null
+          jq -e '.schema_version=="gooo/diagnostics/v1" and .status=="ok" and .diagnostics==[]' "$root/syntax.json" "$root/semantic.json" >/dev/null
+          jq -e --arg digest "$source_digest" \
+            '.schema_version=="gooo-graph/v1" and .source_digest==$digest and .ir.status=="available" and
+             ([.nodes[]|select(.kind=="Activity")]|length)==12' "$root/graph.json" >/dev/null
+          cp "$root/version.json" "$root/syntax.json" "$root/semantic.json" "$root/graph.json" "$root/released-gooo.json" "$root/artifacts/"
+
+      - name: Materialize deterministic actuator inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/self-improvement-actuator-v1"
+          base=fixtures/self-improvement-actuator-v1/input.json
+          scenarios="$root/scenarios"
+          mkdir -p "$scenarios"
+          cp "$base" "$scenarios/unknown-claim.json"
+          jq -S '
+            (.observed_claims[0].state)="REFUTED" |
+            (.observed_claims[0].stage)="REFUTATION" |
+            (.observed_claims[0].step)="PRESERVE_REFUTED_CLAIM" |
+            (.observed_claims[0].reason)="DUPLICATE_ACTIVITY_CONTRADICTION_OBSERVED" |
+            (.observed_claims[0].unknown_class)=null |
+            (.observed_claims[0].next_operation)="RETAIN_REFUTED_CLAIM" |
+            (.observed_claims[0].causal_frontier[0].state)="REFUTED" |
+            (.observed_claims[0].causal_frontier[0].stage)="REFUTATION" |
+            (.observed_claims[0].causal_frontier[0].step)="PRESERVE_REFUTED_CLAIM" |
+            (.observed_claims[0].causal_frontier[0].reason)="DUPLICATE_ACTIVITY_CONTRADICTION_OBSERVED" |
+            (.observed_claims[0].causal_frontier[0].unknown_class)=null |
+            (.observed_claims[0].causal_frontier[0].next_operation)="RETAIN_REFUTED_CLAIM"
+          ' "$base" > "$scenarios/refuted-claim.json"
+          jq -S '
+            .observed_claims += [{
+              id:"gooo://claim-dependency-causality/claim/duplicate-activity",
+              state:"REFUTED",
+              stage:"REFUTATION",
+              step:"PRESERVE_REFUTED_CLAIM",
+              reason:"DUPLICATE_ACTIVITY_CONTRADICTION_OBSERVED",
+              unknown_class:null,
+              next_operation:"RETAIN_REFUTED_CLAIM",
+              blocked_by:[],
+              causal_frontier:[{
+                id:"gooo://claim-dependency-causality/frontier/duplicate-activity",
+                state:"REFUTED",
+                stage:"REFUTATION",
+                step:"PRESERVE_REFUTED_CLAIM",
+                reason:"DUPLICATE_ACTIVITY_CONTRADICTION_OBSERVED",
+                unknown_class:null,
+                next_operation:"RETAIN_REFUTED_CLAIM",
+                blocked_by:[],
+                activity:"PreserveRefutedClaimPrecedence"
+              }]
+            }]
+          ' "$base" > "$scenarios/mixed-refuted-over-unknown.json"
+          ticket_id=$(jq -r .temporal_ticket.ticket_id "$base")
+          jq -S --arg ticket_id "$ticket_id" \
+            '.replay_guard.consumed_ticket_ids=[$ticket_id]' "$base" > "$scenarios/consumed-ticket-reuse.json"
+          jq -S '.historical_claims[0].state="CLOSED"' "$base" > "$scenarios/historical-closure-attempt.json"
+          jq -S '.change_request.patch="forbidden-patch" | .change_request.requested_repository_writes=1' "$base" > "$scenarios/scope-escalation.json"
+          cp "$scenarios"/*.json "$root/artifacts/inputs/"
+
+      - name: Generate proposals and exercise replay/refutation cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/self-improvement-actuator-v1"
+          script=scripts/actuate-self-improvement-proposal-v1.sh
+          graph="$root/graph.json"
+          run_case() {
+            local scenario=$1
+            bash "$script" "$GITHUB_WORKSPACE" "$graph" "$root/scenarios/$scenario.json" "$root/artifacts/reports/$scenario.json" "$SUBJECT_SHA" "$scenario"
+          }
+          run_case unknown-claim
+          bash "$script" "$GITHUB_WORKSPACE" "$graph" "$root/scenarios/unknown-claim.json" "$root/artifacts/reports/unknown-claim-replay.json" "$SUBJECT_SHA" unknown-claim-replay
+          run_case refuted-claim
+          run_case mixed-refuted-over-unknown
+          run_case consumed-ticket-reuse
+          run_case historical-closure-attempt
+          run_case scope-escalation
+          proposal_digest=$(jq -r .proposal.digest "$root/artifacts/reports/unknown-claim.json")
+          jq -S --arg proposal_digest "$proposal_digest" \
+            '.replay_guard.consumed_proposal_digests=[$proposal_digest]' \
+            "$root/scenarios/unknown-claim.json" > "$root/scenarios/consumed-proposal-reuse.json"
+          cp "$root/scenarios/consumed-proposal-reuse.json" "$root/artifacts/inputs/"
+          run_case consumed-proposal-reuse
+
+      - name: Enforce claim preservation, proposal determinism, and zero-write authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/self-improvement-actuator-v1"
+          normal="$root/artifacts/reports/unknown-claim.json"
+          replay="$root/artifacts/reports/unknown-claim-replay.json"
+          normal_digest=$(jq -r .proposal.digest "$normal")
+          jq -e --arg digest "$normal_digest" '
+            .decision=="UNKNOWN" and .actuator_result=="GENERATED" and
+            .claim.state=="UNKNOWN" and
+            (.claim|has("stage") and has("step") and has("reason") and has("unknown_class") and has("next_operation") and has("blocked_by")) and
+            .claim.unknown_class=="DIRECT_MISSING" and .claim.blocked_by==[] and
+            .proposal.status=="GENERATED" and .proposal.digest==$digest and
+            .proposal.generated_change=={mode:"DETERMINISTIC_PROPOSAL_ONLY",apply_change:false,patch:null,repository_writes:0} and
+            .allowed_scope.repository_writes==0 and .allowed_scope.apply_change==false and
+            .expected_effect.state=="UNKNOWN" and .improvement_claim.state=="UNKNOWN" and
+            .improvement_claim.reason=="EXACT_COMPARABLE_BEFORE_AFTER_EVIDENCE_ABSENT" and
+            .replay_guard.accepted==true and .summary.denominator_total==12 and
+            .summary.denominator_reduced==false and .summary.score==null and
+            ([.metrics[].activity]|sort)==([.bindings.activity_names[]]|sort) and
+            all(.metrics[]; .total==1 and .value==1 and .state=="CLOSED") and
+            ([.historical_claims[]|select(.state=="UNKNOWN")]|length)==1
+          ' "$normal" >/dev/null
+          jq -e --arg digest "$normal_digest" \
+            '.decision=="UNKNOWN" and .actuator_result=="GENERATED" and .proposal.digest==$digest and .replay_guard.accepted==true' \
+            "$replay" >/dev/null
+          jq -e '
+            .decision=="REFUTED" and .actuator_result=="GENERATED" and .claim.state=="REFUTED" and
+            .claim.reason=="DUPLICATE_ACTIVITY_CONTRADICTION_OBSERVED" and .proposal.status=="GENERATED" and
+            .replay_guard.accepted==true and .summary.denominator_total==12
+          ' "$root/artifacts/reports/refuted-claim.json" >/dev/null
+          jq -e '
+            .decision=="REFUTED" and .actuator_result=="GENERATED" and
+            .claim.state=="REFUTED" and .claim.id=="gooo://claim-dependency-causality/claim/duplicate-activity" and
+            .validation.reason=="DUPLICATE_ACTIVITY_CONTRADICTION_OBSERVED"
+          ' "$root/artifacts/reports/mixed-refuted-over-unknown.json" >/dev/null
+          jq -e --arg digest "$normal_digest" '
+            .decision=="REFUTED" and .actuator_result=="REJECTED" and
+            .proposal.status=="REJECTED" and .proposal.digest==$digest and
+            .replay_guard.ticket_reuse==true and .validation.reason=="CONSUMED_TICKET_REUSE"
+          ' "$root/artifacts/reports/consumed-ticket-reuse.json" >/dev/null
+          jq -e --arg digest "$normal_digest" '
+            .decision=="REFUTED" and .actuator_result=="REJECTED" and
+            .proposal.status=="REJECTED" and .proposal.digest==$digest and
+            .replay_guard.proposal_reuse==true and .validation.reason=="CONSUMED_PROPOSAL_REUSE"
+          ' "$root/artifacts/reports/consumed-proposal-reuse.json" >/dev/null
+          jq -e '
+            .decision=="REFUTED" and .actuator_result=="REJECTED" and
+            .validation.reason=="RETROACTIVE_FAILURE_CLOSURE_FORBIDDEN" and .replay_guard.accepted==false
+          ' "$root/artifacts/reports/historical-closure-attempt.json" >/dev/null
+          jq -e '
+            .decision=="REFUTED" and .actuator_result=="REJECTED" and
+            .validation.reason=="PROPOSAL_SCOPE_ESCALATION" and .repository_writes==0
+          ' "$root/artifacts/reports/scope-escalation.json" >/dev/null
+
+      - name: Record runtime receipt and verify repository writes remain zero
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/self-improvement-actuator-v1"
+          snapshot() {
+            find "$GITHUB_WORKSPACE" -path "$GITHUB_WORKSPACE/.git" -prune -o -type f -print0 |
+              sort -z | xargs -0 -r sha256sum | sha256sum | awk '{print $1}'
+          }
+          before=$(cat "$root/repository-before")
+          after=$(snapshot)
+          test "$before" = "$after"
+          report_files=$(find "$root/artifacts/reports" -type f | wc -l | tr -d ' ')
+          input_files=$(find "$root/artifacts/inputs" -type f | wc -l | tr -d ' ')
+          artifact_files_before_runtime=$(find "$root/artifacts" -type f | wc -l | tr -d ' ')
+          artifact_files=$((artifact_files_before_runtime + 1))
+          jq -S -n \
+            --arg subject_sha "$SUBJECT_SHA" \
+            --arg before "$before" --arg after "$after" \
+            --argjson report_files "$report_files" --argjson input_files "$input_files" --argjson artifact_files "$artifact_files" \
+            --slurpfile released "$root/released-gooo.json" \
+            --slurpfile report "$root/artifacts/reports/unknown-claim.json" \
+            '{schema:"gooo/meta/self-improvement/actuator/runtime/v1",subject_sha:$subject_sha,
+              released_gooo:$released[0],repository:{before_digest:$before,after_digest:$after,writes:0},
+              authority:{repository_writes:0,local_test_executions:0,cross_project_required_gates:0,automatic_merge_allowed:false,release_authority:false,deploy_authority:false},
+              executions:{gooo_version:1,gooo_syntax_check:1,gooo_semantic_check:1,gooo_graph:1,actuator_evaluations:8,go_build:0,go_test:0,local_tests:0},
+              scenarios:{total:8,unknown_generated:1,refuted_generated:2,rejected_reuse_or_boundary:4,deterministic_replay_comparisons:1},
+              proposal_digest:$report[0].proposal.digest,
+              improvement_claim:{state:"UNKNOWN",reason:"EXACT_COMPARABLE_BEFORE_AFTER_EVIDENCE_ABSENT",evidence:0,required:1},
+              bindings:{activity_metrics:$report[0].metrics,activity_count:$report[0].bindings.gooo_meta_activity_count,
+                released_graph_schema:$report[0].bindings.released_graph_schema,released_graph_source_digest:$report[0].bindings.released_graph_source_digest},
+              artifacts:{report_files:$report_files,input_files:$input_files,total:$artifact_files}}' \
+            > "$root/artifacts/runtime.json"
+          jq -e '
+            .repository.writes==0 and .authority.repository_writes==0 and .authority.local_test_executions==0 and
+            .authority.cross_project_required_gates==0 and .executions.go_build==0 and .executions.go_test==0 and
+            .executions.local_tests==0 and .scenarios=={total:8,unknown_generated:1,refuted_generated:2,rejected_reuse_or_boundary:4,deterministic_replay_comparisons:1} and
+            .improvement_claim.state=="UNKNOWN" and .bindings.activity_count==12
+          ' "$root/artifacts/runtime.json" >/dev/null
+
+      - name: Publish exact actuator summary
+        if: always()
+        shell: bash
+        run: |
+          root="$RUNNER_TEMP/self-improvement-actuator-v1"
+          if test -f "$root/artifacts/runtime.json"; then
+            {
+              echo '## Self-improvement actuator v1'
+              jq -r '"- scenarios: \(.scenarios.total); UNKNOWN generated \(.scenarios.unknown_generated); REFUTED generated \(.scenarios.refuted_generated); rejected \(.scenarios.rejected_reuse_or_boundary)"' "$root/artifacts/runtime.json"
+              jq -r '"- proposal digest: \(.proposal_digest); actual improvement: \(.improvement_claim.state)"' "$root/artifacts/runtime.json"
+              jq -r '"- activities: \(.bindings.activity_count); repository writes / local tests / required cross-project gates: \(.authority.repository_writes) / \(.authority.local_test_executions) / \(.authority.cross_project_required_gates)"' "$root/artifacts/runtime.json"
+              jq -r '"- artifacts: \(.artifacts.total) total (\(.artifacts.report_files) reports, \(.artifacts.input_files) inputs)"' "$root/artifacts/runtime.json"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload actuator evidence
+        id: upload
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          if-no-files-found: error
+          path: ${{ runner.temp }}/self-improvement-actuator-v1/artifacts
+
+      - name: Publish uploaded artifact identity
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "- artifact name: ${{ env.ARTIFACT_NAME }}"
+            echo "- artifact id: ${{ steps.upload.outputs.artifact-id }}"
+            echo "- artifact digest: ${{ steps.upload.outputs.artifact-digest }}"
+          } >> "$GITHUB_STEP_SUMMARY"
