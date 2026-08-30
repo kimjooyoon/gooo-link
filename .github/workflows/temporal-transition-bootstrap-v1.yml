@@ -1,0 +1,558 @@
+name: Temporal transition bootstrap v1
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+jobs:
+  temporal-transition-bootstrap:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EVENT_SUBJECT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      ARTIFACT_NAME: temporal-transition-bootstrap-v1-${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.0'
+          cache: false
+
+      - name: Bind event identity and read-only source snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/temporal-transition-bootstrap-v1"
+          mkdir -p "$root/artifacts" "$root/scenarios" "$root/conformer"
+          test "$(git rev-parse HEAD)" = "$EVENT_SUBJECT_SHA"
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            echo "BASE_SHA=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
+            echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> "$GITHUB_ENV"
+            echo "PR_HEAD_SHA=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+            echo "TRANSITION_PHASE=PREDECLARE" >> "$GITHUB_ENV"
+          else
+            echo "MERGE_SHA=$EVENT_SUBJECT_SHA" >> "$GITHUB_ENV"
+            echo "TRANSITION_PHASE=CONSUME_ONCE" >> "$GITHUB_ENV"
+          fi
+          snapshot() {
+            find "$GITHUB_WORKSPACE" -path "$GITHUB_WORKSPACE/.git" -prune -o -type f -print0 |
+              sort -z | xargs -0 -r sha256sum | sha256sum | awk '{print $1}'
+          }
+          snapshot > "$root/repository-before"
+
+      - name: Resolve the protected-main merge receipt
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/temporal-transition-bootstrap-v1"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$MERGE_SHA/pulls" > "$root/merged-prs.json"
+          jq -e --arg sha "$MERGE_SHA" '
+            [.[] | select(.base.ref=="main" and .merged_at!=null and .merge_commit_sha==$sha)] | length == 1
+          ' "$root/merged-prs.json" >/dev/null
+          jq -r --arg sha "$MERGE_SHA" '
+            [.[] | select(.base.ref=="main" and .merged_at!=null and .merge_commit_sha==$sha)][0] |
+            "BASE_SHA=" + .base.sha,
+            "PR_NUMBER=" + (.number|tostring),
+            "PR_HEAD_SHA=" + .head.sha
+          ' "$root/merged-prs.json" >> "$GITHUB_ENV"
+          test "$(git rev-parse HEAD)" = "$MERGE_SHA"
+
+      - name: Acquire and revalidate the exact immutable evidence release
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/temporal-transition-bootstrap-v1"
+          lock=contracts/temporal-transition-bootstrap-release-lock-v1.json
+          repository=$(jq -r .repository "$lock")
+          tag=$(jq -r .tag "$lock")
+          release_id=$(jq -r .release_id "$lock")
+          tag_object=$(jq -r .tag_object_sha "$lock")
+          target=$(jq -r .target_commit_sha "$lock")
+          zip_id=$(jq -r '.assets[]|select(.name|endswith(".zip"))|.id' "$lock")
+          zip_name=$(jq -r '.assets[]|select(.id=='"$zip_id"')|.name' "$lock")
+          zip_size=$(jq -r '.assets[]|select(.id=='"$zip_id"')|.size' "$lock")
+          zip_digest=$(jq -r '.assets[]|select(.id=='"$zip_id"')|.digest' "$lock")
+          sums_id=$(jq -r '.assets[]|select(.name=="SHA256SUMS")|.id' "$lock")
+          sums_size=$(jq -r '.assets[]|select(.id=='"$sums_id"')|.size' "$lock")
+          sums_digest=$(jq -r '.assets[]|select(.id=='"$sums_id"')|.digest' "$lock")
+
+          gh api "repos/$repository/git/ref/tags/$tag" > "$root/release-ref.json"
+          jq -e --arg sha "$tag_object" '.object.type=="tag" and .object.sha==$sha' "$root/release-ref.json" >/dev/null
+          gh api "repos/$repository/git/tags/$tag_object" > "$root/release-tag.json"
+          jq -e --arg sha "$target" '.object.type=="commit" and .object.sha==$sha' "$root/release-tag.json" >/dev/null
+          gh api "repos/$repository/releases/$release_id" > "$root/release.json"
+          jq -e --arg tag "$tag" --argjson id "$release_id" \
+            '.id==$id and .tag_name==$tag and .immutable==true and .prerelease==true and .draft==false' \
+            "$root/release.json" >/dev/null
+          jq -e --arg name "$zip_name" --arg digest "$zip_digest" --argjson id "$zip_id" --argjson size "$zip_size" \
+            'any(.assets[]; .id==$id and .name==$name and .size==$size and .digest==$digest)' "$root/release.json" >/dev/null
+          jq -e --arg digest "$sums_digest" --argjson id "$sums_id" --argjson size "$sums_size" \
+            'any(.assets[]; .id==$id and .name=="SHA256SUMS" and .size==$size and .digest==$digest)' "$root/release.json" >/dev/null
+
+          gh api -H 'Accept: application/octet-stream' "repos/$repository/releases/assets/$zip_id" > "$root/$zip_name"
+          gh api -H 'Accept: application/octet-stream' "repos/$repository/releases/assets/$sums_id" > "$root/SHA256SUMS"
+          test "$(wc -c < "$root/$zip_name" | tr -d ' ')" -eq "$zip_size"
+          test "$(wc -c < "$root/SHA256SUMS" | tr -d ' ')" -eq "$sums_size"
+          test "sha256:$(sha256sum "$root/$zip_name" | awk '{print $1}')" = "$zip_digest"
+          test "sha256:$(sha256sum "$root/SHA256SUMS" | awk '{print $1}')" = "$sums_digest"
+          grep -F "$zip_digest  $zip_name" "$root/SHA256SUMS" >/dev/null
+          mkdir -p "$root/released-evidence"
+          unzip -q "$root/$zip_name" -d "$root/released-evidence"
+          zip_regular_files=$(find "$root/released-evidence" -type f | wc -l | tr -d ' ')
+          test "$zip_regular_files" -eq 158
+          jq -e '
+            .schema=="gooo/evidence-generator/temporal-transition-ticket/runtime/v1" and
+            .toolchain.go=="go1.27.0" and
+            .cases=={total:18,closed:1,unknown:4,refuted:13,normal_replay_runs:2,cells_per_case:12,activities:12} and
+            .activities.proof=={COHERENCE:4,FOUNDATION:4,REGRESSION:4} and
+            .activities.indicator=={DRIVER:4,GUARDRAIL:4,OUTCOME:4} and
+            .artifacts.total==158 and .repository.writes==0 and .authority.local_test_executions==0
+          ' "$root/released-evidence/runtime.json" >/dev/null
+          cp "$root/released-evidence/runtime.json" "$root/released-runtime-oracle.json"
+
+      - name: Acquire the external conformer by pinned source blobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/temporal-transition-bootstrap-v1"
+          repository=kimjooyoon/gooo-evidence-generator
+          target=$(jq -r .target_commit_sha contracts/temporal-transition-bootstrap-release-lock-v1.json)
+          while IFS=$'\t' read -r file_rel blob_sha; do
+            dest="$root/conformer/$file_rel"
+            mkdir -p "$(dirname "$dest")"
+            gh api "repos/$repository/contents/$file_rel?ref=$target" --jq .content | tr -d '\n' | base64 --decode > "$dest"
+            test "$(git hash-object "$dest")" = "$blob_sha"
+            chmod +x "$dest"
+          done < <(jq -r '.external_conformer.files[]|[.path,.blob_sha]|@tsv' contracts/temporal-transition-bootstrap-release-lock-v1.json)
+          jq -e '.schema=="gooo/core-release-lock/v1" and .tag=="v0.2.0-dev" and .target_commit_sha=="050b11e56d9f972e0d507d406e5da8a60595052b"' \
+            "$root/conformer/contracts/core-release-lock-v1.json" >/dev/null
+
+      - name: Acquire the released Gooo core used by the external conformer
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/temporal-transition-bootstrap-v1"
+          lock="$root/conformer/contracts/core-release-lock-v1.json"
+          repository=$(jq -r .repository "$lock")
+          tag=$(jq -r .tag "$lock")
+          tag_object=$(jq -r .tag_object_sha "$lock")
+          target=$(jq -r .target_commit_sha "$lock")
+          asset=$(jq -r '.assets[0].name' "$lock")
+          digest=$(jq -r '.assets[0].sha256' "$lock")
+          gh api "repos/$repository/git/ref/tags/$tag" > "$root/core-ref.json"
+          jq -e --arg sha "$tag_object" '.object.type=="tag" and .object.sha==$sha' "$root/core-ref.json" >/dev/null
+          gh api "repos/$repository/git/tags/$tag_object" > "$root/core-tag.json"
+          jq -e --arg sha "$target" '.object.type=="commit" and .object.sha==$sha' "$root/core-tag.json" >/dev/null
+          gh api "repos/$repository/releases/tags/$tag" > "$root/core-release.json"
+          asset_id=$(jq -r --arg name "$asset" '.assets[]|select(.name==$name)|.id' "$root/core-release.json")
+          gh api -H 'Accept: application/octet-stream' "repos/$repository/releases/assets/$asset_id" > "$root/$asset"
+          test "sha256:$(sha256sum "$root/$asset" | awk '{print $1}')" = "$digest"
+          mkdir -p "$root/gooo"
+          tar -xzf "$root/$asset" -C "$root/gooo"
+          test -x "$root/gooo/gooo"
+
+      - name: Generate released IR and bind all twelve activities
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/temporal-transition-bootstrap-v1"
+          gooo="$root/gooo/gooo"
+          source=examples/temporal-transition-bootstrap-v1/main.gooo
+          denominator=contracts/temporal-transition-bootstrap-denominator-v1.json
+          "$gooo" version --json > "$root/version.json"
+          "$gooo" check --json "$source" > "$root/syntax.json"
+          "$gooo" check --semantic --json "$source" > "$root/semantic.json"
+          /usr/bin/time -f '%M' -o "$root/graph-rss" "$gooo" graph dump "$source" > "$root/graph.json"
+          jq -e '.schema_version=="gooo-version/v1" and .language=="gooo"' "$root/version.json" >/dev/null
+          jq -e '.schema_version=="gooo/diagnostics/v1" and .status=="ok"' "$root/syntax.json" "$root/semantic.json" >/dev/null
+          jq -e '.schema_version=="gooo-graph/v1" and .ir.status=="available" and ([.nodes[]|select(.kind=="Activity")]|length)==12' "$root/graph.json" >/dev/null
+          jq -S '{schema:"gooo/evidence-generator/activity-selector-set/v1",role:"project_graph",selectors:[.cells[]|{ordinal,id,activity,selector:{name:.activity}}]}' \
+            "$denominator" > "$root/selectors.json"
+          bash "$root/conformer/scripts/bind-activity-resolutions.sh" "$gooo" "$source" "$root/graph.json" \
+            "$root/selectors.json" "$root/conformer/contracts/core-release-lock-v1.json" "$root/resolved-transition-graph.json" project_graph
+          jq -e '.activity_resolution_observation.summary=={expected:12,observed:12,closed:12,unknown:0,refuted:0,unique_selectors:12}' \
+            "$root/resolved-transition-graph.json" >/dev/null
+
+      - name: Prepare or fetch the immutable PREDECLARE ticket
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/temporal-transition-bootstrap-v1"
+          lock=contracts/temporal-transition-bootstrap-release-lock-v1.json
+          predecessor=contracts/temporal-transition-bootstrap-predecessor-v1.json
+          policy=contracts/temporal-transition-bootstrap-policy-v1.json
+          workflow=.github/workflows/temporal-transition-bootstrap-v1.yml
+          policy_digest="sha256:$(sha256sum "$policy" | awk '{print $1}')"
+          workflow_digest="sha256:$(sha256sum "$workflow" | awk '{print $1}')"
+          tree_digest="sha256:$(git ls-tree -r --full-tree "$EVENT_SUBJECT_SHA" | sha256sum | awk '{print $1}')"
+          proposal_digest="sha256:$(git diff --binary "$BASE_SHA" "$EVENT_SUBJECT_SHA" | sha256sum | awk '{print $1}')"
+          proof_choice=$(jq -r .proof_choice "$policy")
+          core_target=$(jq -r .target_commit_sha "$root/conformer/contracts/core-release-lock-v1.json")
+          core_digest=$(jq -r '.assets[0].sha256' "$root/conformer/contracts/core-release-lock-v1.json")
+          toolchain_digest="sha256:$(printf 'go1.27.0\n%s\n%s\n%s\n' "$core_target" "$core_digest" "$(jq -r .target_commit_sha "$lock")" | sha256sum | awk '{print $1}')"
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            issued_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+            expires_at=$(date -u -d '+7 days' '+%Y-%m-%dT%H:%M:%SZ')
+            nonce="sha256:$(printf '%s\n%s\n%s\n' "$EVENT_SUBJECT_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" | sha256sum | awk '{print $1}')"
+            ticket_id="temporal-transition-bootstrap-v1-$PR_NUMBER-$EVENT_SUBJECT_SHA"
+            predecessor_identity=$(jq -r .identity "$predecessor")
+            predecessor_artifact_digest=$(jq -r '.observations[0].artifact_digest' "$predecessor")
+            predecessor_report_digest=$(jq -r '.observations[1].artifact_digest' "$predecessor")
+            jq -S -n \
+              --arg ticket_id "$ticket_id" --arg phase PREDECLARED --arg issued_at "$issued_at" --arg expires_at "$expires_at" \
+              --arg nonce "$nonce" --arg predecessor_identity "$predecessor_identity" --arg predecessor_base "$BASE_SHA" \
+              --arg predecessor_artifact_digest "$predecessor_artifact_digest" --arg predecessor_report_digest "$predecessor_report_digest" \
+              --arg proposal_digest "$proposal_digest" --arg tree_digest "$tree_digest" --argjson pr_number "$PR_NUMBER" \
+              --arg policy_digest "$policy_digest" --arg toolchain_digest "$toolchain_digest" --arg workflow_digest "$workflow_digest" \
+              --arg proof_choice "$proof_choice" --arg release_url "$(jq -r .release_url "$lock")" --arg release_tag "$(jq -r .tag "$lock")" \
+              --arg release_target "$(jq -r .target_commit_sha "$lock")" --arg release_zip_digest "$(jq -r '.assets[0].digest' "$lock")" \
+              --arg release_sha256sums_digest "$(jq -r '.assets[1].digest' "$lock")" \
+              '{schema:"gooo/link/temporal-transition-ticket/v1",ticket_id:$ticket_id,phase:$phase,issued_at:$issued_at,expires_at:$expires_at,nonce:$nonce,
+                predecessor:{identity:$predecessor_identity,base_sha:$predecessor_base,head_sha:'"$EVENT_SUBJECT_SHA"',artifact_digest:$predecessor_artifact_digest,report_digest:$predecessor_report_digest},
+                proposal:{digest:$proposal_digest,expected_tree_digest:$tree_digest,expected_pr_number:$pr_number,target_branch:"main"},
+                bindings:{policy_digest:$policy_digest,toolchain_digest:$toolchain_digest,workflow_digest:$workflow_digest,proof_choice:$proof_choice},
+                target:{release_url:$release_url,tag:$release_tag,target_commit_sha:$release_target,zip_digest:$release_zip_digest,sha256sums_digest:$release_sha256sums_digest},
+                future_commit_sha_predeclared:false,merge_mapping:"SQUASH_COMMIT_TO_EXPECTED_TREE"}' > "$root/ticket.json"
+            jq -S -c . "$root/ticket.json" | sha256sum | awk '{print $1 "  ticket.json"}' > "$root/ticket.sha256"
+            jq -S -n --arg ticket_digest "sha256:$(awk '{print $1}' "$root/ticket.sha256")" --arg tree_digest "$tree_digest" \
+              --arg proposal_digest "$proposal_digest" --arg policy_digest "$policy_digest" --arg workflow_digest "$workflow_digest" \
+              '{schema:"gooo/link/temporal-transition-predeclare-manifest/v1",ticket_digest:$ticket_digest,expected_tree_digest:$tree_digest,proposal_digest:$proposal_digest,policy_digest:$policy_digest,workflow_digest:$workflow_digest}' \
+              > "$root/predeclare-manifest.json"
+            cp "$root/ticket.json" "$root/artifacts/predeclare-ticket.json"
+            cp "$root/predeclare-manifest.json" "$root/artifacts/predeclare-manifest.json"
+          else
+            ticket_name="temporal-transition-bootstrap-ticket-$PR_HEAD_SHA"
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$ticket_name&per_page=100" > "$root/ticket-artifacts.json"
+            jq -e --arg name "$ticket_name" '[.artifacts[]|select(.name==$name and .expired==false)]|length==1' "$root/ticket-artifacts.json" >/dev/null
+            ticket_artifact_id=$(jq -r --arg name "$ticket_name" '[.artifacts[]|select(.name==$name and .expired==false)][0].id' "$root/ticket-artifacts.json")
+            ticket_artifact_digest=$(jq -r --arg name "$ticket_name" '[.artifacts[]|select(.name==$name and .expired==false)][0].digest' "$root/ticket-artifacts.json")
+            gh api -H 'Accept: application/zip' "repos/$GITHUB_REPOSITORY/actions/artifacts/$ticket_artifact_id/zip" > "$root/ticket.zip"
+            mkdir -p "$root/ticket"
+            unzip -q "$root/ticket.zip" -d "$root/ticket"
+            test -f "$root/ticket/ticket.json" "$root/ticket/ticket.sha256" "$root/ticket/predeclare-manifest.json"
+            (cd "$root/ticket" && sha256sum -c ticket.sha256)
+            cp "$root/ticket/ticket.json" "$root/ticket.json"
+            cp "$root/ticket/predeclare-manifest.json" "$root/predeclare-manifest.json"
+            jq -e --arg base "$BASE_SHA" --arg head "$PR_HEAD_SHA" --arg pr "$PR_NUMBER" --arg tree "$tree_digest" \
+              --arg policy "$policy_digest" --arg workflow "$workflow_digest" --arg proof "$(jq -r .proof_choice "$policy")" \
+              '.predecessor.base_sha==$base and .predecessor.head_sha==$head and .proposal.expected_pr_number==($pr|tonumber) and
+               .proposal.expected_tree_digest==$tree and .bindings.policy_digest==$policy and .bindings.workflow_digest==$workflow and .bindings.proof_choice==$proof and
+               .future_commit_sha_predeclared==false and .merge_mapping=="SQUASH_COMMIT_TO_EXPECTED_TREE"' "$root/ticket.json" >/dev/null
+            test "$ticket_artifact_digest" != null
+            echo "TICKET_ARTIFACT_ID=$ticket_artifact_id" >> "$GITHUB_ENV"
+            echo "TICKET_ARTIFACT_DIGEST=$ticket_artifact_digest" >> "$GITHUB_ENV"
+            echo "TICKET_DIGEST=sha256:$(sha256sum "$root/ticket.json" | awk '{print $1}')" >> "$GITHUB_ENV"
+          fi
+          echo "TREE_DIGEST=$tree_digest" >> "$GITHUB_ENV"
+          echo "POLICY_DIGEST=$policy_digest" >> "$GITHUB_ENV"
+          echo "WORKFLOW_DIGEST=$workflow_digest" >> "$GITHUB_ENV"
+          echo "TOOLCHAIN_DIGEST=$toolchain_digest" >> "$GITHUB_ENV"
+
+      - name: Validate predecessor evidence when a coherence revision is declared
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/temporal-transition-bootstrap-v1"
+          predecessor=contracts/temporal-transition-bootstrap-predecessor-v1.json
+          if [ "$(jq -r '.require_successor_observation // false' "$predecessor")" = true ]; then
+            baseline_name=$(jq -r .successor_observation.artifact_name "$predecessor")
+            baseline_id=$(jq -r .successor_observation.artifact_id "$predecessor")
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$baseline_id" > "$root/baseline-artifact.json"
+            jq -e --arg name "$baseline_name" '.name==$name and .expired==false' "$root/baseline-artifact.json" >/dev/null
+            gh api -H 'Accept: application/zip' "repos/$GITHUB_REPOSITORY/actions/artifacts/$baseline_id/zip" > "$root/baseline.zip"
+            mkdir -p "$root/baseline"
+            unzip -q "$root/baseline.zip" -d "$root/baseline"
+            jq -e '.schema=="gooo/link/temporal-successor-observation/v1" and .metric_pair.state=="UNKNOWN" and .metric_pair.definition=="successor_observation_required_fields" and .metric_pair.before==5' \
+              "$root/baseline/successor-observation.json" >/dev/null
+            cp "$root/baseline/successor-observation.json" "$root/baseline-successor-observation.json"
+          fi
+
+      - name: Materialize the exact ticket evidence cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/temporal-transition-bootstrap-v1"
+          base=fixtures/temporal-transition-bootstrap-v1/evidence.json
+          ticket="$root/ticket.json"
+          policy=contracts/temporal-transition-bootstrap-policy-v1.json
+          predecessor=contracts/temporal-transition-bootstrap-predecessor-v1.json
+          predecessor_identity=$(jq -r .identity "$predecessor")
+          predecessor_artifact_digest=$(jq -r '.observations[0].artifact_digest' "$predecessor")
+          predecessor_report_digest=$(jq -r '.observations[1].artifact_digest' "$predecessor")
+          proposal_digest=$(jq -r .proposal.digest "$ticket")
+          tree_digest=$(jq -r .proposal.expected_tree_digest "$ticket")
+          pr_number=$(jq -r .proposal.expected_pr_number "$ticket")
+          policy_digest=$(jq -r .bindings.policy_digest "$ticket")
+          toolchain_digest=$(jq -r .bindings.toolchain_digest "$ticket")
+          workflow_digest=$(jq -r .bindings.workflow_digest "$ticket")
+          proof_choice=$(jq -r .bindings.proof_choice "$ticket")
+          ticket_id=$(jq -r .ticket_id "$ticket")
+          nonce=$(jq -r .nonce "$ticket")
+          future_commit="$EVENT_SUBJECT_SHA"
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then future_commit="successor-commit-intentionally-late"; fi
+          jq -S --arg predecessor_identity "$predecessor_identity" --arg artifact "$predecessor_artifact_digest" --arg report "$predecessor_report_digest" \
+            --arg proposal "$proposal_digest" --arg tree "$tree_digest" --argjson pr "$pr_number" --arg policy "$policy_digest" \
+            --arg toolchain "$toolchain_digest" --arg workflow "$workflow_digest" --arg proof "$proof_choice" --arg ticket_id "$ticket_id" --arg nonce "$nonce" \
+            --arg commit "$future_commit" --arg target_tree "$TREE_DIGEST" --argjson actual_consume "$([ "$GITHUB_EVENT_NAME" = push ] && echo true || echo false)" \
+            '(.predecessor.identity)=$predecessor_identity |
+             (.predecessor.artifact_digest)=$artifact | (.predecessor.observed_artifact_digest)=$artifact |
+             (.predecessor.report_digest)=$report | (.predecessor.observed_report_digest)=$report |
+             (.proposal.proposal_digest)=$proposal | (.proposal.observed_digest)=$proposal |
+             (.proposal.expected_tree_digest)=$tree | (.proposal.target_branch)="main" | (.proposal.policy_digest)=$policy |
+             (.proposal.toolchain_digest)=$toolchain | (.proposal.workflow_digest)=$workflow | (.proposal.expected_proof_choice)=$proof |
+             (.ticket.predeclare.predecessor_identity)=$predecessor_identity | (.ticket.predeclare.predecessor_artifact_digest)=$artifact |
+             (.ticket.predeclare.predecessor_report_digest)=$report | (.ticket.predeclare.proposal_digest)=$proposal |
+             (.ticket.predeclare.expected_tree_digest)=$tree | (.ticket.predeclare.expected_pr_number)=$pr |
+             (.ticket.predeclare.policy_digest)=$policy | (.ticket.predeclare.toolchain_digest)=$toolchain |
+             (.ticket.predeclare.workflow_digest)=$workflow | (.ticket.predeclare.expected_proof_choice)=$proof |
+             (.ticket.predeclare.nonce)=$nonce | (.ticket.predeclare.ticket_id)=$ticket_id |
+             (.consume.attempted)=$actual_consume | (.consume.ticket_id)=$ticket_id |
+             (.consume.successor.commit_sha)=$commit | (.consume.successor.tree_digest)=$target_tree |
+             (.consume.successor.pr_number)=$pr | (.consume.successor.target_branch)="main" |
+             (.consume.successor.policy_digest)=$policy | (.consume.successor.toolchain_digest)=$toolchain |
+             (.consume.successor.workflow_digest)=$workflow | (.consume.successor.proof_choice)=$proof |
+             (.consume.successor.merge_receipt.commit_sha)=$commit | (.consume.successor.merge_receipt.tree_digest)=$target_tree |
+             (.ticket.phase)="PREPARED" | (.ticket.prepared)=true | (.ticket.predeclared_before_successor)=true |
+             (.ticket.fresh)=true | (.ticket.post_hoc)=false | (.ticket.retroactive_closure_requested)=false |
+             (.consume.reuse)=false | (.upper_decision)="CLOSED"' "$base" > "$root/evidence-base.json"
+          scenarios="$root/scenarios"
+          evidence="$root/evidence-base.json"
+          jq -S '.' "$evidence" > "$scenarios/normal.json"
+          jq -S '.consume.attempted=false' "$evidence" > "$scenarios/prepared-not-consumed.json"
+          jq -S '.predecessor.artifact_present=false' "$evidence" > "$scenarios/missing-predecessor-artifact.json"
+          jq -S '.ticket.fresh=false' "$evidence" > "$scenarios/expired-stale.json"
+          jq -S '.predecessor.identity_state="UNKNOWN"' "$evidence" > "$scenarios/dependency-blocked.json"
+          jq -S '.consume.successor.target_branch="release"' "$evidence" > "$scenarios/target-mismatch.json"
+          jq -S '.consume.successor.tree_digest="sha256:0000000000000000000000000000000000000000000000000000000000000000"' "$evidence" > "$scenarios/tree-mismatch.json"
+          jq -S '.consume.successor.policy_digest="sha256:0000000000000000000000000000000000000000000000000000000000000000"' "$evidence" > "$scenarios/policy-mismatch.json"
+          jq -S '.consume.successor.toolchain_digest="sha256:0000000000000000000000000000000000000000000000000000000000000000"' "$evidence" > "$scenarios/toolchain-mismatch.json"
+          jq -S '.consume.successor.workflow_digest="sha256:0000000000000000000000000000000000000000000000000000000000000000"' "$evidence" > "$scenarios/workflow-mismatch.json"
+          jq -S '.ticket.phase="ABSENT" | .ticket.prepared=false | .ticket.predeclared_before_successor=false' "$evidence" > "$scenarios/consume-before-prepare.json"
+          jq -S '.ticket.phase="CLOSED" | .consume.reuse=true' "$evidence" > "$scenarios/replay-reuse.json"
+          jq -S '.predecessor.observed_artifact_digest="sha256:0000000000000000000000000000000000000000000000000000000000000000"' "$evidence" > "$scenarios/digest-laundering.json"
+          jq -S '.upper_decision="MYSTERY"' "$evidence" > "$scenarios/unknown-top-level-decision.json"
+          jq -S '.ticket.post_hoc=true | .ticket.predeclared_before_successor=false' "$evidence" > "$scenarios/post-hoc-ticket.json"
+          jq -S '.ticket.retroactive_closure_requested=true' "$evidence" > "$scenarios/retroactive-closure.json"
+          jq -S '.authority.write_escalation=true' "$evidence" > "$scenarios/authority-write-escalation.json"
+          jq -S '.ticket.fresh=false | .consume.successor.target_branch="release"' "$evidence" > "$scenarios/mixed.json"
+
+      - name: Evaluate every transition case with the external conformer
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/temporal-transition-bootstrap-v1"
+          denominator=contracts/temporal-transition-bootstrap-denominator-v1.json
+          ticket=contracts/temporal-transition-bootstrap-ticket-v1.json
+          resolution="$root/resolved-transition-graph.json"
+          evaluator="$root/conformer/scripts/evaluate-temporal-transition-ticket-v1.sh"
+          conformer="$root/conformer/scripts/conform-temporal-transition-ticket-v1.sh"
+          scenarios="$root/scenarios"
+          outputs="$root/artifacts"
+          mkdir -p "$outputs"
+          run_case() {
+            local name=$1 input=$2 output=$3 report=$4
+            bash "$evaluator" "$GITHUB_WORKSPACE" "$denominator" "$ticket" "$input" "$resolution" "$outputs/$output" "$EVENT_SUBJECT_SHA" "$name"
+            bash "$conformer" "$outputs/$output" "$denominator" "$ticket" "$input" "$resolution" "$name" "$outputs/$report"
+          }
+          start_ns=$(date +%s%N)
+          /usr/bin/time -f '%M' -o "$root/evaluator-rss" bash "$evaluator" "$GITHUB_WORKSPACE" "$denominator" "$ticket" "$scenarios/normal.json" "$resolution" "$outputs/normal-a" "$EVENT_SUBJECT_SHA" normal
+          end_ns=$(date +%s%N)
+          echo $(( (end_ns-start_ns+999999)/1000000 )) > "$root/evaluator-wall-ms"
+          bash "$conformer" "$outputs/normal-a" "$denominator" "$ticket" "$scenarios/normal.json" "$resolution" normal "$outputs/conform-normal-a.json"
+          bash "$evaluator" "$GITHUB_WORKSPACE" "$denominator" "$ticket" "$scenarios/normal.json" "$resolution" "$outputs/normal-b" "$EVENT_SUBJECT_SHA" normal
+          bash "$conformer" "$outputs/normal-b" "$denominator" "$ticket" "$scenarios/normal.json" "$resolution" normal "$outputs/conform-normal-b.json"
+          diff -qr "$outputs/normal-a" "$outputs/normal-b"
+          run_case prepared-not-consumed "$scenarios/prepared-not-consumed.json" prepared-not-consumed conform-prepared-not-consumed.json
+          run_case missing-predecessor-artifact "$scenarios/missing-predecessor-artifact.json" missing-predecessor-artifact conform-missing-predecessor-artifact.json
+          run_case expired-stale "$scenarios/expired-stale.json" expired-stale conform-expired-stale.json
+          run_case dependency-blocked "$scenarios/dependency-blocked.json" dependency-blocked conform-dependency-blocked.json
+          run_case target-mismatch "$scenarios/target-mismatch.json" target-mismatch conform-target-mismatch.json
+          run_case tree-mismatch "$scenarios/tree-mismatch.json" tree-mismatch conform-tree-mismatch.json
+          run_case policy-mismatch "$scenarios/policy-mismatch.json" policy-mismatch conform-policy-mismatch.json
+          run_case toolchain-mismatch "$scenarios/toolchain-mismatch.json" toolchain-mismatch conform-toolchain-mismatch.json
+          run_case workflow-mismatch "$scenarios/workflow-mismatch.json" workflow-mismatch conform-workflow-mismatch.json
+          run_case consume-before-prepare "$scenarios/consume-before-prepare.json" consume-before-prepare conform-consume-before-prepare.json
+          run_case replay-reuse "$scenarios/replay-reuse.json" replay-reuse conform-replay-reuse.json
+          run_case digest-laundering "$scenarios/digest-laundering.json" digest-laundering conform-digest-laundering.json
+          run_case unknown-top-level-decision "$scenarios/unknown-top-level-decision.json" unknown-top-level-decision conform-unknown-top-level-decision.json
+          run_case post-hoc-ticket "$scenarios/post-hoc-ticket.json" post-hoc-ticket conform-post-hoc-ticket.json
+          run_case retroactive-closure "$scenarios/retroactive-closure.json" retroactive-closure conform-retroactive-closure.json
+          run_case authority-write-escalation "$scenarios/authority-write-escalation.json" authority-write-escalation conform-authority-write-escalation.json
+          run_case mixed "$scenarios/mixed.json" mixed conform-mixed.json
+          test "$(find "$outputs" -mindepth 1 -maxdepth 1 -name 'conform-*.json' | wc -l | tr -d ' ')" -eq 19
+
+      - name: Record transition receipt, successor observation, inventory, and authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/temporal-transition-bootstrap-v1"
+          artifacts="$root/artifacts"
+          snapshot() {
+            find "$GITHUB_WORKSPACE" -path "$GITHUB_WORKSPACE/.git" -prune -o -type f -print0 |
+              sort -z | xargs -0 -r sha256sum | sha256sum | awk '{print $1}'
+          }
+          before=$(cat "$root/repository-before")
+          after=$(snapshot)
+          test "$before" = "$after"
+          regular_files=$(find "$GITHUB_WORKSPACE" -path "$GITHUB_WORKSPACE/.git" -prune -o -type f ! -path "$GITHUB_WORKSPACE/README.md" -print | wc -l | tr -d ' ')
+          physical_lines=$(find "$GITHUB_WORKSPACE" -path "$GITHUB_WORKSPACE/.git" -prune -o -type f ! -path "$GITHUB_WORKSPACE/README.md" -print0 | sort -z | xargs -0 -r cat | wc -l | tr -d ' ')
+          descendant_dirs=$(find "$GITHUB_WORKSPACE" -path "$GITHUB_WORKSPACE/.git" -prune -o -mindepth 1 -type d -print | wc -l | tr -d ' ')
+          go_files=$(find "$GITHUB_WORKSPACE" -path "$GITHUB_WORKSPACE/.git" -prune -o -type f -name '*.go' -print | wc -l | tr -d ' ')
+          gooo_files=$(find "$GITHUB_WORKSPACE" -path "$GITHUB_WORKSPACE/.git" -prune -o -type f -name '*.gooo' -print | wc -l | tr -d ' ')
+          go_lines=$(find "$GITHUB_WORKSPACE" -path "$GITHUB_WORKSPACE/.git" -prune -o -type f -name '*.go' -print0 | sort -z | xargs -0 -r cat | wc -l | tr -d ' ')
+          gooo_lines=$(find "$GITHUB_WORKSPACE" -path "$GITHUB_WORKSPACE/.git" -prune -o -type f -name '*.gooo' -print0 | sort -z | xargs -0 -r cat | wc -l | tr -d ' ')
+          language_files=$(
+            find "$GITHUB_WORKSPACE" -path "$GITHUB_WORKSPACE/.git" -prune -o -type f \( -name '*.go' -o -name '*.gooo' \) -print0 |
+              sort -z | while IFS= read -r -d '' file; do
+                relative=${file#"$GITHUB_WORKSPACE/"}
+                case "$file" in *.gooo) language=Gooo ;; *) language=Go ;; esac
+                jq -cn --arg language "$language" --arg path "$relative" --argjson physical_lines "$(wc -l < "$file" | tr -d ' ')" \
+                  '{language:$language,path:$path,physical_lines:$physical_lines}'
+              done | jq -s .
+          )
+          cp "$root/version.json" "$root/syntax.json" "$root/semantic.json" "$root/graph.json" "$root/resolved-transition-graph.json" "$artifacts/"
+          scenario_output_files=$(find "$artifacts" -mindepth 2 -type f ! -name 'conform-*.json' | wc -l | tr -d ' ')
+          conformer_reports=$(find "$artifacts" -maxdepth 1 -name 'conform-*.json' -type f | wc -l | tr -d ' ')
+          artifact_files=$(find "$artifacts" -type f | wc -l | tr -d ' ')
+          metadata_files=$((artifact_files - scenario_output_files - conformer_reports))
+          go_version=$(go env GOVERSION)
+          test "$go_version" = go1.27.0
+          predecessor=contracts/temporal-transition-bootstrap-predecessor-v1.json
+          ticket_state=PREDECLARED
+          consumed_once=false
+          if [ "$GITHUB_EVENT_NAME" = push ]; then ticket_state=CLOSED; consumed_once=true; fi
+          baseline_metric_state=UNKNOWN
+          baseline_metric_before=5
+          metric_after=null
+          if [ "$(jq -r '.require_successor_observation // false' "$predecessor")" = true ]; then
+            baseline_metric_before=$(jq -r .metric_pair.before "$root/baseline-successor-observation.json")
+          fi
+          if [ "$GITHUB_EVENT_NAME" = push ]; then metric_after=6; fi
+          jq -S -n --arg subject_sha "$EVENT_SUBJECT_SHA" --arg merge_sha "${MERGE_SHA:-}" --arg head_sha "$PR_HEAD_SHA" \
+            --arg ticket_id "$(jq -r .ticket_id "$root/ticket.json")" --arg nonce "$(jq -r .nonce "$root/ticket.json")" \
+            --arg ticket_digest "sha256:$(sha256sum "$root/ticket.json" | awk '{print $1}')" --arg state "$ticket_state" \
+            --argjson consumed_once "$consumed_once" --argjson metric_after "$metric_after" --argjson metric_before "$baseline_metric_before" \
+            '{schema:"gooo/link/temporal-successor-observation/v1",state:$state,predecessor_ticket_digest:$ticket_digest,nonce:$nonce,ticket_id:$ticket_id,
+              merge_sha:(if $merge_sha=="" then null else $merge_sha end),pr_head_sha:$head_sha,consumed_once:$consumed_once,
+              metric_pair:{definition:"successor_observation_required_fields",before:$metric_before,after:$metric_after,state:(if $metric_after==null then "UNKNOWN" else "OBSERVED" end)}}' \
+            > "$artifacts/successor-observation.json"
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            jq -S -n --arg merge_sha "$MERGE_SHA" --arg head_sha "$PR_HEAD_SHA" --arg base_sha "$BASE_SHA" --argjson pr "$PR_NUMBER" \
+              --arg ticket_digest "sha256:$(sha256sum "$root/ticket.json" | awk '{print $1}')" --arg nonce "$(jq -r .nonce "$root/ticket.json")" \
+              --arg tree "$TREE_DIGEST" --arg policy "$POLICY_DIGEST" --arg toolchain "$TOOLCHAIN_DIGEST" --arg workflow "$WORKFLOW_DIGEST" \
+              '{schema:"gooo/link/temporal-merge-receipt/v1",merge_method:"SQUASH",typed:true,mapping_type:"SQUASH_COMMIT_TO_EXPECTED_TREE",merge_commit_sha:$merge_sha,
+                pr_head_sha:$head_sha,predecessor_base_sha:$base_sha,pr_number:$pr,ticket_digest:$ticket_digest,nonce:$nonce,tree_digest:$tree,
+                policy_digest:$policy,toolchain_digest:$toolchain,workflow_digest:$workflow,proof_choice:(input_filename|not)}' \
+              /dev/null > "$artifacts/merge-receipt.json"
+            jq --arg proof "$(jq -r .bindings.proof_choice "$root/ticket.json")" '.proof_choice=$proof' "$artifacts/merge-receipt.json" > "$artifacts/merge-receipt.tmp"
+            mv "$artifacts/merge-receipt.tmp" "$artifacts/merge-receipt.json"
+          fi
+          jq -S -n --arg subject_sha "$EVENT_SUBJECT_SHA" --arg before "$before" --arg after "$after" --arg go "$go_version" \
+            --arg policy_digest "$POLICY_DIGEST" --arg workflow_digest "$WORKFLOW_DIGEST" --arg toolchain_digest "$TOOLCHAIN_DIGEST" \
+            --arg ticket_digest "sha256:$(sha256sum "$root/ticket.json" | awk '{print $1}')" --argjson regular_files "$regular_files" --argjson physical_lines "$physical_lines" \
+            --argjson descendant_dirs "$descendant_dirs" --argjson go_files "$go_files" --argjson go_lines "$go_lines" --argjson gooo_files "$gooo_files" --argjson gooo_lines "$gooo_lines" \
+            --argjson language_files "$language_files" --argjson artifact_files "$artifact_files" --argjson scenario_output_files "$scenario_output_files" \
+            --argjson conformer_reports "$conformer_reports" --argjson graph_rss "$(tr -d ' ' < "$root/graph-rss")" --argjson evaluator_rss "$(tr -d ' ' < "$root/evaluator-rss")" \
+            --argjson evaluator_wall "$(cat "$root/evaluator-wall-ms")" --arg phase "$TRANSITION_PHASE" --arg ticket_state "$ticket_state" --argjson consumed_once "$consumed_once" \
+            --slurpfile lock contracts/temporal-transition-bootstrap-release-lock-v1.json --slurpfile predecessor "$predecessor" \
+            '{schema:"gooo/evidence-generator/temporal-transition-bootstrap/runtime/v1",subject_sha:$subject_sha,phase:$phase,ticket_state:$ticket_state,consumed_once:$consumed_once,
+              release:$lock[0],predecessor:$predecessor[0],ticket_digest:$ticket_digest,toolchain:{go:$go,required:"go1.27.0",policy_digest:$policy_digest,workflow_digest:$workflow_digest,toolchain_digest:$toolchain_digest},
+              performance:{normal_transition_evaluator_wall_ms:$evaluator_wall,normal_transition_evaluator_peak_rss_kib:$evaluator_rss,gooo_graph_peak_rss_kib:$graph_rss,
+                improvement:{state:"UNKNOWN",evidence:0,required:1,reason:"COMPARABLE_BEFORE_AFTER_PERFORMANCE_EVIDENCE_ABSENT"}},
+              inventory:{root_readme_policy:"EXCLUDED",input_regular_files:$regular_files,input_descendant_dirs:$descendant_dirs,input_physical_lines:$physical_lines,
+                input_go_files:$go_files,input_go_physical_lines:$go_lines,input_gooo_files:$gooo_files,input_gooo_physical_lines:$gooo_lines,language_files:$language_files},
+              repository:{before_digest:$before,after_digest:$after,writes:0},authority:{source_repository_writes:0,local_test_executions:0,cross_project_required_gates:0,
+                automatic_merge_allowed:false,release_authority:false,deploy_authority:false},executions:{gooo_version:1,gooo_syntax_check:1,gooo_semantic_check:1,gooo_graph:1,activity_resolution:12,transition_evaluator:19,conformer:19,normal_replay_runs:2,go_build:0,go_test:0,local_tests:0},
+              cases:{total:18,closed:1,unknown:4,refuted:13,normal_replay_runs:2,cells_per_case:12,activities:12},activities:{total:12,proof:{FOUNDATION:4,COHERENCE:4,REGRESSION:4},indicator:{DRIVER:4,OUTCOME:4,GUARDRAIL:4}},
+              artifacts:{scenario_outputs:$scenario_output_files,conformer_reports:$conformer_reports,metadata_files:$metadata_files,total:$artifact_files},claims:{external_utility:{state:"UNKNOWN",evidence:0,reason:"INDEPENDENT_EXTERNAL_UTILITY_EVIDENCE_ABSENT"},
+                performance_improvement:{state:"UNKNOWN",evidence:0,reason:"COMPARABLE_BEFORE_AFTER_PERFORMANCE_EVIDENCE_ABSENT"}}}' > "$artifacts/runtime.json"
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            test "$artifact_files" -eq 161
+          else
+            test "$artifact_files" -eq 160
+          fi
+          test "$scenario_output_files" -eq 133
+          test "$conformer_reports" -eq 19
+
+      - name: Enforce exact decisions, replay refusal, and authority boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/temporal-transition-bootstrap-v1"
+          artifacts="$root/artifacts"
+          jq -e '((.phase=="PREDECLARE" and .artifacts.total==161) or (.phase=="CONSUME_ONCE" and .artifacts.total==160)) and
+            .cases=={total:18,closed:1,unknown:4,refuted:13,normal_replay_runs:2,cells_per_case:12,activities:12} and
+            .toolchain.go=="go1.27.0" and .repository.writes==0 and .authority.local_test_executions==0 and .authority.cross_project_required_gates==0 and
+            .executions.go_build==0 and .executions.go_test==0 and .activities.total==12 and .activities.proof=={FOUNDATION:4,COHERENCE:4,REGRESSION:4} and
+            .activities.indicator=={DRIVER:4,OUTCOME:4,GUARDRAIL:4}' "$artifacts/runtime.json" >/dev/null
+          jq -e '.decision=="CONFORMANT" and .summary=={total:12,closed:12,unknown:0,refuted:0,direct_missing:0,stale:0,dependency_blocked:0}' "$artifacts/conform-normal-a.json" >/dev/null
+          jq -e '.decision=="CONFORMANT" and .summary.refuted>0 and .claim.reason=="CONSUMED_TICKET_REUSE"' "$artifacts/conform-replay-reuse.json" >/dev/null
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            jq -e '.state=="CLOSED" and .consumed_once==true and .metric_pair.after==6 and .metric_pair.state=="OBSERVED"' "$artifacts/successor-observation.json" >/dev/null
+            jq -e '.schema=="gooo/link/temporal-merge-receipt/v1" and .typed==true and .mapping_type=="SQUASH_COMMIT_TO_EXPECTED_TREE" and
+              .merge_commit_sha != .pr_head_sha and .tree_digest == $tree' --arg tree "$TREE_DIGEST" "$artifacts/merge-receipt.json" >/dev/null
+          else
+            jq -e '.state=="PREDECLARED" and .consumed_once==false and .metric_pair.state=="UNKNOWN"' "$artifacts/successor-observation.json" >/dev/null
+          fi
+          test "$(git status --porcelain=v1 --untracked-files=all)" = ""
+
+      - name: Publish exact summary
+        if: always()
+        shell: bash
+        run: |
+          root="$RUNNER_TEMP/temporal-transition-bootstrap-v1"
+          if [ -f "$root/artifacts/runtime.json" ]; then
+            {
+              echo '## Temporal transition bootstrap v1'
+              jq -r '"- phase: \(.phase); ticket: \(.ticket_state); consumed once: \(.consumed_once)"' "$root/artifacts/runtime.json"
+              jq -r '"- cases: \(.cases.total) total; \(.cases.closed) CLOSED / \(.cases.unknown) UNKNOWN / \(.cases.refuted) REFUTED; cells per case \(.cases.cells_per_case)"' "$root/artifacts/runtime.json"
+              jq -r '"- activities: \(.activities.total); proof FOUNDATION \(.activities.proof.FOUNDATION), COHERENCE \(.activities.proof.COHERENCE), REGRESSION \(.activities.proof.REGRESSION); indicators DRIVER \(.activities.indicator.DRIVER), OUTCOME \(.activities.indicator.OUTCOME), GUARDRAIL \(.activities.indicator.GUARDRAIL)"' "$root/artifacts/runtime.json"
+              jq -r '"- Go: \(.toolchain.go); evaluator \(.performance.normal_transition_evaluator_wall_ms) ms / \(.performance.normal_transition_evaluator_peak_rss_kib) KiB; graph RSS \(.performance.gooo_graph_peak_rss_kib) KiB"' "$root/artifacts/runtime.json"
+              jq -r '"- inventory: \(.inventory.input_regular_files) files / \(.inventory.input_descendant_dirs) dirs / \(.inventory.input_physical_lines) lines; Go \(.inventory.input_go_files)/\(.inventory.input_go_physical_lines); Gooo \(.inventory.input_gooo_files)/\(.inventory.input_gooo_physical_lines); \(.inventory.root_readme_policy)"' "$root/artifacts/runtime.json"
+              jq -r '"- artifact files: \(.artifacts.total); source writes / local tests / required cross-project gates: \(.authority.source_repository_writes) / \(.authority.local_test_executions) / \(.authority.cross_project_required_gates)"' "$root/artifacts/runtime.json"
+              jq -r '"- external utility / performance improvement: \(.claims.external_utility.state) / \(.claims.performance_improvement.state)"' "$root/artifacts/runtime.json"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload temporal transition evidence
+        id: upload-evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          if-no-files-found: error
+          path: ${{ runner.temp }}/temporal-transition-bootstrap-v1/artifacts
+
+      - name: Upload PREDECLARE ticket for protected-main consumption
+        id: upload-ticket
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: temporal-transition-bootstrap-ticket-${{ github.event.pull_request.head.sha }}
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/temporal-transition-bootstrap-v1/ticket.json
+            ${{ runner.temp }}/temporal-transition-bootstrap-v1/ticket.sha256
+            ${{ runner.temp }}/temporal-transition-bootstrap-v1/predeclare-manifest.json
+
+      - name: Publish uploaded artifact identities
+        if: always()
+        shell: bash
+        run: |
+          {
+              echo "- evidence artifact: ${{ env.ARTIFACT_NAME }}; id: ${{ steps.upload-evidence.outputs.artifact-id }}; digest: ${{ steps.upload-evidence.outputs.artifact-digest }}"
+            if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+              echo "- ticket artifact: temporal-transition-bootstrap-ticket-${{ github.event.pull_request.head.sha }}; id: ${{ steps.upload-ticket.outputs.artifact-id }}; digest: ${{ steps.upload-ticket.outputs.artifact-digest }}"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
