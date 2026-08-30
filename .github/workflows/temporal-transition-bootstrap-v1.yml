@@ -422,10 +422,6 @@ jobs:
               done | jq -s .
           )
           cp "$root/version.json" "$root/syntax.json" "$root/semantic.json" "$root/graph.json" "$root/resolved-transition-graph.json" "$artifacts/"
-          scenario_output_files=$(find "$artifacts" -mindepth 2 -type f ! -name 'conform-*.json' | wc -l | tr -d ' ')
-          conformer_reports=$(find "$artifacts" -maxdepth 1 -name 'conform-*.json' -type f | wc -l | tr -d ' ')
-          artifact_files=$(find "$artifacts" -type f | wc -l | tr -d ' ')
-          metadata_files=$((artifact_files - scenario_output_files - conformer_reports))
           go_version=$(go env GOVERSION)
           test "$go_version" = go1.27.0
           predecessor=contracts/temporal-transition-bootstrap-predecessor-v1.json
@@ -453,11 +449,16 @@ jobs:
               --arg tree "$TREE_DIGEST" --arg policy "$POLICY_DIGEST" --arg toolchain "$TOOLCHAIN_DIGEST" --arg workflow "$WORKFLOW_DIGEST" \
               '{schema:"gooo/link/temporal-merge-receipt/v1",merge_method:"SQUASH",typed:true,mapping_type:"SQUASH_COMMIT_TO_EXPECTED_TREE",merge_commit_sha:$merge_sha,
                 pr_head_sha:$head_sha,predecessor_base_sha:$base_sha,pr_number:$pr,ticket_digest:$ticket_digest,nonce:$nonce,tree_digest:$tree,
-                policy_digest:$policy,toolchain_digest:$toolchain,workflow_digest:$workflow,proof_choice:(input_filename|not)}' \
+                policy_digest:$policy,toolchain_digest:$toolchain,workflow_digest:$workflow,proof_choice:null}' \
               /dev/null > "$artifacts/merge-receipt.json"
             jq --arg proof "$(jq -r .bindings.proof_choice "$root/ticket.json")" '.proof_choice=$proof' "$artifacts/merge-receipt.json" > "$artifacts/merge-receipt.tmp"
             mv "$artifacts/merge-receipt.tmp" "$artifacts/merge-receipt.json"
           fi
+          scenario_output_files=$(find "$artifacts" -mindepth 2 -type f ! -name 'conform-*.json' | wc -l | tr -d ' ')
+          conformer_reports=$(find "$artifacts" -maxdepth 1 -name 'conform-*.json' -type f | wc -l | tr -d ' ')
+          artifact_files_before_runtime=$(find "$artifacts" -type f | wc -l | tr -d ' ')
+          artifact_files=$((artifact_files_before_runtime + 1))
+          metadata_files=$((artifact_files - scenario_output_files - conformer_reports))
           jq -S -n --arg subject_sha "$EVENT_SUBJECT_SHA" --arg before "$before" --arg after "$after" --arg go "$go_version" \
             --arg policy_digest "$POLICY_DIGEST" --arg workflow_digest "$WORKFLOW_DIGEST" --arg toolchain_digest "$TOOLCHAIN_DIGEST" \
             --arg ticket_digest "sha256:$(sha256sum "$root/ticket.json" | awk '{print $1}')" --argjson regular_files "$regular_files" --argjson physical_lines "$physical_lines" \
