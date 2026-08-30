@@ -1,0 +1,42 @@
+{
+  "schema": "gooo/link/core-experiment-backlog-snapshot-policy/v1",
+  "id": "gooo.policy.core-experiment-backlog.snapshot.v1",
+  "version": 1,
+  "source_binding": {
+    "committed_snapshot": "REQUIRED",
+    "snapshot_digest": "REQUIRED",
+    "source_release_or_run": "REQUIRED",
+    "policy_digest": "REQUIRED",
+    "live_pull_request_api_as_closed_input": "PROHIBITED"
+  },
+  "stale_inputs": [
+    "MISSING_SNAPSHOT",
+    "SNAPSHOT_DIGEST_MISMATCH",
+    "SOURCE_BINDING_MISMATCH",
+    "PAYLOAD_SHAPE_MISMATCH",
+    "POLICY_DIGEST_MISMATCH"
+  ],
+  "stale_resolution": {
+    "stage": "OBSERVATION",
+    "step": "BIND_CORE_EXPERIMENT_BACKLOG_SNAPSHOT",
+    "reason": "CORE_EXPERIMENT_BACKLOG_SNAPSHOT_STALE",
+    "unknown_class": "STALE",
+    "next_operation": "REFRESH_CORE_EXPERIMENT_BACKLOG_SNAPSHOT",
+    "blocked_by": ["CORE_EXPERIMENT_BACKLOG_SNAPSHOT"]
+  },
+  "missing_resolution": {
+    "stage": "OBSERVATION",
+    "step": "BIND_CORE_EXPERIMENT_BACKLOG_SNAPSHOT",
+    "reason": "CORE_EXPERIMENT_BACKLOG_SNAPSHOT_UNAVAILABLE",
+    "unknown_class": "DIRECT_MISSING",
+    "next_operation": "PROVIDE_CORE_EXPERIMENT_BACKLOG_SNAPSHOT",
+    "blocked_by": ["CORE_EXPERIMENT_BACKLOG_SNAPSHOT"]
+  },
+  "decision_precedence": ["REFUTED", "UNKNOWN", "CLOSED"],
+  "authority": {
+    "repository_writes": 0,
+    "local_test_executions": 0,
+    "cross_project_required_gates": 0,
+    "automatic_merge_allowed": false
+  }
+}

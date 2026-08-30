@@ -219,15 +219,100 @@ jobs:
           done < <(jq -r '.cells[]|[.activity]|@tsv' "$denominator")
           echo '::notice title=Portfolio selection stage::GOOO_ACTIVITY_BINDING_CLOSED'
 
-          gh api --paginate 'repos/kimjooyoon/meta-ontology-go/pulls?state=open&per_page=100' > "$RUNNER_TEMP/core-open-pr-pages.jsonl"
-          jq -s 'add//[]' "$RUNNER_TEMP/core-open-pr-pages.jsonl" > "$RUNNER_TEMP/core-open-prs.json"
-          jq -S -n --slurpfile contract contracts/core-experiment-backlog-v1.json --slurpfile open "$RUNNER_TEMP/core-open-prs.json" '
-            ($contract[0].experiments|map(.number)) as $expected |
-            [$open[0][]|select(.number as $number|$expected|index($number))|{number,title:.title,state:.state,url:.html_url,candidate_id:null,mapping_state:"UNKNOWN"}] as $observed |
-            {schema:$contract[0].schema,repository:$contract[0].repository,observed_open_experiments:($observed|length),primitive_candidates_observed:0,mapped_pull_requests:0,merge_eligible_pull_requests:0,mapping_state:"UNKNOWN",experiments:$observed,unknown_contract:$contract[0].unknown_contract}
-          ' > "$RUNNER_TEMP/observed-backlog.json"
-          jq -e '.observed_open_experiments==29 and (.experiments|length)==29 and .primitive_candidates_observed==0 and .mapped_pull_requests==0 and .merge_eligible_pull_requests==0' "$RUNNER_TEMP/observed-backlog.json" >/dev/null
-          echo '::notice title=Portfolio selection stage::CORE_EXPERIMENT_BACKLOG_OBSERVED'
+          snapshot_lock=contracts/core-experiment-backlog-snapshot-lock-v1.json
+          snapshot_policy=contracts/core-experiment-backlog-snapshot-policy-v1.json
+          snapshot=contracts/core-experiment-backlog-v1.json
+          snapshot_state=UNKNOWN
+          snapshot_stage=OBSERVATION
+          snapshot_step=BIND_CORE_EXPERIMENT_BACKLOG_SNAPSHOT
+          snapshot_reason=CORE_EXPERIMENT_BACKLOG_SNAPSHOT_UNAVAILABLE
+          snapshot_unknown_class=DIRECT_MISSING
+          snapshot_next_operation=PROVIDE_CORE_EXPERIMENT_BACKLOG_SNAPSHOT
+          snapshot_source_release_or_run=
+          snapshot_source_digest=
+          snapshot_artifact_digest=
+          snapshot_policy_digest=
+          if test -f "$snapshot_lock" && test -f "$snapshot_policy" && test -f "$snapshot" && test -f contracts/cross-consumer-release-lock-v1.json; then
+            actual_snapshot_digest="sha256:$(sha256sum "$snapshot" | awk '{print $1}')"
+            actual_policy_digest="sha256:$(sha256sum "$snapshot_policy" | awk '{print $1}')"
+            set +e
+            jq -e \
+              --arg snapshot_digest "$actual_snapshot_digest" \
+              --arg policy_digest "$actual_policy_digest" \
+              --slurpfile source_lock contracts/cross-consumer-release-lock-v1.json \
+              --slurpfile policy "$snapshot_policy" \
+              --slurpfile payload "$snapshot" '
+                ($source_lock[0].inputs | map(select(.id=="core-experiment-backlog")) | .[0]) as $source |
+                ($policy[0]) as $p |
+                ($payload[0]) as $b |
+                .schema=="gooo/link/core-experiment-backlog-snapshot-lock/v1" and
+                .snapshot_path=="contracts/core-experiment-backlog-v1.json" and
+                .snapshot_sha256==$snapshot_digest and
+                .policy.path=="contracts/core-experiment-backlog-snapshot-policy-v1.json" and
+                .policy.id==$p.id and .policy.digest==$policy_digest and
+                .source.repository==$source.repository and
+                .source.tag==$source.tag and .source.ref_type==$source.ref_type and
+                .source.tag_object_sha==$source.tag_object_sha and
+                .source.target_commit_sha==$source.target_commit_sha and
+                .source.asset.id==$source.assets[0].id and
+                .source.asset.name==$source.assets[0].name and
+                .source.asset.sha256==( "sha256:" + $source.assets[0].sha256 ) and
+                .source.payload_repository==$b.repository and
+                .source.payload_schema==$b.schema and
+                .expected.observed_open_experiments==$b.observed_open_experiments and
+                .expected.experiment_count==($b.experiments|length) and
+                (.expected.numbers|sort)==($b.experiments|map(.number)|sort) and
+                $p.schema=="gooo/link/core-experiment-backlog-snapshot-policy/v1" and
+                $p.source_binding.committed_snapshot=="REQUIRED" and
+                $p.source_binding.snapshot_digest=="REQUIRED" and
+                $p.source_binding.source_release_or_run=="REQUIRED" and
+                $p.source_binding.policy_digest=="REQUIRED" and
+                $p.source_binding.live_pull_request_api_as_closed_input=="PROHIBITED" and
+                $p.decision_precedence==["REFUTED","UNKNOWN","CLOSED"] and
+                $b.schema=="gooo/link/core-experiment-backlog/v1" and
+                $b.repository=="kimjooyoon/meta-ontology-go" and
+                $b.observed_open_experiments==29 and ($b.experiments|length)==29
+              ' "$snapshot_lock" >/dev/null
+            validation_status=$?
+            set -e
+            if test "$validation_status" -eq 0; then
+              snapshot_state=VALID
+              snapshot_source_release_or_run="$(jq -r '.source.repository + "@" + .source.tag + "#asset:" + (.source.asset.id|tostring)' "$snapshot_lock")"
+              snapshot_source_digest=$(jq -r '.source.asset.sha256' "$snapshot_lock")
+              snapshot_artifact_digest="$actual_snapshot_digest"
+              snapshot_policy_digest="$actual_policy_digest"
+            else
+              snapshot_unknown_class=STALE
+              snapshot_reason=CORE_EXPERIMENT_BACKLOG_SNAPSHOT_STALE
+              snapshot_next_operation=REFRESH_CORE_EXPERIMENT_BACKLOG_SNAPSHOT
+            fi
+          fi
+          if test "$snapshot_state" = VALID; then
+            jq -S \
+              --arg source_release_or_run "$snapshot_source_release_or_run" \
+              --arg source_digest "$snapshot_source_digest" \
+              --arg artifact_digest "$snapshot_artifact_digest" \
+              --arg policy_digest "$snapshot_policy_digest" \
+              '. + {snapshot:{state:"VALID",source_release_or_run:$source_release_or_run,source_digest:$source_digest,artifact_digest:$artifact_digest,policy_digest:$policy_digest}}' \
+              "$snapshot" > "$RUNNER_TEMP/observed-backlog.json"
+            jq -e '.snapshot.state=="VALID" and .observed_open_experiments==29 and (.experiments|length)==29 and .primitive_candidates_observed==0 and .mapped_pull_requests==0 and .merge_eligible_pull_requests==0' "$RUNNER_TEMP/observed-backlog.json" >/dev/null
+            echo '::notice title=Portfolio selection stage::IMMUTABLE_CORE_EXPERIMENT_BACKLOG_SNAPSHOT_CLOSED'
+          else
+            jq -S -n \
+              --arg repository "kimjooyoon/meta-ontology-go" \
+              --arg stage "$snapshot_stage" \
+              --arg step "$snapshot_step" \
+              --arg reason "$snapshot_reason" \
+              --arg unknown_class "$snapshot_unknown_class" \
+              --arg next_operation "$snapshot_next_operation" \
+              --arg source_release_or_run "$snapshot_source_release_or_run" \
+              --arg source_digest "$snapshot_source_digest" \
+              --arg artifact_digest "$snapshot_artifact_digest" \
+              --arg policy_digest "$snapshot_policy_digest" \
+              '{schema:"gooo/link/core-experiment-backlog/v1",repository:$repository,observed_open_experiments:null,primitive_candidates_observed:0,mapped_pull_requests:0,merge_eligible_pull_requests:0,mapping_state:"UNKNOWN",experiments:[],unknown_contract:{stage:$stage,step:$step,reason:$reason,unknown_class:$unknown_class,next_operation:$next_operation,blocked_by:["CORE_EXPERIMENT_BACKLOG_SNAPSHOT"]},stage:$stage,step:$step,reason:$reason,unknown_class:$unknown_class,next_operation:$next_operation,blocked_by:["CORE_EXPERIMENT_BACKLOG_SNAPSHOT"],snapshot:{state:"UNKNOWN",source_release_or_run:(if $source_release_or_run=="" then null else $source_release_or_run end),source_digest:(if $source_digest=="" then null else $source_digest end),artifact_digest:(if $artifact_digest=="" then null else $artifact_digest end),policy_digest:(if $policy_digest=="" then null else $policy_digest end)}}' \
+              > "$RUNNER_TEMP/observed-backlog.json"
+            echo '::notice title=Portfolio selection stage::IMMUTABLE_CORE_EXPERIMENT_BACKLOG_SNAPSHOT_UNKNOWN'
+          fi
 
           cp "$RUNNER_TEMP/selection.json" "$RUNNER_TEMP/historical-selection.json"
           evaluator=scripts/recompute-portfolio-core-selection.sh
@@ -238,8 +323,25 @@ jobs:
           wall_ms=$(( (end_ns-start_ns)/1000000 ))
           bash "$evaluator" "${args[@]}" "$RUNNER_TEMP/portfolio-replay.json" "$SUBJECT_SHA" complete
           cmp -s "$RUNNER_TEMP/selection.json" "$RUNNER_TEMP/portfolio-replay.json"
-          jq -e '.decision=="CORE_PRIMITIVE_SELECTION_UNKNOWN" and .summary=={closed:5,dependency_blocked:5,direct_missing:2,external_consumers:2,mapped_pull_requests:0,merge_eligible_pull_requests:0,open_experiments:29,refuted:0,total:12,unknown:7} and .claim.state=="UNKNOWN" and .claim.reason=="CORE_PRIMITIVE_EVIDENCE_UNAVAILABLE" and .claim.unknown_class=="DIRECT_MISSING" and .claim.next_operation=="OBSERVE_CROSS_CONSUMER_PRIMITIVE_NEED" and .candidate.observed==0 and .experiments.mapped==0 and .experiments.merge_eligible==0 and .experiments.automatic_merge_allowed==false and .stale_operation.state=="REFUTED"' "$RUNNER_TEMP/selection.json" >/dev/null
-          echo '::notice title=Portfolio selection stage::NORMAL_SELECTION_CLOSED'
+          if test "$snapshot_state" = VALID; then
+            jq -e '.decision=="CORE_PRIMITIVE_SELECTION_UNKNOWN" and .summary=={closed:5,dependency_blocked:5,direct_missing:2,external_consumers:2,mapped_pull_requests:0,merge_eligible_pull_requests:0,open_experiments:29,refuted:0,total:12,unknown:7} and .claim.state=="UNKNOWN" and .claim.reason=="CORE_PRIMITIVE_EVIDENCE_UNAVAILABLE" and .claim.unknown_class=="DIRECT_MISSING" and .claim.next_operation=="OBSERVE_CROSS_CONSUMER_PRIMITIVE_NEED" and .candidate.observed==0 and .experiments.mapped==0 and .experiments.merge_eligible==0 and .experiments.automatic_merge_allowed==false and .stale_operation.state=="REFUTED" and .snapshot.state=="VALID"' "$RUNNER_TEMP/selection.json" >/dev/null
+            echo '::notice title=Portfolio selection stage::NORMAL_SELECTION_CLOSED'
+          else
+            jq -e '.decision=="CORE_PRIMITIVE_SELECTION_UNKNOWN" and .claim.state=="UNKNOWN" and .claim.stage=="OBSERVATION" and .claim.step=="BIND_CORE_EXPERIMENT_BACKLOG_SNAPSHOT" and ((.claim.reason=="CORE_EXPERIMENT_BACKLOG_SNAPSHOT_UNAVAILABLE") or (.claim.reason=="CORE_EXPERIMENT_BACKLOG_SNAPSHOT_STALE")) and ((.claim.unknown_class=="DIRECT_MISSING") or (.claim.unknown_class=="STALE")) and (.claim.next_operation|length)>0 and (.claim.blocked_by|length)>0 and .summary.refuted==0 and .snapshot.state=="UNKNOWN"' "$RUNNER_TEMP/selection.json" >/dev/null
+            echo '::notice title=Portfolio selection stage::SNAPSHOT_FAILURE_FAILS_CLOSED_AS_UNKNOWN'
+          fi
+
+          jq '.snapshot.state="UNKNOWN" | .stage="OBSERVATION" | .step="BIND_CORE_EXPERIMENT_BACKLOG_SNAPSHOT" | .reason="CORE_EXPERIMENT_BACKLOG_SNAPSHOT_UNAVAILABLE" | .unknown_class="DIRECT_MISSING" | .next_operation="PROVIDE_CORE_EXPERIMENT_BACKLOG_SNAPSHOT" | .blocked_by=["CORE_EXPERIMENT_BACKLOG_SNAPSHOT"]' "$RUNNER_TEMP/observed-backlog.json" > "$RUNNER_TEMP/missing-backlog.json"
+          missing_snapshot_args=("$RUNNER_TEMP/portfolio-graph.json" "$denominator" "$RUNNER_TEMP/portfolio-promotion.json" "$RUNNER_TEMP/portfolio-consumer-releases.json" "$RUNNER_TEMP/portfolio-queue.json" "$RUNNER_TEMP/historical-selection.json" "$RUNNER_TEMP/missing-backlog.json")
+          bash "$evaluator" "${missing_snapshot_args[@]}" "$RUNNER_TEMP/missing-backlog-selection.json" "$SUBJECT_SHA" missing-backlog-snapshot
+          jq -e '.decision=="CORE_PRIMITIVE_SELECTION_UNKNOWN" and .claim.state=="UNKNOWN" and .claim.stage=="OBSERVATION" and .claim.step=="BIND_CORE_EXPERIMENT_BACKLOG_SNAPSHOT" and .claim.reason=="CORE_EXPERIMENT_BACKLOG_SNAPSHOT_UNAVAILABLE" and .claim.unknown_class=="DIRECT_MISSING" and (.claim.next_operation|length)>0 and (.claim.blocked_by|length)>0 and .summary.refuted==0 and .snapshot.state=="UNKNOWN"' "$RUNNER_TEMP/missing-backlog-selection.json" >/dev/null
+          echo '::notice title=Portfolio selection stage::MISSING_SNAPSHOT_UNKNOWN'
+
+          jq '.snapshot.state="UNKNOWN" | .stage="OBSERVATION" | .step="BIND_CORE_EXPERIMENT_BACKLOG_SNAPSHOT" | .reason="CORE_EXPERIMENT_BACKLOG_SNAPSHOT_STALE" | .unknown_class="STALE" | .next_operation="REFRESH_CORE_EXPERIMENT_BACKLOG_SNAPSHOT" | .blocked_by=["CORE_EXPERIMENT_BACKLOG_SNAPSHOT"]' "$RUNNER_TEMP/observed-backlog.json" > "$RUNNER_TEMP/stale-backlog.json"
+          stale_snapshot_args=("$RUNNER_TEMP/portfolio-graph.json" "$denominator" "$RUNNER_TEMP/portfolio-promotion.json" "$RUNNER_TEMP/portfolio-consumer-releases.json" "$RUNNER_TEMP/portfolio-queue.json" "$RUNNER_TEMP/historical-selection.json" "$RUNNER_TEMP/stale-backlog.json")
+          bash "$evaluator" "${stale_snapshot_args[@]}" "$RUNNER_TEMP/stale-backlog-selection.json" "$SUBJECT_SHA" stale-backlog-snapshot
+          jq -e '.decision=="CORE_PRIMITIVE_SELECTION_UNKNOWN" and .claim.state=="UNKNOWN" and .claim.stage=="OBSERVATION" and .claim.step=="BIND_CORE_EXPERIMENT_BACKLOG_SNAPSHOT" and .claim.reason=="CORE_EXPERIMENT_BACKLOG_SNAPSHOT_STALE" and .claim.unknown_class=="STALE" and (.claim.next_operation|length)>0 and (.claim.blocked_by|length)>0 and .summary.refuted==0 and .snapshot.state=="UNKNOWN"' "$RUNNER_TEMP/stale-backlog-selection.json" >/dev/null
+          echo '::notice title=Portfolio selection stage::STALE_SNAPSHOT_UNKNOWN'
 
           printf 'null\n' > "$RUNNER_TEMP/missing-portfolio-promotion.json"
           missing_args=("$RUNNER_TEMP/portfolio-graph.json" "$denominator" "$RUNNER_TEMP/missing-portfolio-promotion.json" "$RUNNER_TEMP/portfolio-consumer-releases.json" "$RUNNER_TEMP/portfolio-queue.json" "$RUNNER_TEMP/historical-selection.json" "$RUNNER_TEMP/observed-backlog.json")

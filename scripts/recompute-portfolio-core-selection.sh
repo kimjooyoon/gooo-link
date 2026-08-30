@@ -34,9 +34,13 @@ jq -S -n \
   $queue[0] as $q |
   $historical[0] as $h |
   $backlog[0] as $b |
+  (($b!=null and ($b|type)=="object" and ($b|has("snapshot")) and $b.snapshot.state=="VALID")) as $snapshot_valid |
+  ($snapshot_valid|not) as $snapshot_unknown |
   def closed_fact($reason): {state:"CLOSED",reason:$reason,unknown_class:null,next_operation:"NONE",blocked_by:[]};
   def unknown_fact($stage;$step;$reason;$next): {state:"UNKNOWN",stage:$stage,step:$step,reason:$reason,unknown_class:"DIRECT_MISSING",next_operation:$next,blocked_by:[]};
   def refuted_fact($stage;$step;$reason;$next): {state:"REFUTED",stage:$stage,step:$step,reason:$reason,unknown_class:null,next_operation:$next,blocked_by:[]};
+  def snapshot_unknown_fact:
+    {state:"UNKNOWN",stage:($b.stage//"OBSERVATION"),step:($b.step//"BIND_CORE_EXPERIMENT_BACKLOG_SNAPSHOT"),reason:($b.reason//"CORE_EXPERIMENT_BACKLOG_SNAPSHOT_UNAVAILABLE"),unknown_class:($b.unknown_class//"DIRECT_MISSING"),next_operation:($b.next_operation//"PROVIDE_CORE_EXPERIMENT_BACKLOG_SNAPSHOT"),blocked_by:($b.blocked_by//["CORE_EXPERIMENT_BACKLOG_SNAPSHOT"])};
   def activity_count($name): [$g.nodes[]?|select(.kind=="Activity" and .name==$name)]|length;
   ($p!=null and $p.schema=="gooo/link/generator-consumer-promotion-report/v1" and $p.decision=="GENERATOR_PROMOTION_ELIGIBLE" and $p.summary.closed==12 and $p.summary.total==12 and $p.observations.independent_consumers=={observed:2,total:2}) as $promotion_valid |
   ($p!=null and $p.observations.evidence_assets=={observed:10,total:10} and $p.observations.generated_cells=={observed:24,total:24} and $p.observations.verification_cells=={observed:12,total:12}) as $consumer_contract_valid |
@@ -68,7 +72,8 @@ jq -S -n \
       if $primitive_candidates==0 then unknown_fact("PRIMITIVE_SELECTION";"OBSERVE_CORE_PRIMITIVE_CANDIDATE";"CORE_PRIMITIVE_EVIDENCE_UNAVAILABLE";"OBSERVE_CROSS_CONSUMER_PRIMITIVE_NEED")
       else refuted_fact("PRIMITIVE_SELECTION";"OBSERVE_CORE_PRIMITIVE_CANDIDATE";"PRIMITIVE_CANDIDATE_WITHOUT_CROSS_CONSUMER_EVIDENCE";"REMOVE_UNSUPPORTED_PRIMITIVE_CANDIDATE") end
     elif $cell.id=="experiment-pr-mapping" then
-      if $mapped_prs==0 then unknown_fact("PULL_REQUEST_MAPPING";"BIND_EXPERIMENT_PULL_REQUEST_MAPPING";"EXPERIMENT_PULL_REQUEST_MAPPING_UNAVAILABLE";"MAP_SELECTED_PRIMITIVE_TO_ONE_EXPERIMENT_PR")
+      if $snapshot_unknown then snapshot_unknown_fact
+      elif $mapped_prs==0 then unknown_fact("PULL_REQUEST_MAPPING";"BIND_EXPERIMENT_PULL_REQUEST_MAPPING";"EXPERIMENT_PULL_REQUEST_MAPPING_UNAVAILABLE";"MAP_SELECTED_PRIMITIVE_TO_ONE_EXPERIMENT_PR")
       elif $eligible_prs==1 then closed_fact("ONE_EXPERIMENT_PULL_REQUEST_MAPPED")
       else refuted_fact("PULL_REQUEST_MAPPING";"BIND_EXPERIMENT_PULL_REQUEST_MAPPING";"EXPERIMENT_PULL_REQUEST_MAPPING_INVALID";"RESTORE_SINGLE_ELIGIBLE_PULL_REQUEST") end
     else closed_fact("DIRECT_POLICY_GUARD_OBSERVED") end;
@@ -89,7 +94,7 @@ jq -S -n \
   ([$evaluation.cells[]|select(.state=="REFUTED")]|length) as $refuted |
   ([$evaluation.cells[]|select(.unknown_class=="DIRECT_MISSING")]|length) as $direct_missing |
   ([$evaluation.cells[]|select(.unknown_class=="DEPENDENCY_BLOCKED")]|length) as $dependency_blocked |
-  ([$evaluation.cells[]|select(.state=="REFUTED")][0] // [$evaluation.cells[]|select(.state=="UNKNOWN")][0] // null) as $first |
+  ([$evaluation.cells[]|select(.state=="REFUTED")][0] // [$evaluation.cells[]|select(.reason=="CORE_EXPERIMENT_BACKLOG_SNAPSHOT_UNAVAILABLE" or .reason=="CORE_EXPERIMENT_BACKLOG_SNAPSHOT_STALE")][0] // [$evaluation.cells[]|select(.state=="UNKNOWN")][0] // null) as $first |
   (if $refuted>0 then "FAIL_CLOSED" elif $unknown>0 then "CORE_PRIMITIVE_SELECTION_UNKNOWN" else "CORE_PRIMITIVE_SELECTED" end) as $decision |
   {
     schema:"gooo/link/portfolio-core-improvement-selection/v1",
@@ -101,6 +106,7 @@ jq -S -n \
     candidate:{id:null,state:(if $primitive_candidates==0 then "UNKNOWN" else "REFUTED" end),required:1,observed:$primitive_candidates,cross_consumer_need:{observed:0,total:2},semantic_invariants:{observed:0,total:1},version_locks:{observed:0,total:1}},
     experiments:{open:($b.observed_open_experiments//0),mapped:$mapped_prs,merge_eligible:$eligible_prs,automatic_merge_allowed:false},
     stale_operation:{operation:($h.claim.next_operation//null),state:(if $stale_operation_observed then "REFUTED" else "UNKNOWN" end),reason:(if $stale_operation_observed then "CONSUMER_ADOPTIONS_ALREADY_COMPLETE" else "HISTORICAL_SELECTION_UNRECOGNIZED" end),replacement:"OBSERVE_CROSS_CONSUMER_PRIMITIVE_NEED"},
+    snapshot:{state:(if $snapshot_valid then "VALID" else "UNKNOWN" end),source_release_or_run:($b.snapshot.source_release_or_run//null),source_digest:($b.snapshot.source_digest//null),artifact_digest:($b.snapshot.artifact_digest//null),policy_digest:($b.snapshot.policy_digest//null),reason:($b.reason//null)},
     portfolio:{generator_promotion:$p.decision,external_consumers:$p.observations.independent_consumers,evidence_assets:$p.observations.evidence_assets,generated_cells:$p.observations.generated_cells,verification_cells:$p.observations.verification_cells,queue_decision:$q.decision},
     proofs:[$d.proofs[] as $proof|{choice:$proof.choice,closed:([$evaluation.cells[]|select(.proof==$proof.choice and .state=="CLOSED")]|length),total:$proof.total}],
     indicator_classes:[$d.indicator_classes[] as $class|{class:$class.class,closed:([$evaluation.cells[]|select(.indicator_class==$class.class and .state=="CLOSED")]|length),total:$class.total}],
