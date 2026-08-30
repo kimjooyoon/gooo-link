@@ -1,0 +1,29 @@
+{
+  "schema": "gooo/link/core-experiment-backlog-snapshot-lock/v1",
+  "snapshot_path": "contracts/core-experiment-backlog-v1.json",
+  "snapshot_sha256": "sha256:f66f126a39e3c0a29b9155e8d0dc5ef0ba5e9c24985ef58e23d3b450770b45b1",
+  "source": {
+    "repository": "kimjooyoon/gooo-link",
+    "tag": "v0.8.0-dev",
+    "ref_type": "tag",
+    "tag_object_sha": "9054dc573a96ed877bbc57e4e1e3c367124932fa",
+    "target_commit_sha": "13962fdcf314d9624ef451d386c59db9545a3ebb",
+    "asset": {
+      "id": 533496282,
+      "name": "gooo-link-v0.8.0-dev-core-experiment-backlog.json",
+      "sha256": "sha256:4a0fce2cb2a27f5d71f4582a340135919ac1b6b6ccf723d1f6e6c650cd806168"
+    },
+    "payload_repository": "kimjooyoon/meta-ontology-go",
+    "payload_schema": "gooo/link/core-experiment-backlog/v1"
+  },
+  "policy": {
+    "path": "contracts/core-experiment-backlog-snapshot-policy-v1.json",
+    "id": "gooo.policy.core-experiment-backlog.snapshot.v1",
+    "digest": "sha256:4ec5e8d73ea78d6d08ff4423f45647529208140877d2ae022d7db374146dd920"
+  },
+  "expected": {
+    "observed_open_experiments": 29,
+    "experiment_count": 29,
+    "numbers": [541, 542, 543, 544, 545, 546, 548, 549, 551, 552, 553, 554, 555, 556, 557, 558, 559, 560, 561, 562, 563, 564, 565, 566, 567, 568, 569, 570, 571]
+  }
+}

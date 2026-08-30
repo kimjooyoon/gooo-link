@@ -13,7 +13,7 @@ Portfolio promotion is not evidence for a specific core language primitive. This
 - dependency blocked: 5;
 - external consumers: 2/2;
 - core primitive candidates with cross-consumer evidence: 0/1;
-- open experimental pull requests observed: 29;
+- committed Core experiment snapshot entries: 29;
 - experiment-to-primitive mappings: 0/29;
 - merge-eligible experimental pull requests: 0/1;
 - automatic merge allowed: false;
@@ -31,4 +31,6 @@ The 29 experiments remain public research. They are neither rejected nor merge-e
 
 ## Non-bottleneck boundary
 
-The selector reads a pinned `gooo-link v0.7.0-dev` release and a read-only GitHub PR snapshot. It does not make consumer releases depend on this selection, does not modify a consumer or core repository, and does not turn UNKNOWN into a core implementation mandate.
+The selector reads a pinned `gooo-link v0.7.0-dev` release and a committed Core experiment backlog snapshot. The snapshot is bound to its source release/asset digest, its own file digest, and the snapshot policy digest. A live GitHub PR listing is not a CLOSED input. If the committed snapshot, source binding, or policy is missing or stale, the backlog becomes UNKNOWN with `stage`, `step`, `reason`, `unknown_class`, `next_operation`, and `blocked_by`; the denominator remains 29 and the selection remains fail-closed. REFUTED evidence still takes precedence over UNKNOWN.
+
+The selector does not make consumer releases depend on this selection, does not modify a consumer or core repository, and does not turn UNKNOWN into a core implementation mandate.
