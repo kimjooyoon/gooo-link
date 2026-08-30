@@ -1,0 +1,252 @@
+name: Self-improvement causal chain v1
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  causal-chain:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SUBJECT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      ARTIFACT_NAME: self-improvement-causal-chain-v1-${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.SUBJECT_SHA }}
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.27.0
+          cache: false
+
+      - name: Bind exact subject and read-only snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SUBJECT_SHA"
+          mkdir -p "$RUNNER_TEMP/self-improvement-causal-chain-v1/artifacts" "$RUNNER_TEMP/self-improvement-causal-chain-v1/scenarios"
+          snapshot() {
+            find "$GITHUB_WORKSPACE" -path "$GITHUB_WORKSPACE/.git" -prune -o -type f -print0 |
+              sort -z | xargs -0 -r sha256sum | sha256sum | awk '{print $1}'
+          }
+          snapshot > "$RUNNER_TEMP/self-improvement-causal-chain-v1/repository-before"
+
+      - name: Acquire exact released Gooo CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          lock=contracts/core-release-lock-v1.json
+          core_repository=$(jq -r .repository "$lock")
+          core_tag=$(jq -r .tag "$lock")
+          tag_object_sha=$(jq -r .tag_object_sha "$lock")
+          target_commit_sha=$(jq -r .target_commit_sha "$lock")
+          asset_name=$(jq -r '.consumer.binary_asset' "$lock")
+          asset_digest=$(jq -r --arg name "$asset_name" '.assets[]|select(.name==$name)|.digest' "$lock")
+          asset_size=$(jq -r --arg name "$asset_name" '.assets[]|select(.name==$name)|.size' "$lock")
+
+          gh api "repos/$core_repository/git/ref/tags/$core_tag" > "$RUNNER_TEMP/self-improvement-causal-chain-v1/core-ref.json"
+          jq -e --arg sha "$tag_object_sha" '.object.type=="tag" and .object.sha==$sha' \
+            "$RUNNER_TEMP/self-improvement-causal-chain-v1/core-ref.json" >/dev/null
+          gh api "repos/$core_repository/git/tags/$tag_object_sha" > "$RUNNER_TEMP/self-improvement-causal-chain-v1/core-tag.json"
+          jq -e --arg sha "$target_commit_sha" '.object.type=="commit" and .object.sha==$sha' \
+            "$RUNNER_TEMP/self-improvement-causal-chain-v1/core-tag.json" >/dev/null
+          gh api "repos/$core_repository/releases/tags/$core_tag" > "$RUNNER_TEMP/self-improvement-causal-chain-v1/core-release.json"
+          jq -e --arg name "$asset_name" --arg digest "$asset_digest" --argjson size "$asset_size" \
+            '.draft==false and .prerelease==true and (.assets[]|select(.name==$name and .digest==$digest and .size==$size))' \
+            "$RUNNER_TEMP/self-improvement-causal-chain-v1/core-release.json" >/dev/null
+
+          gh api -H 'Accept: application/octet-stream' \
+            "repos/$core_repository/releases/assets/$(jq -r --arg name "$asset_name" '.assets[]|select(.name==$name)|.id' "$RUNNER_TEMP/self-improvement-causal-chain-v1/core-release.json")" \
+            > "$RUNNER_TEMP/self-improvement-causal-chain-v1/gooo.tar.gz"
+          test "$(wc -c < "$RUNNER_TEMP/self-improvement-causal-chain-v1/gooo.tar.gz" | tr -d ' ')" -eq "$asset_size"
+          test "sha256:$(sha256sum "$RUNNER_TEMP/self-improvement-causal-chain-v1/gooo.tar.gz" | awk '{print $1}')" = "$asset_digest"
+          mkdir -p "$RUNNER_TEMP/self-improvement-causal-chain-v1/gooo"
+          tar -xzf "$RUNNER_TEMP/self-improvement-causal-chain-v1/gooo.tar.gz" -C "$RUNNER_TEMP/self-improvement-causal-chain-v1/gooo"
+          test -x "$RUNNER_TEMP/self-improvement-causal-chain-v1/gooo/gooo"
+          jq -S -n --arg repository "$core_repository" --arg tag "$core_tag" --arg asset "$asset_name" --arg digest "$asset_digest" \
+            '{repository:$repository,tag:$tag,asset:$asset,digest:$digest,synthetic_fixture:true}' \
+            > "$RUNNER_TEMP/self-improvement-causal-chain-v1/released-gooo.json"
+
+      - name: Generate Gooo IR and runtime receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/self-improvement-causal-chain-v1"
+          gooo="$root/gooo/gooo"
+          source=examples/self-improvement-causal-chain-v1/main.gooo
+          "$gooo" version --json > "$root/version.json"
+          "$gooo" check --json "$source" > "$root/syntax.json"
+          "$gooo" check --semantic --json "$source" > "$root/semantic.json"
+          /usr/bin/time -f '%M' -o "$root/graph-rss" "$gooo" graph dump "$source" > "$root/graph.json"
+          go_version=$(go env GOVERSION)
+          test "$go_version" = go1.27.0
+          source_digest="sha256:$(sha256sum "$source" | awk '{print $1}')"
+          jq -e '.status=="ok" and .diagnostics==[]' "$root/syntax.json" "$root/semantic.json" >/dev/null
+          jq -e --arg digest "${source_digest#sha256:}" '.schema_version=="gooo-graph/v1" and .source_digest==$digest and
+            ([.nodes[]|select(.kind=="Activity")]|length)==12' "$root/graph.json" >/dev/null
+          cp "$root/version.json" "$root/artifacts/version.json"
+          cp "$root/syntax.json" "$root/artifacts/syntax.json"
+          cp "$root/semantic.json" "$root/artifacts/semantic.json"
+          cp "$root/graph.json" "$root/artifacts/graph.json"
+          graph_peak_rss_kib=$(tr -d ' ' < "$root/graph-rss")
+          jq -S -n --arg go "$go_version" --arg source_digest "$source_digest" --argjson graph_peak_rss_kib "$graph_peak_rss_kib" \
+            '{toolchain:{go:$go,required:"go1.27.0",source_digest:$source_digest},performance:{graph_peak_rss_kib:$graph_peak_rss_kib},executions:{gooo_version:1,gooo_syntax_check:1,gooo_semantic_check:1,gooo_graph:1}}' \
+            > "$root/runtime-base.json"
+
+      - name: Materialize fixed causal-chain scenarios
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/self-improvement-causal-chain-v1"
+          base=fixtures/self-improvement-causal-chain-v1/closed.json
+          scenarios="$root/scenarios"
+          mkdir -p "$root/artifacts/scenarios"
+          jq -S '.scenario_id="closed" | .expected_state="CLOSED"' "$base" > "$scenarios/closed.json"
+          jq -S '.scenario_id="missing-observation" | .expected_state="UNKNOWN" |
+            del(.stages[] | select(.id=="OBSERVATION_RECEIPT")) |
+            del(.edges[] | select(.from_stage=="OBSERVATION_RECEIPT")) |
+            .decision.state="UNKNOWN"' "$base" > "$scenarios/missing-observation.json"
+          jq -S '.scenario_id="dependency-blocked-revision" | .expected_state="UNKNOWN" |
+            (.stages[]|select(.id=="REVISION_PROPOSAL")) |= (.status="BLOCKED"|.blocked_by=["COUNTEREXAMPLE_OR_UNKNOWN"]) |
+            .decision.state="UNKNOWN"' "$base" > "$scenarios/dependency-blocked-revision.json"
+          jq -S '.scenario_id="stale-conformance" | .expected_state="UNKNOWN" |
+            (.stages[]|select(.id=="CONFORMANCE_RECEIPT")) |= (.status="STALE"|.freshness="STALE") |
+            .decision.state="UNKNOWN"' "$base" > "$scenarios/stale-conformance.json"
+          jq -S '.scenario_id="ambiguous-human-decision" | .expected_state="UNKNOWN" |
+            (.stages[]|select(.id=="HUMAN_DECISION")) |= (.status="AMBIGUOUS"|.decision="AMBIGUOUS") |
+            .decision.state="UNKNOWN"' "$base" > "$scenarios/ambiguous-human-decision.json"
+          jq -S '.scenario_id="explicit-counterexample" | .expected_state="REFUTED" |
+            (.stages[]|select(.id=="COUNTEREXAMPLE_OR_UNKNOWN")) |= (.kind="EXPLICIT_COUNTEREXAMPLE"|.status="REFUTED"|.outcome="REFUTED") |
+            .decision.state="REFUTED"' "$base" > "$scenarios/explicit-counterexample.json"
+          jq -S '.scenario_id="digest-laundering" | .expected_state="REFUTED" |
+            (.edges[]|select(.from_stage=="OBSERVATION_RECEIPT")) |= (.artifact_digest="sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff") |
+            .decision.state="REFUTED"' "$base" > "$scenarios/digest-laundering.json"
+          jq -S '.scenario_id="unknown-top-level-decision" | .expected_state="REFUTED" |
+            .decision.state="UNRECOGNIZED"' "$base" > "$scenarios/unknown-top-level-decision.json"
+          jq -S '.scenario_id="mixed-refuted-over-unknown" | .expected_state="REFUTED" |
+            (.stages[]|select(.id=="CONFORMANCE_RECEIPT")) |= (.status="STALE"|.freshness="STALE") |
+            (.stages[]|select(.id=="COUNTEREXAMPLE_OR_UNKNOWN")) |= (.kind="EXPLICIT_COUNTEREXAMPLE"|.status="REFUTED"|.outcome="REFUTED") |
+            .decision.state="REFUTED"' "$base" > "$scenarios/mixed-refuted-over-unknown.json"
+          jq -S '.scenario_id="authority-write-escalation" | .expected_state="REFUTED" |
+            .authority.repository_writes=1 | .decision.state="REFUTED"' "$base" > "$scenarios/authority-write-escalation.json"
+          for scenario in "$scenarios"/*.json; do
+            scenario_id=$(jq -r .scenario_id "$scenario")
+            jq -S --arg scenario_id "$scenario_id" '(.stages[]?.scenario)=$scenario_id | (.edges[]?.scenario)=$scenario_id' \
+              "$scenario" > "$scenario.tmp"
+            mv "$scenario.tmp" "$scenario"
+          done
+          cp "$scenarios"/*.json "$root/artifacts/scenarios/"
+
+      - name: Evaluate typed causal chain and fixed scenarios
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/self-improvement-causal-chain-v1"
+          start_ns=$(date +%s%N)
+          /usr/bin/time -f '%M' -o "$root/evaluator-rss" \
+            bash scripts/observe-self-improvement-causal-chain-v1.sh "$GITHUB_WORKSPACE" "$root/graph.json" "$root/scenarios" "$root/runtime-base.json" "$root/artifacts/report.json" "$SUBJECT_SHA" scenarios
+          end_ns=$(date +%s%N)
+          wall_ms=$(( (end_ns-start_ns+999999)/1000000 ))
+          peak_rss_kib=$(tr -d ' ' < "$root/evaluator-rss")
+          snapshot() {
+            find "$GITHUB_WORKSPACE" -path "$GITHUB_WORKSPACE/.git" -prune -o -type f -print0 |
+              sort -z | xargs -0 -r sha256sum | sha256sum | awk '{print $1}'
+          }
+          before=$(cat "$root/repository-before")
+          after=$(snapshot)
+          if test "$before" = "$after"; then writes=0; else writes=1; fi
+          artifact_file_count=$(( $(find "$root/artifacts" -type f | wc -l | tr -d ' ') + 1 ))
+          jq -S -n \
+            --arg subject_sha "$SUBJECT_SHA" \
+            --arg go_version "$(go env GOVERSION)" \
+            --arg source_digest "$(jq -r .toolchain.source_digest "$root/runtime-base.json")" \
+            --arg before "$before" --arg after "$after" \
+            --argjson writes "$writes" --argjson wall_ms "$wall_ms" --argjson peak_rss_kib "$peak_rss_kib" \
+            --argjson graph_peak_rss_kib "$(jq -r .performance.graph_peak_rss_kib "$root/runtime-base.json")" \
+            --argjson artifact_file_count "$artifact_file_count" \
+            --slurpfile released "$root/released-gooo.json" \
+            '{schema:"gooo/meta/self-improvement-causal-chain/runtime/v1",subject_sha:$subject_sha,
+              toolchain:{go:$go_version,required:"go1.27.0",source_digest:$source_digest,released_gooo:$released[0]},
+              performance:{wall_ms:$wall_ms,peak_rss_kib:$peak_rss_kib,graph_peak_rss_kib:$graph_peak_rss_kib},
+              authority:{repository_writes:$writes,local_test_executions:0,cross_project_required_gates:0,automatic_merge_allowed:false,release_authority:false,deploy_authority:false},
+              executions:{gooo_version:1,gooo_syntax_check:1,gooo_semantic_check:1,gooo_graph:1,scenario_evaluator:1,go_build:0,go_test:0,local_tests:0},
+              repository:{before_digest:$before,after_digest:$after},
+              artifacts:{name:$ENV.ARTIFACT_NAME,id:null,digest:null,file_count:$artifact_file_count}}
+          ' > "$root/artifacts/runtime.json"
+          test "$artifact_file_count" -eq 16
+          bash scripts/observe-self-improvement-causal-chain-v1.sh "$GITHUB_WORKSPACE" "$root/graph.json" "$root/scenarios" "$root/artifacts/runtime.json" "$root/artifacts/report.json" "$SUBJECT_SHA" final
+
+      - name: Enforce exact decisions and authority boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/self-improvement-causal-chain-v1"
+          jq -e '
+            .decision=="REFUTED" and
+            .summary==(.summary | .scenarios_total=10 | .closed=1 | .unknown=4 | .refuted=5 | .stage_total=7 | .edge_total=6 | .required_edge_fields=6 | .unknown_coordinate_fields=6 | .causal_frontiers_required=10 | .scenario_expectations_met=10 | .scenario_expectations_total=10) and
+            .ir.meta_activities_observed==12 and .ir.meta_activities_total==12 and
+            ([.proof_choices[]|select(.closed==4 and .total==4)]|length)==3 and
+            ([.scenarios[]|select(.state=="UNKNOWN" and .unknown_coordinates_present==true and .causal_frontier_present==true)]|length)==4 and
+            ([.scenarios[]|select(.id=="missing-observation" and .claim.unknown_class=="DIRECT_MISSING" and .claim.blocked_by==[])]|length)==1 and
+            ([.scenarios[]|select(.id=="dependency-blocked-revision" and .claim.unknown_class=="DEPENDENCY_BLOCKED" and .claim.blocked_by==["COUNTEREXAMPLE_OR_UNKNOWN"])]|length)==1 and
+            ([.scenarios[]|select(.id=="stale-conformance" and .claim.unknown_class=="STALE")]|length)==1 and
+            ([.scenarios[]|select(.id=="ambiguous-human-decision" and .claim.unknown_class=="AMBIGUOUS")]|length)==1 and
+            ([.scenarios[]|select(.id=="explicit-counterexample" and .claim.reason=="EXPLICIT_COUNTEREXAMPLE_OBSERVED")]|length)==1 and
+            ([.scenarios[]|select(.id=="digest-laundering" and .claim.reason=="DIGEST_LAUNDERING_DETECTED")]|length)==1 and
+            ([.scenarios[]|select(.id=="unknown-top-level-decision" and .claim.reason=="UNRECOGNIZED_TOP_LEVEL_DECISION")]|length)==1 and
+            ([.scenarios[]|select(.id=="mixed-refuted-over-unknown" and .state=="REFUTED" and .conditions.unknown==1 and .conditions.refuted==1)]|length)==1 and
+            ([.scenarios[]|select(.id=="authority-write-escalation" and .claim.reason=="AUTHORITY_WRITE_ESCALATION")]|length)==1 and
+            .authority.repository_writes==0 and .authority.local_test_executions==0 and .authority.cross_project_required_gates==0 and
+            .toolchain.go=="go1.27.0" and .artifacts.file_count==16 and
+            .improvement.external_utility.state=="UNKNOWN" and .improvement.saved_build_ms.state=="UNKNOWN" and .improvement.saved_test_ms.state=="UNKNOWN"
+          ' "$root/artifacts/report.json" >/dev/null
+          test "$(git status --porcelain=v1 --untracked-files=all)" = ""
+
+      - name: Publish exact human-readable summary
+        if: always()
+        shell: bash
+        run: |
+          root="$RUNNER_TEMP/self-improvement-causal-chain-v1"
+          if test -f "$root/artifacts/report.json"; then
+            {
+              echo '## Self-improvement causal chain v1'
+              jq -r '"- decision: \(.decision)",
+                "- scenarios: \(.summary.closed) CLOSED / \(.summary.unknown) UNKNOWN / \(.summary.refuted) REFUTED (\(.summary.scenarios_total) total)",
+                "- stages: \(.summary.stage_total); edges: \(.summary.edge_total); required edge fields: \(.summary.required_edge_fields)",
+                "- Gooo meta activities: \(.ir.meta_activities_observed)/\(.ir.meta_activities_total)",
+                (.proof_choices[]|"- Munchausen \(.choice): \(.closed)/\(.total)"),
+                "- repository writes / local tests / cross-project gates: \(.authority.repository_writes) / \(.authority.local_test_executions) / \(.authority.cross_project_required_gates)",
+                "- utility / saved build / saved test: \(.improvement.external_utility.state) / \(.improvement.saved_build_ms.state) / \(.improvement.saved_test_ms.state)",
+                "- Go: \(.toolchain.go); wall: \(.performance.wall_ms) ms; peak RSS: \(.performance.peak_rss_kib) KiB",
+                "- inventory (root README excluded): \(.inventory.regular_files) regular files / \(.inventory.descendant_directories) descendant dirs / \(.inventory.physical_lines) physical lines",
+                "- Go files/lines: \(.inventory.go.files)/\(.inventory.go.lines); Gooo files/lines: \(.inventory.gooo.files)/\(.inventory.gooo.lines)",
+                "- artifact files: \(.artifacts.file_count)"' "$root/artifacts/report.json"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload causal-chain artifact
+        id: upload
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          if-no-files-found: error
+          path: ${{ runner.temp }}/self-improvement-causal-chain-v1/artifacts
+
+      - name: Publish uploaded artifact identity
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "- artifact name: ${{ env.ARTIFACT_NAME }}"
+            echo "- artifact id: ${{ steps.upload.outputs.artifact-id }}"
+            echo "- artifact digest: ${{ steps.upload.outputs.artifact-digest }}"
+            echo "- artifact files: 16"
+          } >> "$GITHUB_STEP_SUMMARY"

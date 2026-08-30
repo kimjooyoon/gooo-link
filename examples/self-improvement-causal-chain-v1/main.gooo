@@ -1,0 +1,29 @@
+package selfimprovementcausalchain
+namespace selfimprovementcausalchain
+
+entity ObservationReceipt id "gooo://self-improvement/causal-chain/stage/observation-receipt"
+entity CounterexampleOrUnknown id "gooo://self-improvement/causal-chain/stage/counterexample-or-unknown"
+entity RevisionProposal id "gooo://self-improvement/causal-chain/stage/revision-proposal"
+entity ConformanceReceipt id "gooo://self-improvement/causal-chain/stage/conformance-receipt"
+entity HumanDecision id "gooo://self-improvement/causal-chain/stage/human-decision"
+entity MergeOrDeferReceipt id "gooo://self-improvement/causal-chain/stage/merge-or-defer-receipt"
+entity SuccessorObservation id "gooo://self-improvement/causal-chain/stage/successor-observation"
+entity EdgeProvenance id "gooo://self-improvement/causal-chain/evidence/edge-provenance"
+entity ScenarioReceipt id "gooo://self-improvement/causal-chain/evidence/scenario-receipt"
+entity UnknownFrontier id "gooo://self-improvement/causal-chain/evidence/unknown-frontier"
+entity DecisionPrecedence id "gooo://self-improvement/causal-chain/evidence/decision-precedence"
+entity AuthorityBoundary id "gooo://self-improvement/causal-chain/evidence/authority-boundary"
+entity CausalChainReport id "gooo://self-improvement/causal-chain/report"
+
+activity ReceiveObservation(ObservationReceipt) -> CounterexampleOrUnknown
+activity EvaluateCounterexampleOrUnknown(CounterexampleOrUnknown) -> RevisionProposal
+activity ProposeRevision(RevisionProposal) -> ConformanceReceipt
+activity CheckConformance(ConformanceReceipt) -> HumanDecision
+activity ResolveHumanDecision(HumanDecision) -> MergeOrDeferReceipt
+activity RecordMergeOrDefer(MergeOrDeferReceipt) -> SuccessorObservation
+activity ObserveSuccessor(SuccessorObservation) -> CausalChainReport
+activity VerifyImmutableEdgeProvenance(EdgeProvenance) -> CausalChainReport
+activity VerifyScenarioBinding(ScenarioReceipt) -> CausalChainReport
+activity PreserveUnknownCausalFrontier(UnknownFrontier) -> CausalChainReport
+activity EnforceRefutationPrecedence(DecisionPrecedence) -> CausalChainReport
+activity PreserveCallerOwnedAuthority(AuthorityBoundary) -> CausalChainReport
