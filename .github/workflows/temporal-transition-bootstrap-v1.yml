@@ -157,7 +157,7 @@ jobs:
           gh api "repos/$repository/releases/tags/$tag" > "$root/core-release.json"
           asset_id=$(jq -r --arg name "$asset" '.assets[]|select(.name==$name)|.id' "$root/core-release.json")
           gh api -H 'Accept: application/octet-stream' "repos/$repository/releases/assets/$asset_id" > "$root/$asset"
-          test "sha256:$(sha256sum "$root/$asset" | awk '{print $1}')" = "$digest"
+          test "$(sha256sum "$root/$asset" | awk '{print $1}')" = "$digest"
           mkdir -p "$root/gooo"
           tar -xzf "$root/$asset" -C "$root/gooo"
           test -x "$root/gooo/gooo"
