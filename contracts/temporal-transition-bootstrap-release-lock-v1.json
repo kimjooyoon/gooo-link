@@ -1,0 +1,43 @@
+{
+  "schema": "gooo/link/temporal-transition-bootstrap-release-lock/v1",
+  "repository": "kimjooyoon/gooo-evidence-generator",
+  "tag": "v0.6.1-dev",
+  "version": "0.6.1-dev",
+  "status": "development",
+  "release_url": "https://github.com/kimjooyoon/gooo-evidence-generator/releases/tag/v0.6.1-dev",
+  "release_id": 379352973,
+  "immutable": true,
+  "prerelease": true,
+  "tag_object_sha": "b11ac2dfb05ef4c7d85bf1fc60c000b2189b2416",
+  "target_commit_sha": "a4d33bc64828a5a8b21838ce4a9976fd34f3f4aa",
+  "assets": [
+    {
+      "id": 536873848,
+      "name": "gooo-evidence-generator-temporal-transition-v0.6.1-dev.zip",
+      "size": 215048,
+      "digest": "sha256:b3c9a1fc09194c9a7e3df662ae9a74589b30749191aa5afd45538e48f24930c5"
+    },
+    {
+      "id": 536873847,
+      "name": "SHA256SUMS",
+      "size": 125,
+      "digest": "sha256:55915a434cd680b236fed1fdb8a3857eb05c3651ecf8835585f5f5ba6cce642a"
+    }
+  ],
+  "provenance": {
+    "run_id": 33324871690,
+    "source_artifact_id": 9735928721,
+    "source_artifact_digest": "sha256:f4dcd9ecda3623ce84a602d816346ed85cfb49f70a74177f9411279d105bffde",
+    "zip_regular_files": 158,
+    "downloaded_checksum_verified": true
+  },
+  "external_conformer": {
+    "source_commit_sha": "a4d33bc64828a5a8b21838ce4a9976fd34f3f4aa",
+    "files": [
+      {"path": "scripts/evaluate-temporal-transition-ticket-v1.sh", "blob_sha": "ad2adb7606763df4a0e9738e2cbcb6e8859daae4"},
+      {"path": "scripts/conform-temporal-transition-ticket-v1.sh", "blob_sha": "be8fdb8aeafb0c013aa9a0b63eba26a6f26b8e51"},
+      {"path": "scripts/bind-activity-resolutions.sh", "blob_sha": "014a9c0b2c417620473586277abdcf8b37a25a54"},
+      {"path": "contracts/core-release-lock-v1.json", "blob_sha": "10c9360a1809845c7f7e8453339173db10eccef2"}
+    ]
+  }
+}

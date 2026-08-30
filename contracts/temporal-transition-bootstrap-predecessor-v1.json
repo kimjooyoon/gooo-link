@@ -1,0 +1,22 @@
+{
+  "schema": "gooo/link/temporal-transition-bootstrap-predecessor/v1",
+  "identity": "commit:a14e4f88a7f1ad65ecc589ff78e815aa4d1a6721",
+  "target_ref": "main",
+  "observations": [
+    {
+      "kind": "causal-chain",
+      "run_id": 33323273371,
+      "artifact_id": 9735498732,
+      "artifact_digest": "sha256:c6e29991eb1985bfd1c5ee17c94b2b067d92c0c325ab45b268760e02daa9ce35"
+    },
+    {
+      "kind": "core-selection",
+      "run_id": 33323273401,
+      "artifact_id": 9735499129,
+      "artifact_digest": "sha256:d1b808dc8bfc26b497a31d975dd850594e34fe74a9639adf3e2cf95b0aff3685"
+    }
+  ],
+  "historical_failures": {
+    "meta_ontology_go_retroactive_closure": "FORBIDDEN"
+  }
+}

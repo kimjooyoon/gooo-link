@@ -1,0 +1,33 @@
+{
+  "schema": "gooo/link/temporal-transition-bootstrap-policy/v1",
+  "name": "PREDECLARE_TO_CONSUME_ONCE",
+  "phase_order": ["PREDECLARE", "CONSUME_ONCE"],
+  "proof_choice": "FOUNDATION",
+  "target_branch": "main",
+  "expiry_policy": "ONE_SUCCESSOR_ATTEMPT",
+  "decision_precedence": ["REFUTED", "UNKNOWN", "CLOSED"],
+  "unknown_classes": ["DIRECT_MISSING", "STALE", "DEPENDENCY_BLOCKED", "AMBIGUOUS"],
+  "authority": {
+    "source_repository_writes": 0,
+    "local_test_executions": 0,
+    "cross_project_required_gates": 0,
+    "automatic_merge_allowed": false,
+    "release_authority": false,
+    "deploy_authority": false
+  },
+  "forbidden": [
+    "POST_HOC_TICKET",
+    "RETROACTIVE_FAILURE_CLOSURE",
+    "TICKET_REUSE",
+    "DIGEST_LAUNDERING",
+    "AUTHORITY_WRITE_ESCALATION"
+  ],
+  "future_commit_mapping": {
+    "type": "SQUASH_COMMIT_TO_EXPECTED_TREE",
+    "commit_sha_predeclared": false,
+    "expected_tree_field": "expected_tree_digest",
+    "merge_receipt_tree_field": "merge_receipt.tree_digest",
+    "typed": true
+  },
+  "ordinary_route": "COHERENCE_ONLY_AFTER_BOOTSTRAP_MAIN_SUCCESS"
+}
