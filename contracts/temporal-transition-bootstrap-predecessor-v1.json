@@ -1,7 +1,7 @@
 {
   "schema": "gooo/link/temporal-transition-bootstrap-predecessor/v1",
   "identity": "commit:a14e4f88a7f1ad65ecc589ff78e815aa4d1a6721",
-  "branch": "main",
+  "target_ref": "main",
   "observations": [
     {
       "kind": "causal-chain",
