@@ -1,6 +1,6 @@
 {
   "schema": "gooo/link/temporal-transition-bootstrap-predecessor/v1",
-  "identity": "commit:a14e4f88a7f1ad65ecc589ff78e815aa4d1a6721",
+  "identity": "commit:d08144142e51c835eccb6276807cde29c5d3886a",
   "target_ref": "main",
   "observations": [
     {
@@ -16,6 +16,17 @@
       "artifact_digest": "sha256:d1b808dc8bfc26b497a31d975dd850594e34fe74a9639adf3e2cf95b0aff3685"
     }
   ],
+  "require_successor_observation": true,
+  "successor_observation": {
+    "artifact_name": "temporal-transition-bootstrap-v1-d08144142e51c835eccb6276807cde29c5d3886a",
+    "artifact_id": 9736541813,
+    "artifact_digest": "sha256:a05f42fbc0f39f68803c5a8c59e33863b2f7c2c5807b2150e7f553d3933f2683",
+    "run_id": 33327090349,
+    "metric_definition": "normal_transition_evaluator_wall_ms",
+    "metric_before": 223,
+    "counterexample_state": "UNKNOWN",
+    "counterexample_reason": "COMPARABLE_BEFORE_AFTER_PERFORMANCE_EVIDENCE_ABSENT"
+  },
   "historical_failures": {
     "meta_ontology_go_retroactive_closure": "FORBIDDEN"
   }

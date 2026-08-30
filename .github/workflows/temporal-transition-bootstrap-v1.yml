@@ -170,6 +170,19 @@ jobs:
           gooo="$root/gooo/gooo"
           source=examples/temporal-transition-bootstrap-v1/main.gooo
           denominator=contracts/temporal-transition-bootstrap-denominator-v1.json
+          proof_choice=$(jq -r .proof_choice contracts/temporal-transition-bootstrap-policy-v1.json)
+          if [ "$proof_choice" = COHERENCE ]; then
+            source=examples/temporal-transition-coherence-v1/main.gooo
+            jq -e '.schema=="gooo/link/temporal-transition-coherence-revision/v1" and
+              .proof_choice=="COHERENCE" and .semantic_ir.source=="examples/temporal-transition-coherence-v1/main.gooo" and
+              .semantic_ir.activity_count==12 and .counterexample.metric.definition=="normal_transition_evaluator_wall_ms" and
+              .revision_proposal.generated_patch.expected_tree_field=="proposal.expected_tree_digest" and
+              .tree_binding.receipt_field=="merge_receipt.tree_digest"' \
+              contracts/temporal-transition-coherence-revision-v1.json >/dev/null
+            jq -e '.coherence_revision.contract=="contracts/temporal-transition-coherence-revision-v1.json" and
+              .coherence_revision.outcome=="OBSERVABILITY_COMPLETENESS"' \
+              contracts/temporal-transition-bootstrap-policy-v1.json >/dev/null
+          fi
           "$gooo" version --json > "$root/version.json"
           "$gooo" check --json "$source" > "$root/syntax.json"
           "$gooo" check --semantic --json "$source" > "$root/semantic.json"
@@ -257,6 +270,7 @@ jobs:
             echo "TICKET_DIGEST=sha256:$(sha256sum "$root/ticket.json" | awk '{print $1}')" >> "$GITHUB_ENV"
           fi
           echo "TREE_DIGEST=$tree_digest" >> "$GITHUB_ENV"
+          echo "PROPOSAL_DIGEST=$(jq -r .proposal.digest "$root/ticket.json")" >> "$GITHUB_ENV"
           echo "POLICY_DIGEST=$policy_digest" >> "$GITHUB_ENV"
           echo "WORKFLOW_DIGEST=$workflow_digest" >> "$GITHUB_ENV"
           echo "TOOLCHAIN_DIGEST=$toolchain_digest" >> "$GITHUB_ENV"
@@ -267,16 +281,38 @@ jobs:
           set -euo pipefail
           root="$RUNNER_TEMP/temporal-transition-bootstrap-v1"
           predecessor=contracts/temporal-transition-bootstrap-predecessor-v1.json
+          policy=contracts/temporal-transition-bootstrap-policy-v1.json
+          revision=contracts/temporal-transition-coherence-revision-v1.json
           if [ "$(jq -r '.require_successor_observation // false' "$predecessor")" = true ]; then
             baseline_name=$(jq -r .successor_observation.artifact_name "$predecessor")
             baseline_id=$(jq -r .successor_observation.artifact_id "$predecessor")
+            baseline_digest=$(jq -r .successor_observation.artifact_digest "$predecessor")
+            baseline_run_id=$(jq -r .successor_observation.run_id "$predecessor")
             gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$baseline_id" > "$root/baseline-artifact.json"
-            jq -e --arg name "$baseline_name" '.name==$name and .expired==false' "$root/baseline-artifact.json" >/dev/null
+            jq -e --arg name "$baseline_name" --arg digest "$baseline_digest" --argjson run "$baseline_run_id" \
+              '.name==$name and .expired==false and .digest==$digest and .workflow_run.id==$run' "$root/baseline-artifact.json" >/dev/null
             gh api -H 'Accept: application/vnd.github+json' "repos/$GITHUB_REPOSITORY/actions/artifacts/$baseline_id/zip" > "$root/baseline.zip"
             mkdir -p "$root/baseline"
             unzip -q "$root/baseline.zip" -d "$root/baseline"
-            jq -e '.schema=="gooo/link/temporal-successor-observation/v1" and .metric_pair.state=="UNKNOWN" and .metric_pair.definition=="successor_observation_required_fields" and .metric_pair.before==5' \
-              "$root/baseline/successor-observation.json" >/dev/null
+            proof_choice=$(jq -r .proof_choice "$policy")
+            if [ "$proof_choice" = COHERENCE ]; then
+              test -f "$root/baseline/runtime.json"
+              test -f "$root/baseline/successor-observation.json"
+              expected_baseline=$(jq -r .counterexample.metric.baseline_value "$revision")
+              jq -e --argjson expected "$expected_baseline" \
+                '.schema=="gooo/evidence-generator/temporal-transition-bootstrap/runtime/v1" and
+                 .claims.performance_improvement.state=="UNKNOWN" and
+                 .claims.performance_improvement.reason=="COMPARABLE_BEFORE_AFTER_PERFORMANCE_EVIDENCE_ABSENT" and
+                 .performance.normal_transition_evaluator_wall_ms==$expected' "$root/baseline/runtime.json" >/dev/null
+              jq -e '.schema=="gooo/link/temporal-successor-observation/v1" and .state=="CLOSED" and .consumed_once==true and
+                 .metric_pair.state=="OBSERVED" and .metric_pair.definition=="successor_observation_required_fields" and
+                 .metric_pair.before==5 and .metric_pair.after==6' "$root/baseline/successor-observation.json" >/dev/null
+              cp "$root/baseline/runtime.json" "$root/baseline-runtime.json"
+            else
+              jq -e '.schema=="gooo/link/temporal-successor-observation/v1" and .metric_pair.state=="UNKNOWN" and
+                 .metric_pair.definition=="successor_observation_required_fields" and .metric_pair.before==5' \
+                "$root/baseline/successor-observation.json" >/dev/null
+            fi
             cp "$root/baseline/successor-observation.json" "$root/baseline-successor-observation.json"
           fi
 
@@ -430,20 +466,36 @@ jobs:
           ticket_state=PREDECLARED
           consumed_once=false
           if [ "$GITHUB_EVENT_NAME" = push ]; then ticket_state=CLOSED; consumed_once=true; fi
-          baseline_metric_state=UNKNOWN
+          proof_choice=$(jq -r .bindings.proof_choice "$root/ticket.json")
+          metric_definition=successor_observation_required_fields
           baseline_metric_before=5
           metric_after=null
-          if [ "$(jq -r '.require_successor_observation // false' "$predecessor")" = true ]; then
-            baseline_metric_before=$(jq -r .metric_pair.before "$root/baseline-successor-observation.json")
+          successor_metric_state=UNKNOWN
+          performance_metric_state=UNKNOWN
+          performance_metric_reason=COMPARABLE_BEFORE_AFTER_PERFORMANCE_EVIDENCE_ABSENT
+          observability_state=UNKNOWN
+          if [ "$proof_choice" = COHERENCE ]; then
+            metric_definition=$(jq -r .counterexample.metric.definition contracts/temporal-transition-coherence-revision-v1.json)
+            baseline_metric_before=$(jq -r .performance.normal_transition_evaluator_wall_ms "$root/baseline-runtime.json")
+            performance_metric_reason=PERFORMANCE_DIRECTION_AND_CAUSAL_IMPROVEMENT_UNKNOWN
           fi
-          if [ "$GITHUB_EVENT_NAME" = push ]; then metric_after=6; fi
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            successor_metric_state=OBSERVED
+            if [ "$proof_choice" = COHERENCE ]; then
+              metric_after=$(cat "$root/evaluator-wall-ms")
+              observability_state=CLOSED
+            else
+              metric_after=6
+            fi
+          fi
           jq -S -n --arg subject_sha "$EVENT_SUBJECT_SHA" --arg merge_sha "${MERGE_SHA:-}" --arg head_sha "$PR_HEAD_SHA" \
             --arg ticket_id "$(jq -r .ticket_id "$root/ticket.json")" --arg nonce "$(jq -r .nonce "$root/ticket.json")" \
             --arg ticket_digest "sha256:$(sha256sum "$root/ticket.json" | awk '{print $1}')" --arg state "$ticket_state" \
+            --arg metric_definition "$metric_definition" --arg metric_state "$successor_metric_state" \
             --argjson consumed_once "$consumed_once" --argjson metric_after "$metric_after" --argjson metric_before "$baseline_metric_before" \
             '{schema:"gooo/link/temporal-successor-observation/v1",state:$state,predecessor_ticket_digest:$ticket_digest,nonce:$nonce,ticket_id:$ticket_id,
               merge_sha:(if $merge_sha=="" then null else $merge_sha end),pr_head_sha:$head_sha,consumed_once:$consumed_once,
-              metric_pair:{definition:"successor_observation_required_fields",before:$metric_before,after:$metric_after,state:(if $metric_after==null then "UNKNOWN" else "OBSERVED" end)}}' \
+              metric_pair:{definition:$metric_definition,before:$metric_before,after:$metric_after,state:$metric_state}}' \
             > "$artifacts/successor-observation.json"
           if [ "$GITHUB_EVENT_NAME" = push ]; then
             jq -S -n --arg merge_sha "$MERGE_SHA" --arg head_sha "$PR_HEAD_SHA" --arg base_sha "$BASE_SHA" --argjson pr "$PR_NUMBER" \
@@ -468,18 +520,26 @@ jobs:
             --argjson language_files "$language_files" --argjson artifact_files "$artifact_files" --argjson metadata_files "$metadata_files" --argjson scenario_output_files "$scenario_output_files" \
             --argjson conformer_reports "$conformer_reports" --argjson graph_rss "$(tr -d ' ' < "$root/graph-rss")" --argjson evaluator_rss "$(tr -d ' ' < "$root/evaluator-rss")" \
             --argjson evaluator_wall "$(cat "$root/evaluator-wall-ms")" --arg phase "$TRANSITION_PHASE" --arg ticket_state "$ticket_state" --argjson consumed_once "$consumed_once" \
+            --arg proof_choice "$proof_choice" --arg metric_definition "$metric_definition" --arg performance_metric_state "$performance_metric_state" \
+            --arg performance_metric_reason "$performance_metric_reason" --arg observability_state "$observability_state" \
+            --argjson metric_before "$baseline_metric_before" --argjson metric_after "$metric_after" \
+            --arg proposal_digest "$PROPOSAL_DIGEST" --arg tree_digest "$TREE_DIGEST" \
             --slurpfile lock contracts/temporal-transition-bootstrap-release-lock-v1.json --slurpfile predecessor "$predecessor" \
+            --slurpfile revision contracts/temporal-transition-coherence-revision-v1.json \
             '{schema:"gooo/evidence-generator/temporal-transition-bootstrap/runtime/v1",subject_sha:$subject_sha,phase:$phase,ticket_state:$ticket_state,consumed_once:$consumed_once,
-              release:$lock[0],predecessor:$predecessor[0],ticket_digest:$ticket_digest,toolchain:{go:$go,required:"go1.27.0",policy_digest:$policy_digest,workflow_digest:$workflow_digest,toolchain_digest:$toolchain_digest},
+              proof_choice:$proof_choice,release:$lock[0],predecessor:$predecessor[0],ticket_digest:$ticket_digest,toolchain:{go:$go,required:"go1.27.0",policy_digest:$policy_digest,workflow_digest:$workflow_digest,toolchain_digest:$toolchain_digest},
               performance:{normal_transition_evaluator_wall_ms:$evaluator_wall,normal_transition_evaluator_peak_rss_kib:$evaluator_rss,gooo_graph_peak_rss_kib:$graph_rss,
-                improvement:{state:"UNKNOWN",evidence:0,required:1,reason:"COMPARABLE_BEFORE_AFTER_PERFORMANCE_EVIDENCE_ABSENT"}},
+                comparable_before_after:{definition:$metric_definition,before:$metric_before,after:$metric_after,state:(if $metric_after==null then "UNKNOWN" else "OBSERVED" end),runner_equivalence:"UNKNOWN"},
+                observability:{state:$observability_state,evidence:(if $observability_state=="CLOSED" then 1 else 0 end),required:1,reason:(if $observability_state=="CLOSED" then "EXACT_BEFORE_AFTER_FIELD_CAPTURED_RUNNER_EQUIVALENCE_UNKNOWN" else "COMPARABLE_BEFORE_AFTER_FIELD_NOT_YET_CAPTURED" end)},
+                improvement:{state:$performance_metric_state,evidence:0,required:1,reason:$performance_metric_reason}},
+              revision:$revision[0],revision_binding:{proposal_digest:$proposal_digest,expected_tree_digest:$tree_digest,workflow_digest:$workflow_digest,proof_choice:$proof_choice,tree_binding:"SQUASH_COMMIT_TO_EXPECTED_TREE"},
               inventory:{root_readme_policy:"EXCLUDED",input_regular_files:$regular_files,input_descendant_dirs:$descendant_dirs,input_physical_lines:$physical_lines,
                 input_go_files:$go_files,input_go_physical_lines:$go_lines,input_gooo_files:$gooo_files,input_gooo_physical_lines:$gooo_lines,language_files:$language_files},
               repository:{before_digest:$before,after_digest:$after,writes:0},authority:{source_repository_writes:0,local_test_executions:0,cross_project_required_gates:0,
                 automatic_merge_allowed:false,release_authority:false,deploy_authority:false},executions:{gooo_version:1,gooo_syntax_check:1,gooo_semantic_check:1,gooo_graph:1,activity_resolution:12,transition_evaluator:19,conformer:19,normal_replay_runs:2,go_build:0,go_test:0,local_tests:0},
               cases:{total:18,closed:1,unknown:4,refuted:13,normal_replay_runs:2,cells_per_case:12,activities:12},activities:{total:12,proof:{FOUNDATION:4,COHERENCE:4,REGRESSION:4},indicator:{DRIVER:4,OUTCOME:4,GUARDRAIL:4}},
               artifacts:{scenario_outputs:$scenario_output_files,conformer_reports:$conformer_reports,metadata_files:$metadata_files,total:$artifact_files},claims:{external_utility:{state:"UNKNOWN",evidence:0,reason:"INDEPENDENT_EXTERNAL_UTILITY_EVIDENCE_ABSENT"},
-                performance_improvement:{state:"UNKNOWN",evidence:0,reason:"COMPARABLE_BEFORE_AFTER_PERFORMANCE_EVIDENCE_ABSENT"}}}' > "$artifacts/runtime.json"
+                performance_improvement:{state:"UNKNOWN",evidence:0,reason:"PERFORMANCE_DIRECTION_AND_CAUSAL_IMPROVEMENT_UNKNOWN"}}}' > "$artifacts/runtime.json"
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             test "$artifact_files" -eq 161
           else
@@ -501,12 +561,33 @@ jobs:
             .activities.indicator=={DRIVER:4,OUTCOME:4,GUARDRAIL:4}' "$artifacts/runtime.json" >/dev/null
           jq -e '.decision=="CONFORMANT" and .summary=={total:12,closed:12,unknown:0,refuted:0,direct_missing:0,stale:0,dependency_blocked:0}' "$artifacts/conform-normal-a.json" >/dev/null
           jq -e '.decision=="CONFORMANT" and .summary.refuted>0 and .claim.reason=="CONSUMED_TICKET_REUSE"' "$artifacts/conform-replay-reuse.json" >/dev/null
+          proof_choice=$(jq -r .bindings.proof_choice "$root/ticket.json")
           if [ "$GITHUB_EVENT_NAME" = push ]; then
-            jq -e '.state=="CLOSED" and .consumed_once==true and .metric_pair.after==6 and .metric_pair.state=="OBSERVED"' "$artifacts/successor-observation.json" >/dev/null
+            if [ "$proof_choice" = COHERENCE ]; then
+              expected_before=$(jq -r .performance.normal_transition_evaluator_wall_ms "$root/baseline-runtime.json")
+              jq -e --argjson before "$expected_before" \
+                '.state=="CLOSED" and .consumed_once==true and .metric_pair.state=="OBSERVED" and
+                 .metric_pair.definition=="normal_transition_evaluator_wall_ms" and .metric_pair.before==$before and
+                 (.metric_pair.after|type)=="number"' "$artifacts/successor-observation.json" >/dev/null
+              jq -e '.performance.observability.state=="CLOSED" and .performance.observability.evidence==1 and
+                .performance.improvement.state=="UNKNOWN" and .claims.performance_improvement.state=="UNKNOWN" and
+                .claims.external_utility.state=="UNKNOWN"' "$artifacts/runtime.json" >/dev/null
+            else
+              jq -e '.state=="CLOSED" and .consumed_once==true and .metric_pair.after==6 and .metric_pair.state=="OBSERVED"' "$artifacts/successor-observation.json" >/dev/null
+            fi
             jq -e '.schema=="gooo/link/temporal-merge-receipt/v1" and .typed==true and .mapping_type=="SQUASH_COMMIT_TO_EXPECTED_TREE" and
               .merge_commit_sha != .pr_head_sha and .tree_digest == $tree' --arg tree "$TREE_DIGEST" "$artifacts/merge-receipt.json" >/dev/null
           else
-            jq -e '.state=="PREDECLARED" and .consumed_once==false and .metric_pair.state=="UNKNOWN"' "$artifacts/successor-observation.json" >/dev/null
+            if [ "$proof_choice" = COHERENCE ]; then
+              jq -e '.state=="PREDECLARED" and .consumed_once==false and .metric_pair.state=="UNKNOWN" and
+                .metric_pair.definition=="normal_transition_evaluator_wall_ms" and .metric_pair.before==223' \
+                "$artifacts/successor-observation.json" >/dev/null
+              jq -e '.performance.observability.state=="UNKNOWN" and .performance.improvement.state=="UNKNOWN" and
+                .claims.performance_improvement.state=="UNKNOWN" and .claims.external_utility.state=="UNKNOWN"' \
+                "$artifacts/runtime.json" >/dev/null
+            else
+              jq -e '.state=="PREDECLARED" and .consumed_once==false and .metric_pair.state=="UNKNOWN"' "$artifacts/successor-observation.json" >/dev/null
+            fi
           fi
           test "$(git status --porcelain=v1 --untracked-files=all)" = ""
 
@@ -522,6 +603,7 @@ jobs:
               jq -r '"- cases: \(.cases.total) total; \(.cases.closed) CLOSED / \(.cases.unknown) UNKNOWN / \(.cases.refuted) REFUTED; cells per case \(.cases.cells_per_case)"' "$root/artifacts/runtime.json"
               jq -r '"- activities: \(.activities.total); proof FOUNDATION \(.activities.proof.FOUNDATION), COHERENCE \(.activities.proof.COHERENCE), REGRESSION \(.activities.proof.REGRESSION); indicators DRIVER \(.activities.indicator.DRIVER), OUTCOME \(.activities.indicator.OUTCOME), GUARDRAIL \(.activities.indicator.GUARDRAIL)"' "$root/artifacts/runtime.json"
               jq -r '"- Go: \(.toolchain.go); evaluator \(.performance.normal_transition_evaluator_wall_ms) ms / \(.performance.normal_transition_evaluator_peak_rss_kib) KiB; graph RSS \(.performance.gooo_graph_peak_rss_kib) KiB"' "$root/artifacts/runtime.json"
+              jq -r '"- comparable metric: \(.performance.comparable_before_after.definition); \(.performance.comparable_before_after.before) -> \(.performance.comparable_before_after.after); observability \(.performance.observability.state); performance direction \(.performance.improvement.state)"' "$root/artifacts/runtime.json"
               jq -r '"- inventory: \(.inventory.input_regular_files) files / \(.inventory.input_descendant_dirs) dirs / \(.inventory.input_physical_lines) lines; Go \(.inventory.input_go_files)/\(.inventory.input_go_physical_lines); Gooo \(.inventory.input_gooo_files)/\(.inventory.input_gooo_physical_lines); \(.inventory.root_readme_policy)"' "$root/artifacts/runtime.json"
               jq -r '"- artifact files: \(.artifacts.total); source writes / local tests / required cross-project gates: \(.authority.source_repository_writes) / \(.authority.local_test_executions) / \(.authority.cross_project_required_gates)"' "$root/artifacts/runtime.json"
               jq -r '"- external utility / performance improvement: \(.claims.external_utility.state) / \(.claims.performance_improvement.state)"' "$root/artifacts/runtime.json"

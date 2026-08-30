@@ -1,0 +1,66 @@
+{
+  "schema": "gooo/link/temporal-transition-coherence-revision/v1",
+  "proof_choice": "COHERENCE",
+  "outcome": "OBSERVABILITY_COMPLETENESS",
+  "counterexample": {
+    "source_artifact": {
+      "name": "temporal-transition-bootstrap-v1-d08144142e51c835eccb6276807cde29c5d3886a",
+      "id": 9736541813,
+      "digest": "sha256:a05f42fbc0f39f68803c5a8c59e33863b2f7c2c5807b2150e7f553d3933f2683",
+      "run_id": 33327090349
+    },
+    "state": "UNKNOWN",
+    "reason": "COMPARABLE_BEFORE_AFTER_PERFORMANCE_EVIDENCE_ABSENT",
+    "metric": {
+      "definition": "normal_transition_evaluator_wall_ms",
+      "path": "performance.normal_transition_evaluator_wall_ms",
+      "baseline_value": 223,
+      "unit": "milliseconds",
+      "observation_boundary": "external_conformer_normal_transition_evaluator_only"
+    }
+  },
+  "meta_activity": {
+    "name": "RecordComparableBeforeAfterMetric",
+    "proof_choice": "COHERENCE",
+    "indicator_class": "OUTCOME",
+    "operation": "bind the prior runtime field and the protected-main successor runtime field without inferring direction"
+  },
+  "semantic_ir": {
+    "source": "examples/temporal-transition-coherence-v1/main.gooo",
+    "activity_count": 12,
+    "binding_key": "activity.name",
+    "metric_definition": "normal_transition_evaluator_wall_ms",
+    "counterexample_entity": "CounterexamplePerformanceObservation",
+    "revision_entity": "RevisionProposal"
+  },
+  "revision_proposal": {
+    "id": "temporal-transition-coherence-revision-v1",
+    "kind": "ADD_COMPARABLE_BEFORE_AFTER_OBSERVABILITY",
+    "generated_patch": {
+      "mode": "CI_GENERATED_BINDING",
+      "files": [
+        ".github/workflows/temporal-transition-bootstrap-v1.yml",
+        "contracts/temporal-transition-bootstrap-policy-v1.json",
+        "contracts/temporal-transition-bootstrap-predecessor-v1.json",
+        "contracts/temporal-transition-coherence-revision-v1.json",
+        "examples/temporal-transition-coherence-v1/main.gooo"
+      ],
+      "expected_tree_field": "proposal.expected_tree_digest",
+      "proposal_digest_field": "proposal.digest",
+      "patch_effect": "capture the exact metric pair and close observability completeness while retaining UNKNOWN performance direction"
+    }
+  },
+  "tree_binding": {
+    "method": "git ls-tree -r --full-tree <successor> | sha256sum",
+    "ticket_field": "proposal.expected_tree_digest",
+    "receipt_field": "merge_receipt.tree_digest",
+    "future_commit_sha_predeclared": false,
+    "mapping": "SQUASH_COMMIT_TO_EXPECTED_TREE"
+  },
+  "claims": {
+    "external_utility": "UNKNOWN",
+    "performance_direction": "UNKNOWN",
+    "performance_causal_improvement": "UNKNOWN",
+    "reason": "runner-image-and-cross-run-equivalence-not-proven"
+  }
+}

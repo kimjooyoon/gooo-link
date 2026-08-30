@@ -2,7 +2,12 @@
   "schema": "gooo/link/temporal-transition-bootstrap-policy/v1",
   "name": "PREDECLARE_TO_CONSUME_ONCE",
   "phase_order": ["PREDECLARE", "CONSUME_ONCE"],
-  "proof_choice": "FOUNDATION",
+  "proof_choice": "COHERENCE",
+  "coherence_revision": {
+    "contract": "contracts/temporal-transition-coherence-revision-v1.json",
+    "outcome": "OBSERVABILITY_COMPLETENESS",
+    "performance_direction": "UNKNOWN_UNLESS_RUNNER_EQUIVALENCE_IS_PROVEN"
+  },
   "target_branch": "main",
   "expiry_policy": "ONE_SUCCESSOR_ATTEMPT",
   "decision_precedence": ["REFUTED", "UNKNOWN", "CLOSED"],
