@@ -237,7 +237,7 @@ jobs:
             jq -e --arg name "$ticket_name" '[.artifacts[]|select(.name==$name and .expired==false)]|length==1' "$root/ticket-artifacts.json" >/dev/null
             ticket_artifact_id=$(jq -r --arg name "$ticket_name" '[.artifacts[]|select(.name==$name and .expired==false)][0].id' "$root/ticket-artifacts.json")
             ticket_artifact_digest=$(jq -r --arg name "$ticket_name" '[.artifacts[]|select(.name==$name and .expired==false)][0].digest' "$root/ticket-artifacts.json")
-            gh api -H 'Accept: application/zip' "repos/$GITHUB_REPOSITORY/actions/artifacts/$ticket_artifact_id/zip" > "$root/ticket.zip"
+            gh api -H 'Accept: application/vnd.github+json' "repos/$GITHUB_REPOSITORY/actions/artifacts/$ticket_artifact_id/zip" > "$root/ticket.zip"
             mkdir -p "$root/ticket"
             unzip -q "$root/ticket.zip" -d "$root/ticket"
             test -f "$root/ticket/ticket.json" "$root/ticket/ticket.sha256" "$root/ticket/predeclare-manifest.json"
@@ -270,7 +270,7 @@ jobs:
             baseline_id=$(jq -r .successor_observation.artifact_id "$predecessor")
             gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$baseline_id" > "$root/baseline-artifact.json"
             jq -e --arg name "$baseline_name" '.name==$name and .expired==false' "$root/baseline-artifact.json" >/dev/null
-            gh api -H 'Accept: application/zip' "repos/$GITHUB_REPOSITORY/actions/artifacts/$baseline_id/zip" > "$root/baseline.zip"
+            gh api -H 'Accept: application/vnd.github+json' "repos/$GITHUB_REPOSITORY/actions/artifacts/$baseline_id/zip" > "$root/baseline.zip"
             mkdir -p "$root/baseline"
             unzip -q "$root/baseline.zip" -d "$root/baseline"
             jq -e '.schema=="gooo/link/temporal-successor-observation/v1" and .metric_pair.state=="UNKNOWN" and .metric_pair.definition=="successor_observation_required_fields" and .metric_pair.before==5' \
