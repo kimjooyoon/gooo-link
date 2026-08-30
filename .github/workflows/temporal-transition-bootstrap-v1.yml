@@ -304,7 +304,7 @@ jobs:
           jq -S --arg predecessor_identity "$predecessor_identity" --arg artifact "$predecessor_artifact_digest" --arg report "$predecessor_report_digest" \
             --arg proposal "$proposal_digest" --arg tree "$tree_digest" --argjson pr "$pr_number" --arg policy "$policy_digest" \
             --arg toolchain "$toolchain_digest" --arg workflow "$workflow_digest" --arg proof "$proof_choice" --arg ticket_id "$ticket_id" --arg nonce "$nonce" \
-            --arg commit "$future_commit" --arg target_tree "$TREE_DIGEST" --argjson actual_consume "$([ "$GITHUB_EVENT_NAME" = push ] && echo true || echo false)" \
+            --arg commit "$future_commit" --arg target_tree "$TREE_DIGEST" --argjson actual_consume true \
             '(.predecessor.identity)=$predecessor_identity |
              (.predecessor.artifact_digest)=$artifact | (.predecessor.observed_artifact_digest)=$artifact |
              (.predecessor.report_digest)=$report | (.predecessor.observed_report_digest)=$report |
