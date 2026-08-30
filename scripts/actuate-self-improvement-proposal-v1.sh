@@ -71,11 +71,11 @@ jq -S -n \
   ($input[0]) as $i |
   ($policy[0]) as $p |
   ($predecessor[0]) as $old |
-  def choose_claim:
-    ([.observed_claims[]? | select(.state == "REFUTED")] | sort_by(.id)) as $refuted |
+  def choose_claim($claims):
+    ([$claims[]? | select(.state == "REFUTED")] | sort_by(.id)) as $refuted |
     (if ($refuted|length) > 0 then $refuted[0]
-     else ([.observed_claims[]? | select(.state == "UNKNOWN")] | sort_by(.id) | .[0]) end);
-  (choose_claim) as $claim |
+     else ([$claims[]? | select(.state == "UNKNOWN")] | sort_by(.id) | .[0]) end);
+  (choose_claim($i.observed_claims)) as $claim |
   {
     schema: "gooo/meta/self-improvement/change-proposal/v1",
     proposal_version: 1,
@@ -124,11 +124,11 @@ jq -S -n \
   ($predecessor[0]) as $old |
   ($denominator[0]) as $d |
   ($graph[0]) as $g |
-  def choose_claim:
-    ([.observed_claims[]? | select(.state == "REFUTED")] | sort_by(.id)) as $refuted |
+  def choose_claim($claims):
+    ([$claims[]? | select(.state == "REFUTED")] | sort_by(.id)) as $refuted |
     (if ($refuted|length) > 0 then $refuted[0]
-     else ([.observed_claims[]? | select(.state == "UNKNOWN")] | sort_by(.id) | .[0]) end);
-  (choose_claim) as $chosen |
+     else ([$claims[]? | select(.state == "UNKNOWN")] | sort_by(.id) | .[0]) end);
+  (choose_claim($i.observed_claims)) as $chosen |
   (if $chosen == null then
      {state:"REFUTED",stage:"ACTUATOR",step:"VALIDATE_CHANGE_PROPOSAL_INPUT",reason:"CLAIM_INPUT_MISSING",unknown_class:null,next_operation:"PROVIDE_UNKNOWN_OR_REFUTED_CLAIM",blocked_by:[],causal_frontier:[]}
    else $chosen end) as $claim |
