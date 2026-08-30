@@ -141,9 +141,11 @@ jq -S -n \
   (if $chosen == null then
      {state:"REFUTED",stage:"ACTUATOR",step:"VALIDATE_CHANGE_PROPOSAL_INPUT",reason:"CLAIM_INPUT_MISSING",unknown_class:null,next_operation:"PROVIDE_UNKNOWN_OR_REFUTED_CLAIM",blocked_by:[],causal_frontier:[]}
    else $chosen end) as $claim |
-  ([$p.unknown_coordinates[] | . as $key | $claim | has($key)] | all) as $claim_coordinates_present |
-  ([$i.observed_claims[]? | select(.state == "UNKNOWN") |
-      ([$p.unknown_coordinates[] | . as $key | has($key)] | all)] | all) as $unknown_coordinates_present |
+  ([$p.unknown_coordinates[] | . as $key |
+      if ($claim|type) == "object" then ($claim|has($key)) else false end] | all) as $claim_coordinates_present |
+  ([$i.observed_claims[]? | select(.state == "UNKNOWN") | . as $unknown |
+      ([$p.unknown_coordinates[] | . as $key |
+        if ($unknown|type) == "object" then ($unknown|has($key)) else false end] | all)] | all) as $unknown_coordinates_present |
   ([$i.observed_claims[]?.state] | any(. == "UNKNOWN" or . == "REFUTED")) as $claims_have_supported_state |
   ([$i.observed_claims[]? | .causal_frontier | type == "array" and length > 0] | all) as $frontiers_present |
   (($i.temporal_ticket.schema == $p.temporal_precondition.ticket_schema) and
