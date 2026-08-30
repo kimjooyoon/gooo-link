@@ -462,7 +462,7 @@ jobs:
             --arg policy_digest "$POLICY_DIGEST" --arg workflow_digest "$WORKFLOW_DIGEST" --arg toolchain_digest "$TOOLCHAIN_DIGEST" \
             --arg ticket_digest "sha256:$(sha256sum "$root/ticket.json" | awk '{print $1}')" --argjson regular_files "$regular_files" --argjson physical_lines "$physical_lines" \
             --argjson descendant_dirs "$descendant_dirs" --argjson go_files "$go_files" --argjson go_lines "$go_lines" --argjson gooo_files "$gooo_files" --argjson gooo_lines "$gooo_lines" \
-            --argjson language_files "$language_files" --argjson artifact_files "$artifact_files" --argjson scenario_output_files "$scenario_output_files" \
+            --argjson language_files "$language_files" --argjson artifact_files "$artifact_files" --argjson metadata_files "$metadata_files" --argjson scenario_output_files "$scenario_output_files" \
             --argjson conformer_reports "$conformer_reports" --argjson graph_rss "$(tr -d ' ' < "$root/graph-rss")" --argjson evaluator_rss "$(tr -d ' ' < "$root/evaluator-rss")" \
             --argjson evaluator_wall "$(cat "$root/evaluator-wall-ms")" --arg phase "$TRANSITION_PHASE" --arg ticket_state "$ticket_state" --argjson consumed_once "$consumed_once" \
             --slurpfile lock contracts/temporal-transition-bootstrap-release-lock-v1.json --slurpfile predecessor "$predecessor" \
