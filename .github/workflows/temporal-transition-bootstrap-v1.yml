@@ -240,7 +240,9 @@ jobs:
             gh api -H 'Accept: application/vnd.github+json' "repos/$GITHUB_REPOSITORY/actions/artifacts/$ticket_artifact_id/zip" > "$root/ticket.zip"
             mkdir -p "$root/ticket"
             unzip -q "$root/ticket.zip" -d "$root/ticket"
-            test -f "$root/ticket/ticket.json" "$root/ticket/ticket.sha256" "$root/ticket/predeclare-manifest.json"
+            test -f "$root/ticket/ticket.json"
+            test -f "$root/ticket/ticket.sha256"
+            test -f "$root/ticket/predeclare-manifest.json"
             (cd "$root/ticket" && sha256sum -c ticket.sha256)
             cp "$root/ticket/ticket.json" "$root/ticket.json"
             cp "$root/ticket/predeclare-manifest.json" "$root/predeclare-manifest.json"
