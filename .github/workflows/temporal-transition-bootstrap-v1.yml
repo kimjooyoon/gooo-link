@@ -106,7 +106,7 @@ jobs:
           test "$(wc -c < "$root/SHA256SUMS" | tr -d ' ')" -eq "$sums_size"
           test "sha256:$(sha256sum "$root/$zip_name" | awk '{print $1}')" = "$zip_digest"
           test "sha256:$(sha256sum "$root/SHA256SUMS" | awk '{print $1}')" = "$sums_digest"
-          grep -F "$zip_digest  $zip_name" "$root/SHA256SUMS" >/dev/null
+          grep -F "${zip_digest#sha256:}  $zip_name" "$root/SHA256SUMS" >/dev/null
           mkdir -p "$root/released-evidence"
           unzip -q "$root/$zip_name" -d "$root/released-evidence"
           zip_regular_files=$(find "$root/released-evidence" -type f | wc -l | tr -d ' ')
