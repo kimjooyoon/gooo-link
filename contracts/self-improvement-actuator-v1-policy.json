@@ -1,0 +1,45 @@
+{
+  "schema": "gooo/link/self-improvement-actuator-policy/v1",
+  "name": "OBSERVE_CLAIM_AND_PROPOSE_ONLY",
+  "input_states": ["UNKNOWN", "REFUTED"],
+  "decision_precedence": ["REFUTED", "UNKNOWN"],
+  "unknown_coordinates": ["stage", "step", "reason", "unknown_class", "next_operation", "blocked_by"],
+  "temporal_precondition": {
+    "ticket_schema": "gooo/link/temporal-successor-observation/v1",
+    "required_state": "CLOSED",
+    "required_consumed_once": true,
+    "source_contract": "contracts/temporal-transition-bootstrap-predecessor-v1.json"
+  },
+  "allowed_scope": {
+    "target_repository": "kimjooyoon/gooo-link",
+    "target_branch": "main",
+    "paths_mode": "DECLARED_ONLY",
+    "apply_change": false,
+    "repository_writes": 0,
+    "source_repository_writes": 0,
+    "automatic_merge_allowed": false,
+    "release_authority": false,
+    "deploy_authority": false
+  },
+  "expected_effect": {
+    "state": "UNKNOWN",
+    "reason": "EXACT_COMPARABLE_BEFORE_AFTER_EVIDENCE_ABSENT",
+    "direction": "UNKNOWN",
+    "causal_improvement": "UNKNOWN",
+    "metric_definition": "self_improvement_actuator_effect",
+    "activity": "PreserveUnknownImprovementClaim"
+  },
+  "replay_guard": {
+    "same_input": "PROPOSAL_DIGEST_MUST_MATCH",
+    "consumed_ticket": "REFUTED",
+    "consumed_proposal": "REFUTED",
+    "ticket_reuse": "REFUTED",
+    "proposal_reuse": "REFUTED",
+    "post_hoc": "REFUTED",
+    "retroactive_closure": "REFUTED"
+  },
+  "history_policy": {
+    "preserve_historical_unknown": true,
+    "retroactive_closure_allowed": false
+  }
+}

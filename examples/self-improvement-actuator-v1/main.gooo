@@ -1,0 +1,28 @@
+package selfimprovementactuator
+namespace selfimprovementactuator
+
+entity ConsumedTemporalTicket id "gooo://self-improvement-actuator/entity/consumed-temporal-ticket"
+entity ObservedClaim id "gooo://self-improvement-actuator/entity/observed-claim"
+entity SelectedClaim id "gooo://self-improvement-actuator/entity/selected-claim"
+entity CausalFrontier id "gooo://self-improvement-actuator/entity/causal-frontier"
+entity AllowedProposalScope id "gooo://self-improvement-actuator/entity/allowed-proposal-scope"
+entity ExpectedEffect id "gooo://self-improvement-actuator/entity/expected-effect"
+entity DeterministicProposalSeed id "gooo://self-improvement-actuator/entity/deterministic-proposal-seed"
+entity ChangeProposalArtifact id "gooo://self-improvement-actuator/entity/change-proposal-artifact"
+entity UnknownCoordinates id "gooo://self-improvement-actuator/entity/unknown-coordinates"
+entity RefutedPrecedence id "gooo://self-improvement-actuator/entity/refuted-precedence"
+entity ReadOnlyAuthority id "gooo://self-improvement-actuator/entity/read-only-authority"
+entity UnknownImprovementClaim id "gooo://self-improvement-actuator/entity/unknown-improvement-claim"
+
+activity ObserveConsumedTemporalTicket(ConsumedTemporalTicket) -> ObservedClaim
+activity ObserveUnknownOrRefutedClaim(ObservedClaim) -> SelectedClaim
+activity SelectRefutedBeforeUnknownClaim(SelectedClaim) -> CausalFrontier
+activity BindClaimCausalFrontier(CausalFrontier) -> AllowedProposalScope
+activity BindAllowedProposalScope(AllowedProposalScope) -> ExpectedEffect
+activity BindUnknownExpectedEffect(ExpectedEffect) -> DeterministicProposalSeed
+activity DeriveDeterministicProposalSeed(DeterministicProposalSeed) -> ChangeProposalArtifact
+activity GenerateChangeProposalArtifact(ChangeProposalArtifact) -> UnknownCoordinates
+activity PreserveUnknownClaimCoordinates(UnknownCoordinates) -> RefutedPrecedence
+activity PreserveRefutedClaimPrecedence(RefutedPrecedence) -> ReadOnlyAuthority
+activity EnforceZeroRepositoryWrites(ReadOnlyAuthority) -> UnknownImprovementClaim
+activity PreserveUnknownImprovementClaim(UnknownImprovementClaim) -> UnknownImprovementClaim

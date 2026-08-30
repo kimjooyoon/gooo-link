@@ -1,0 +1,74 @@
+{
+  "schema": "gooo/meta/self-improvement/actuator-input/v1",
+  "input_id": "claim-dependency-causality-missing-predecessor",
+  "temporal_ticket": {
+    "schema": "gooo/link/temporal-successor-observation/v1",
+    "phase": "CONSUME_ONCE",
+    "state": "CLOSED",
+    "ticket_id": "temporal-transition-bootstrap-v1-37-d08144142e51c835eccb6276807cde29c5d3886a",
+    "ticket_digest": "sha256:a05f42fbc0f39f68803c5a8c59e33863b2f7c2c5807b2150e7f553d3933f2683",
+    "nonce": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "consumed_once": true,
+    "source_predecessor": {
+      "identity": "commit:d08144142e51c835eccb6276807cde29c5d3886a",
+      "artifact_digest": "sha256:c6e29991eb1985bfd1c5ee17c94b2b067d92c0c325ab45b268760e02daa9ce35",
+      "report_digest": "sha256:d1b808dc8bfc26b497a31d975dd850594e34fe74a9639adf3e2cf95b0aff3685",
+      "successor_observation_artifact_digest": "sha256:a05f42fbc0f39f68803c5a8c59e33863b2f7c2c5807b2150e7f553d3933f2683"
+    }
+  },
+  "observed_claims": [
+    {
+      "id": "gooo://claim-dependency-causality/claim/missing-predecessor",
+      "state": "UNKNOWN",
+      "stage": "RESOLUTION",
+      "step": "PRESERVE_UNKNOWN_CAUSAL_FRONTIER",
+      "reason": "CAUSAL_PREDECESSOR_EVIDENCE_UNAVAILABLE",
+      "unknown_class": "DIRECT_MISSING",
+      "next_operation": "PROVIDE_CAUSAL_PREDECESSOR_EVIDENCE",
+      "blocked_by": [],
+      "causal_frontier": [
+        {
+          "id": "gooo://claim-dependency-causality/frontier/missing-predecessor",
+          "state": "UNKNOWN",
+          "stage": "RESOLUTION",
+          "step": "PRESERVE_UNKNOWN_CAUSAL_FRONTIER",
+          "reason": "CAUSAL_PREDECESSOR_EVIDENCE_UNAVAILABLE",
+          "unknown_class": "DIRECT_MISSING",
+          "next_operation": "PROVIDE_CAUSAL_PREDECESSOR_EVIDENCE",
+          "blocked_by": [],
+          "activity": "BindClaimCausalFrontier"
+        }
+      ]
+    }
+  ],
+  "change_request": {
+    "kind": "BIND_MISSING_CAUSAL_PREDECESSOR_EVIDENCE",
+    "declared_paths": [
+      "contracts/self-improvement-actuator-v1-policy.json",
+      "contracts/self-improvement-actuator-v1-denominator.json",
+      "examples/self-improvement-actuator-v1/main.gooo",
+      "scripts/actuate-self-improvement-proposal-v1.sh"
+    ],
+    "operation": "DESCRIBE_CHANGE_ONLY",
+    "patch": null,
+    "requested_repository_writes": 0
+  },
+  "replay_guard": {
+    "consumed_ticket_ids": [],
+    "consumed_proposal_digests": [],
+    "post_hoc": false,
+    "retroactive_closure_requested": false
+  },
+  "historical_claims": [
+    {
+      "id": "gooo://claim-dependency-causality/historical/unknown-001",
+      "state": "UNKNOWN",
+      "stage": "HISTORICAL",
+      "step": "PRESERVE_HISTORICAL_UNKNOWN",
+      "reason": "HISTORICAL_EVIDENCE_NOT_REOBSERVED",
+      "unknown_class": "STALE",
+      "next_operation": "OBSERVE_NEW_SUCCESSOR_EVIDENCE",
+      "blocked_by": []
+    }
+  ]
+}

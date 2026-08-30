@@ -1,0 +1,29 @@
+{
+  "schema": "gooo/link/self-improvement-actuator-denominator/v1",
+  "id": "gooo://denominator/self-improvement-actuator/v1",
+  "target_cells": 12,
+  "proof_totals": [
+    {"proof_choice": "FOUNDATION", "total": 4},
+    {"proof_choice": "COHERENCE", "total": 4},
+    {"proof_choice": "REGRESSION", "total": 4}
+  ],
+  "indicator_totals": [
+    {"indicator_class": "DRIVER", "total": 4},
+    {"indicator_class": "OUTCOME", "total": 4},
+    {"indicator_class": "GUARDRAIL", "total": 4}
+  ],
+  "cells": [
+    {"ordinal": 1, "id": "TEMPORAL_TICKET", "activity": "ObserveConsumedTemporalTicket", "stage": "TEMPORAL", "step": "OBSERVE_CLOSED_CONSUMED_TICKET", "proof_choice": "FOUNDATION", "indicator_class": "DRIVER", "closed_reason": "CLOSED_CONSUMED_TEMPORAL_TICKET_OBSERVED", "refuted_reason": "TEMPORAL_TICKET_NOT_CLOSED_CONSUMED", "next_operation": "RESTORE_CLOSED_TEMPORAL_TICKET", "depends_on": []},
+    {"ordinal": 2, "id": "CLAIM_INPUT", "activity": "ObserveUnknownOrRefutedClaim", "stage": "CLAIM", "step": "OBSERVE_UNKNOWN_OR_REFUTED_CLAIM", "proof_choice": "FOUNDATION", "indicator_class": "DRIVER", "closed_reason": "SUPPORTED_CLAIM_STATE_OBSERVED", "refuted_reason": "UNSUPPORTED_CLAIM_STATE", "next_operation": "PROVIDE_UNKNOWN_OR_REFUTED_CLAIM", "depends_on": ["TEMPORAL_TICKET"]},
+    {"ordinal": 3, "id": "CLAIM_SELECTION", "activity": "SelectRefutedBeforeUnknownClaim", "stage": "CLAIM", "step": "SELECT_CLAIM_BY_DECISION_PRECEDENCE", "proof_choice": "FOUNDATION", "indicator_class": "GUARDRAIL", "closed_reason": "REFUTED_UNKNOWN_PRECEDENCE_APPLIED", "refuted_reason": "CLAIM_PRECEDENCE_LAUNDERED", "next_operation": "RESTORE_REFUTED_PRECEDENCE", "depends_on": ["CLAIM_INPUT"]},
+    {"ordinal": 4, "id": "CAUSAL_FRONTIER", "activity": "BindClaimCausalFrontier", "stage": "CAUSAL", "step": "BIND_MINIMAL_CAUSAL_FRONTIER", "proof_choice": "FOUNDATION", "indicator_class": "DRIVER", "closed_reason": "CAUSAL_FRONTIER_BOUND", "refuted_reason": "CAUSAL_FRONTIER_MISSING", "next_operation": "PROVIDE_CAUSAL_FRONTIER", "depends_on": ["CLAIM_SELECTION"]},
+    {"ordinal": 5, "id": "ALLOWED_SCOPE", "activity": "BindAllowedProposalScope", "stage": "SCOPE", "step": "BIND_ZERO_WRITE_PROPOSAL_SCOPE", "proof_choice": "COHERENCE", "indicator_class": "DRIVER", "closed_reason": "ZERO_WRITE_PROPOSAL_SCOPE_BOUND", "refuted_reason": "PROPOSAL_SCOPE_ESCALATED", "next_operation": "RESTORE_ZERO_WRITE_SCOPE", "depends_on": ["CAUSAL_FRONTIER"]},
+    {"ordinal": 6, "id": "EXPECTED_EFFECT", "activity": "BindUnknownExpectedEffect", "stage": "EFFECT", "step": "BIND_UNKNOWN_EXPECTED_EFFECT", "proof_choice": "COHERENCE", "indicator_class": "OUTCOME", "closed_reason": "UNKNOWN_EXPECTED_EFFECT_BOUND", "refuted_reason": "UNEVIDENCED_EFFECT_CLAIM", "next_operation": "RESTORE_UNKNOWN_EFFECT_BOUNDARY", "depends_on": ["ALLOWED_SCOPE"]},
+    {"ordinal": 7, "id": "PROPOSAL_SEED", "activity": "DeriveDeterministicProposalSeed", "stage": "DIGEST", "step": "DERIVE_REPLAY_STABLE_PROPOSAL_SEED", "proof_choice": "COHERENCE", "indicator_class": "OUTCOME", "closed_reason": "DETERMINISTIC_PROPOSAL_SEED_DERIVED", "refuted_reason": "PROPOSAL_SEED_NONDETERMINISTIC", "next_operation": "REMOVE_RUNTIME_VALUES_FROM_PROPOSAL_SEED", "depends_on": ["CLAIM_SELECTION", "CAUSAL_FRONTIER", "ALLOWED_SCOPE", "EXPECTED_EFFECT"]},
+    {"ordinal": 8, "id": "PROPOSAL_ARTIFACT", "activity": "GenerateChangeProposalArtifact", "stage": "PROPOSAL", "step": "GENERATE_CHANGE_PROPOSAL_ARTIFACT", "proof_choice": "COHERENCE", "indicator_class": "OUTCOME", "closed_reason": "CHANGE_PROPOSAL_ARTIFACT_GENERATED", "refuted_reason": "CHANGE_PROPOSAL_NOT_GENERATED", "next_operation": "GENERATE_PROPOSAL_ONLY", "depends_on": ["PROPOSAL_SEED"]},
+    {"ordinal": 9, "id": "UNKNOWN_COORDINATES", "activity": "PreserveUnknownClaimCoordinates", "stage": "UNCERTAINTY", "step": "PRESERVE_UNKNOWN_COORDINATES", "proof_choice": "REGRESSION", "indicator_class": "GUARDRAIL", "closed_reason": "UNKNOWN_COORDINATES_PRESERVED", "refuted_reason": "UNKNOWN_COORDINATES_DROPPED", "next_operation": "RESTORE_UNKNOWN_COORDINATES", "depends_on": ["PROPOSAL_ARTIFACT"]},
+    {"ordinal": 10, "id": "REFUTED_PRECEDENCE", "activity": "PreserveRefutedClaimPrecedence", "stage": "REFUTATION", "step": "PRESERVE_REFUTED_OVER_UNKNOWN", "proof_choice": "REGRESSION", "indicator_class": "DRIVER", "closed_reason": "REFUTED_PRECEDENCE_PRESERVED", "refuted_reason": "REFUTED_CLAIM_LAUNDERED", "next_operation": "RESTORE_REFUTED_CLAIM", "depends_on": ["CLAIM_SELECTION"]},
+    {"ordinal": 11, "id": "ZERO_WRITES", "activity": "EnforceZeroRepositoryWrites", "stage": "AUTHORITY", "step": "ENFORCE_ZERO_REPOSITORY_WRITES", "proof_choice": "REGRESSION", "indicator_class": "GUARDRAIL", "closed_reason": "ZERO_REPOSITORY_WRITES_ENFORCED", "refuted_reason": "REPOSITORY_WRITE_ESCALATION", "next_operation": "RESTORE_READ_ONLY_AUTHORITY", "depends_on": ["ALLOWED_SCOPE"]},
+    {"ordinal": 12, "id": "IMPROVEMENT_UNKNOWN", "activity": "PreserveUnknownImprovementClaim", "stage": "IMPROVEMENT", "step": "PRESERVE_UNKNOWN_ACTUAL_IMPROVEMENT", "proof_choice": "REGRESSION", "indicator_class": "OUTCOME", "closed_reason": "ACTUAL_IMPROVEMENT_REMAINS_UNKNOWN", "refuted_reason": "UNEVIDENCED_IMPROVEMENT_CLAIM", "next_operation": "PROVIDE_EXACT_COMPARABLE_EVIDENCE", "depends_on": ["EXPECTED_EFFECT"]}
+  ]
+}
